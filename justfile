@@ -5,6 +5,11 @@ set dotenv-load
 run *args:
   bun run src/cli/index.ts {{args}}
 
+# Build a standalone binary (bun build --compile) into dist/
+build:
+  mkdir -p dist
+  bun build src/cli/index.ts --compile --outfile dist/coden
+
 # Run the offline test suite
 test:
   bun run test
