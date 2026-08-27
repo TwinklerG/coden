@@ -99,6 +99,7 @@ async function main(initialPrompt: string | undefined, options: CliOptions): Pro
   const resumedId = typeof options.resume === "string" ? options.resume : undefined;
   const session = new SessionStore(config.dataDir, workspace, resumedId);
   if (options.resume === true) {
+    rl?.close();
     stdout.write(formatSessionList(await session.list()));
     return;
   }
