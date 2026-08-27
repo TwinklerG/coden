@@ -166,7 +166,8 @@ async list(): Promise<SessionMeta[]> {
   }
   const metas: SessionMeta[] = [];
   for (const name of names) {
-    if (!name.endsWith(".jsonl")) continue;
+    // 会话文件形如 <id>.jsonl；trace 文件形如 <id>.trace.jsonl（同样以 .jsonl 结尾），须排除。
+    if (!name.endsWith(".jsonl") || name.endsWith(".trace.jsonl")) continue;
     const id = name.slice(0, -".jsonl".length);
     if (!isValidSessionId(id)) continue;
     try {
