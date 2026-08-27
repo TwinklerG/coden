@@ -1,3 +1,7 @@
-.agents/skills/
-
+node_modules/
+dist/
+coverage/
 .env
+.DS_Store
+.coden/
+.agents/skills/

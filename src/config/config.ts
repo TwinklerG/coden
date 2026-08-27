@@ -1,0 +1,96 @@
+import { readFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+export type ProviderName = "openai" | "anthropic";
+export interface CodeNConfig {
+  provider: ProviderName;
+  model: string;
+  maxSteps: number;
+  contextWindow: number;
+  reservedOutputTokens: number;
+  safetyMargin: number;
+  plugins: string[];
+  dataDir: string;
+}
+export type ConfigOverrides = Partial<Omit<CodeNConfig, "plugins" | "dataDir">> & {
+  plugins?: string[];
+};
+
+export function userConfigDir(): string {
+  return process.env.XDG_CONFIG_HOME
+    ? path.join(process.env.XDG_CONFIG_HOME, "coden")
+    : path.join(os.homedir(), ".config", "coden");
+}
+export function userDataDir(): string {
+  return process.env.XDG_DATA_HOME
+    ? path.join(process.env.XDG_DATA_HOME, "coden")
+    : path.join(os.homedir(), ".local", "share", "coden");
+}
+async function readJson(file: string): Promise<ConfigOverrides> {
+  try {
+    const raw = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
+    return pickOverrides(raw);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw new Error(
+      `Cannot read config ${file}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function pickOverrides(raw: Record<string, unknown>): ConfigOverrides {
+  const overrides: ConfigOverrides = {};
+  if (raw.provider === "openai" || raw.provider === "anthropic") overrides.provider = raw.provider;
+  if (typeof raw.model === "string") overrides.model = raw.model;
+  if (typeof raw.maxSteps === "number") overrides.maxSteps = raw.maxSteps;
+  if (typeof raw.contextWindow === "number") overrides.contextWindow = raw.contextWindow;
+  if (typeof raw.reservedOutputTokens === "number")
+    overrides.reservedOutputTokens = raw.reservedOutputTokens;
+  if (typeof raw.safetyMargin === "number") overrides.safetyMargin = raw.safetyMargin;
+  if (Array.isArray(raw.plugins))
+    overrides.plugins = raw.plugins.filter((item): item is string => typeof item === "string");
+  return overrides;
+}
+
+export async function loadConfig(
+  workspace: string,
+  cli: ConfigOverrides = {},
+): Promise<CodeNConfig> {
+  const defaults: CodeNConfig = {
+    provider: "openai",
+    model: "gpt-5-mini",
+    maxSteps: 20,
+    contextWindow: 128000,
+    reservedOutputTokens: 8192,
+    safetyMargin: 4096,
+    plugins: [],
+    dataDir: userDataDir(),
+  };
+  const user = await readJson(path.join(userConfigDir(), "config.json"));
+  const project = await readJson(path.join(workspace, ".coden", "config.json"));
+  const env: ConfigOverrides = {};
+  if (process.env.CODEN_PROVIDER === "openai" || process.env.CODEN_PROVIDER === "anthropic")
+    env.provider = process.env.CODEN_PROVIDER;
+  if (process.env.CODEN_MODEL) env.model = process.env.CODEN_MODEL;
+  if (process.env.CODEN_MAX_STEPS) env.maxSteps = Number(process.env.CODEN_MAX_STEPS);
+  const merged = { ...defaults, ...user, ...project, ...env, ...cli };
+  merged.plugins = [...(user.plugins ?? []), ...(project.plugins ?? []), ...(cli.plugins ?? [])];
+  if (merged.provider !== "openai" && merged.provider !== "anthropic")
+    throw new Error("provider must be openai or anthropic");
+  if (typeof merged.model !== "string" || !merged.model.trim())
+    throw new Error("model must be a non-empty string");
+  if (!Number.isInteger(merged.maxSteps) || merged.maxSteps < 1)
+    throw new Error("maxSteps must be a positive integer");
+  for (const key of ["contextWindow", "reservedOutputTokens", "safetyMargin"] as const) {
+    if (!Number.isInteger(merged[key]) || merged[key] < 0)
+      throw new Error(`${key} must be a non-negative integer`);
+  }
+  if (merged.contextWindow === 0 || merged.reservedOutputTokens === 0)
+    throw new Error("contextWindow and reservedOutputTokens must be positive");
+  if (merged.contextWindow <= merged.reservedOutputTokens + merged.safetyMargin)
+    throw new Error("contextWindow must exceed reservedOutputTokens plus safetyMargin");
+  if (!Array.isArray(merged.plugins) || merged.plugins.some((item) => typeof item !== "string"))
+    throw new Error("plugins must be an array of paths");
+  return merged;
+}
