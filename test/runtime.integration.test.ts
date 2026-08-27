@@ -216,4 +216,16 @@ describe("AgentRuntime integration", () => {
     );
     expect((await resumed.run("two")).answer).toBe("second");
   });
+
+  it("persists a session title only once from the first user message", async () => {
+    const h = await harness(new ScriptedProvider([scriptedText("hello"), scriptedText("again")]));
+    await h.runtime.run("first question");
+    await h.runtime.run("second question");
+
+    const list = await h.session.list();
+    expect(list[0]?.title).toBe("first question");
+    // 第二条消息不会覆盖已有标题
+    const text = await readFile(h.session.sessionPath, "utf8");
+    expect(text.match(/"type":"session\.title"/g)).toHaveLength(1);
+  });
 });

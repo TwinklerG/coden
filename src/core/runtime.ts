@@ -94,9 +94,11 @@ export class AgentRuntime {
         if (system?.role === "system") await this.sessions.appendMessage(system);
         this.systemPersisted = true;
       }
+      const hasPriorUser = this.messages.some((message) => message.role === "user");
       const user: AgentMessage = { role: "user", content: userText };
       this.messages.push(user);
       await this.sessions.appendMessage(user);
+      if (!hasPriorUser) await this.sessions.setTitle(userText);
       for (let step = 0; step < this.maxSteps; step++) {
         let prepared = this.context.prepare(this.messages, this.registry.list());
         if (prepared.compacted) {
