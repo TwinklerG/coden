@@ -173,4 +173,66 @@ describe("context and sessions", () => {
     });
     await expect(store.recover()).rejects.toThrow("Orphan tool result");
   });
+
+  it("titles a session from the first user prompt and lists it", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-list-"));
+    const store = new SessionStore(root, root, "session-a");
+    await store.create(root);
+    await store.setTitle("First question");
+    await store.appendMessage({ role: "user", content: "First question" });
+    await store.appendMessage({ role: "assistant", content: "answer", toolCalls: [] });
+
+    const list = await store.list();
+    const meta = list.find((item) => item.id === "session-a");
+    expect(meta?.title).toBe("First question");
+    expect(meta?.messageCount).toBe(2);
+    expect(meta?.lastActivity).toBeTruthy();
+  });
+
+  it("falls back to the first user prompt when no session.title is stored", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-list-"));
+    const store = new SessionStore(root, root, "session-f");
+    await store.create(root);
+    await store.appendMessage({ role: "user", content: "my first prompt" });
+    await store.appendMessage({ role: "assistant", content: "ok", toolCalls: [] });
+
+    const list = await store.list();
+    expect(list[0]?.title).toBe("my first prompt");
+  });
+
+  it("resets conversation stats at session.reset", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-list-"));
+    const store = new SessionStore(root, root, "session-r");
+    await store.create(root);
+    await store.setTitle("old title");
+    await store.appendMessage({ role: "user", content: "old" });
+    await store.append("session.reset", {});
+    await store.setTitle("new title");
+    await store.appendMessage({ role: "user", content: "new" });
+
+    const list = await store.list();
+    expect(list[0]?.title).toBe("new title");
+    expect(list[0]?.messageCount).toBe(1);
+  });
+
+  it("returns an empty list when no sessions exist", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-list-"));
+    const store = new SessionStore(root, root, "session-e");
+    await expect(store.list()).resolves.toEqual([]);
+  });
+
+  it("orders sessions by lastActivity descending", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-list-"));
+    const a = new SessionStore(root, root, "session-a");
+    await a.create(root);
+    await a.appendMessage({ role: "user", content: "a" });
+    const b = new SessionStore(root, root, "session-b");
+    await b.create(root);
+    await b.appendMessage({ role: "user", content: "b" });
+
+    const list = await a.list();
+    for (let i = 1; i < list.length; i++) {
+      expect(list[i - 1]!.lastActivity >= list[i]!.lastActivity).toBe(true);
+    }
+  });
 });

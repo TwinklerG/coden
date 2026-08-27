@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { AgentMessage } from "../core/types.js";
 
@@ -16,6 +16,17 @@ export interface RecoveredSession {
   compactionRange?: { start: number; end: number };
   warnings: string[];
 }
+export interface SessionMeta {
+  id: string;
+  title?: string;
+  messageCount: number;
+  lastActivity: string;
+}
+
+const SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+export function isValidSessionId(id: string): boolean {
+  return SESSION_ID_RE.test(id);
+}
 
 export function workspaceHash(workspace: string): string {
   return createHash("sha256").update(path.resolve(workspace)).digest("hex").slice(0, 16);
@@ -29,8 +40,7 @@ export class SessionStore {
     workspace: string,
     readonly sessionId: string = randomUUID(),
   ) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(sessionId))
-      throw new Error("Invalid session ID");
+    if (!isValidSessionId(sessionId)) throw new Error("Invalid session ID");
     const directory = path.join(dataDir, "sessions", workspaceHash(workspace));
     this.sessionPath = path.join(directory, `${sessionId}.jsonl`);
     this.tracePath = path.join(directory, `${sessionId}.trace.jsonl`);
@@ -64,6 +74,78 @@ export class SessionStore {
   }
   appendCompaction(summary: string, sourceRange?: { start: number; end: number }): Promise<void> {
     return this.append("context.compacted", sourceRange ? { summary, sourceRange } : { summary });
+  }
+  setTitle(title: string): Promise<void> {
+    return this.append("session.title", { title });
+  }
+
+  async list(): Promise<SessionMeta[]> {
+    const directory = path.dirname(this.sessionPath);
+    let names: string[];
+    try {
+      names = await readdir(directory);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+    const metas: SessionMeta[] = [];
+    for (const name of names) {
+      // 会话文件形如 <id>.jsonl；trace 文件形如 <id>.trace.jsonl（同样以 .jsonl 结尾），须排除。
+      if (!name.endsWith(".jsonl") || name.endsWith(".trace.jsonl")) continue;
+      const id = name.slice(0, -".jsonl".length);
+      if (!isValidSessionId(id)) continue;
+      try {
+        metas.push(await this.#readMeta(path.join(directory, name), id));
+      } catch {
+        // Skip a session file that cannot be parsed.
+      }
+    }
+    metas.sort((a, b) => b.lastActivity.localeCompare(a.lastActivity));
+    return metas;
+  }
+
+  async #readMeta(filePath: string, id: string): Promise<SessionMeta> {
+    const text = await readFile(filePath, "utf8");
+    let messageCount = 0;
+    let title: string | undefined;
+    let firstUserPrompt: string | undefined;
+    let lastActivity = "";
+    for (const line of text.split("\n")) {
+      if (!line) continue;
+      let record: SessionRecord;
+      try {
+        record = JSON.parse(line) as SessionRecord;
+      } catch {
+        continue;
+      }
+      if (record.version !== 1) continue;
+      if (record.timestamp) lastActivity = record.timestamp;
+      switch (record.type) {
+        case "session.reset":
+          messageCount = 0;
+          firstUserPrompt = undefined;
+          title = undefined;
+          break;
+        case "session.title": {
+          const data = record.data as { title?: unknown };
+          if (typeof data?.title === "string") title = data.title;
+          break;
+        }
+        case "message":
+          messageCount++;
+          if (firstUserPrompt === undefined) {
+            const data = record.data as { role?: unknown; content?: unknown };
+            if (data?.role === "user" && typeof data.content === "string") {
+              firstUserPrompt = data.content;
+            }
+          }
+          break;
+      }
+    }
+    const resolvedTitle = title ?? firstUserPrompt;
+    const meta: SessionMeta = { id, messageCount, lastActivity };
+    if (resolvedTitle !== undefined) meta.title = resolvedTitle;
+    return meta;
   }
   async recover(): Promise<RecoveredSession> {
     const messages: AgentMessage[] = [];
