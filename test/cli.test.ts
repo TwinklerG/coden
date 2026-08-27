@@ -1,6 +1,10 @@
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { SessionStore } from "../src/sessions/store.js";
 
 const cli = path.join(process.cwd(), "src", "cli", "index.ts");
 const baseEnv = {
@@ -30,5 +34,49 @@ describe("CLI exit codes", () => {
       timeout: 30_000,
     });
     expect(result.status).toBe(1);
+  });
+});
+
+describe("CLI session list and resume", () => {
+  // config.dataDir = $XDG_DATA_HOME/coden (userDataDir() adds "/coden")，必须与 CLI 读取一致。
+  // macOS 上 /var 是 /private/var 的符号链接：CLI 的 process.cwd() 返回规范化路径，
+  // 所以用 realpathSync 统一，避免 workspaceHash 不匹配。
+  async function makeSession(workspace: string, xdgHome: string, id: string) {
+    const store = new SessionStore(path.join(xdgHome, "coden"), workspace, id);
+    await store.create(workspace);
+    await store.setTitle("hello world");
+    await store.appendMessage({ role: "user", content: "hello world" });
+  }
+  async function makeWorkspace() {
+    return realpathSync(await mkdtemp(path.join(os.tmpdir(), "coden-ws-")));
+  }
+  it("lists sessions with --resume and no id", async () => {
+    const workspace = await makeWorkspace();
+    const xdgHome = await mkdtemp(path.join(os.tmpdir(), "coden-xdg-"));
+    await makeSession(workspace, xdgHome, "my-session");
+    const result = spawnSync("bun", [cli, "--resume"], {
+      cwd: workspace,
+      encoding: "utf8",
+      env: { ...baseEnv, CODEN_OPENAI_API_KEY: "", XDG_DATA_HOME: xdgHome },
+      timeout: 30_000,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("my-session");
+    expect(result.stdout).toContain("hello world");
+  });
+  it("shows a resume banner when resuming a session", async () => {
+    const workspace = await makeWorkspace();
+    const xdgHome = await mkdtemp(path.join(os.tmpdir(), "coden-xdg-"));
+    await makeSession(workspace, xdgHome, "my-session");
+    const result = spawnSync("bun", [cli, "--resume", "my-session"], {
+      cwd: workspace,
+      encoding: "utf8",
+      input: "/quit\n",
+      env: { ...baseEnv, CODEN_OPENAI_API_KEY: "test-key", XDG_DATA_HOME: xdgHome },
+      timeout: 30_000,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Resumed session my-session");
+    expect(result.stdout).toContain("Showing last");
   });
 });

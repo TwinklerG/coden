@@ -32,11 +32,12 @@ import { builtinTools } from "../tools/builtin/index.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { PluginLoader } from "../tools/plugin-loader.js";
 import { ToolRegistry } from "../tools/registry.js";
+import { formatSessionList, renderResumeBanner } from "./format.js";
 
 interface CliOptions {
   provider?: ProviderName;
   model?: string;
-  resume?: string;
+  resume?: string | boolean;
   auto: boolean;
   verbose: boolean;
   maxSteps?: number;
@@ -51,7 +52,10 @@ const program = new Command()
   .option("-p, --print", "non-interactive print mode", false)
   .option("--provider <provider>", "openai or anthropic", parseProvider)
   .option("--model <model-id>", "model identifier")
-  .option("--resume <session-id>", "resume a previous session")
+  .option(
+    "--resume [session-id]",
+    "resume a previous session, or list sessions when no id is given",
+  )
   .option("--auto", "skip permission and project-plugin confirmations", false)
   .option("--verbose", "show detailed runtime status", false)
   .option("--max-steps <number>", "maximum model steps", positiveInteger)
@@ -92,16 +96,23 @@ async function main(initialPrompt: string | undefined, options: CliOptions): Pro
   const events = new EventBus();
   const needsInput = !options.auto || (!initialPrompt && !options.print);
   const rl = needsInput ? createInterface({ input: stdin, output: process.stderr }) : undefined;
-  const session = new SessionStore(config.dataDir, workspace, options.resume);
+  const resumedId = typeof options.resume === "string" ? options.resume : undefined;
+  const session = new SessionStore(config.dataDir, workspace, resumedId);
+  if (options.resume === true) {
+    stdout.write(formatSessionList(await session.list()));
+    return;
+  }
   let initialMessages: AgentMessage[] | undefined;
   let recoveredSummary: string | undefined;
   let recoveredCompactionEnd = 0;
-  if (options.resume) {
+  let resumeBanner: string | undefined;
+  if (typeof options.resume === "string") {
     const recovered = await session.recover();
     initialMessages = recovered.messages;
     recoveredSummary = recovered.summary;
     recoveredCompactionEnd = recovered.compactionRange?.end ?? 0;
     for (const warning of recovered.warnings) process.stderr.write(`coden: ${warning}\n`);
+    if (!options.print) resumeBanner = renderResumeBanner(session.sessionId, recovered.messages);
   } else await session.create(workspace);
   const trace = new JSONLTraceWriter(session.tracePath, events);
   const renderer = new TerminalRenderer(events, {
@@ -171,7 +182,7 @@ async function main(initialPrompt: string | undefined, options: CliOptions): Pro
       return;
     }
     if (options.print) throw new Error("print mode requires a prompt");
-    await repl(runtime, session.sessionId, reload, registry, requireInterface(rl));
+    await repl(runtime, session, reload, registry, requireInterface(rl), resumeBanner);
   } finally {
     rl?.close();
     renderer.dispose();
@@ -210,22 +221,32 @@ function createProvider(name: ProviderName): ModelProvider {
 }
 async function repl(
   runtime: AgentRuntime,
-  sessionId: string,
+  session: SessionStore,
   reload: () => Promise<{ loaded: string[]; failed: string[] }>,
   registry: ToolRegistry,
   rl: Interface,
+  resumeBanner?: string,
 ): Promise<void> {
-  stdout.write(`CodeN session ${sessionId}. Type /help for commands.\n`);
+  stdout.write(
+    resumeBanner
+      ? `${resumeBanner}\nType /help for commands.\n`
+      : `CodeN session ${session.sessionId}. Type /help for commands.\n`,
+  );
   while (true) {
     const line = (await question(rl, "> ")).trim();
+    if (line === EOF) break;
     if (!line) continue;
     if (line === "/quit") break;
     if (line === "/help") {
-      stdout.write("/help /session /compact /reload /new /quit\n");
+      stdout.write("/help /session /sessions /compact /reload /new /quit\n");
+      continue;
+    }
+    if (line === "/sessions") {
+      stdout.write(formatSessionList(await session.list(), session.sessionId));
       continue;
     }
     if (line === "/session") {
-      stdout.write(`${sessionId}\n`);
+      stdout.write(`${session.sessionId}\n`);
       continue;
     }
     if (line === "/compact") {
@@ -270,6 +291,7 @@ function createPermissionPrompt(rl: Interface) {
         : "deny";
   };
 }
+const EOF = "\u0004";
 async function question(rl: Interface, message: string, signal?: AbortSignal): Promise<string> {
   const local = signal ? undefined : new AbortController();
   const activeSignal = signal ?? local?.signal;
@@ -284,6 +306,10 @@ async function question(rl: Interface, message: string, signal?: AbortSignal): P
       : await rl.question(message);
   } catch (error) {
     if (activeSignal?.aborted) return "";
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ERR_USE_AFTER_CLOSE" || /readline was closed/.test((error as Error).message)) {
+      return EOF;
+    }
     throw error;
   } finally {
     if (local) {
