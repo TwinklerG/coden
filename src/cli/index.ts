@@ -65,7 +65,7 @@ main(prompt, options).catch((error) => {
   process.exitCode = error instanceof ConfigError ? 2 : 1;
 });
 
-class ConfigError extends Error { }
+class ConfigError extends Error {}
 
 async function loadConfigOrFail(
   workspace: string,
@@ -197,15 +197,15 @@ async function readProjectInstructions(workspace: string): Promise<string> {
 
 function createProvider(name: ProviderName): ModelProvider {
   if (name === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY is required");
+    const apiKey = process.env.CODEN_ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("CODEN_ANTHROPIC_API_KEY is required");
     return new AnthropicProvider({ apiKey });
   }
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY is required");
+  const apiKey = process.env.CODEN_OPENAI_API_KEY;
+  if (!apiKey) throw new Error("CODEN_OPENAI_API_KEY is required");
   return new OpenAICompatibleProvider({
     apiKey,
-    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
+    ...(process.env.CODEN_OPENAI_BASE_URL ? { baseURL: process.env.CODEN_OPENAI_BASE_URL } : {}),
   });
 }
 async function repl(

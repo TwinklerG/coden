@@ -17,11 +17,11 @@ just check
 ## 使用
 
 ```bash
-export OPENAI_API_KEY=...
+export CODEN_OPENAI_API_KEY=...
 bun run src/cli/index.ts "修复当前项目的测试失败"
 bun run src/cli/index.ts -p --auto "实现功能并运行测试"
 
-export ANTHROPIC_API_KEY=...
+export CODEN_ANTHROPIC_API_KEY=...
 bun run src/cli/index.ts --provider anthropic --model claude-sonnet-4-20250514
 
 bun run src/cli/index.ts --resume <session-id>
@@ -47,7 +47,7 @@ bun run src/cli/index.ts --resume <session-id>
 }
 ```
 
-支持 `CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`ANTHROPIC_API_KEY`、`XDG_CONFIG_HOME` 和 `XDG_DATA_HOME`。凭据只从环境读取。
+支持 `CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`CODEN_OPENAI_API_KEY`、`CODEN_OPENAI_BASE_URL`、`CODEN_ANTHROPIC_API_KEY`、`XDG_CONFIG_HOME` 和 `XDG_DATA_HOME`。凭据只从环境读取。
 
 会话和 trace 位于 `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`（默认 `~/.local/share/coden`）。
 
@@ -104,5 +104,5 @@ just check    # Biome lint + strict tsc + complete offline tests
 离线集成测试用 `ScriptedProvider` 覆盖工具循环、拒绝、重试和恢复。真实 API 冒烟测试（`test/live.test.ts`）默认跳过，仅在显式设置后运行：
 
 ```bash
-CODEN_LIVE_TEST=1 OPENAI_API_KEY=... bun run test    # 可选 CODEN_LIVE_OPENAI_MODEL / CODEN_LIVE_ANTHROPIC_MODEL
+CODEN_LIVE_TEST=1 CODEN_OPENAI_API_KEY=... bun run test    # 可选 CODEN_LIVE_OPENAI_MODEL / CODEN_LIVE_ANTHROPIC_MODEL
 ```

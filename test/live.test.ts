@@ -23,13 +23,15 @@ const echoTool: ToolDefinition = {
 };
 
 describe.skipIf(!live)("live provider smoke tests", () => {
-  it.skipIf(!process.env.OPENAI_API_KEY)(
+  it.skipIf(!process.env.CODEN_OPENAI_API_KEY)(
     "openai: streams text and completes a tool call",
     { timeout: 120_000 },
     async () => {
       const provider = new OpenAICompatibleProvider({
-        apiKey: process.env.OPENAI_API_KEY as string,
-        ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
+        apiKey: process.env.CODEN_OPENAI_API_KEY as string,
+        ...(process.env.CODEN_OPENAI_BASE_URL
+          ? { baseURL: process.env.CODEN_OPENAI_BASE_URL }
+          : {}),
       });
       const model = process.env.CODEN_LIVE_OPENAI_MODEL ?? "gpt-5-mini";
       const text = await accumulateStream(
@@ -60,12 +62,12 @@ describe.skipIf(!live)("live provider smoke tests", () => {
     },
   );
 
-  it.skipIf(!process.env.ANTHROPIC_API_KEY)(
+  it.skipIf(!process.env.CODEN_ANTHROPIC_API_KEY)(
     "anthropic: streams text and completes a tool call",
     { timeout: 120_000 },
     async () => {
       const provider = new AnthropicProvider({
-        apiKey: process.env.ANTHROPIC_API_KEY as string,
+        apiKey: process.env.CODEN_ANTHROPIC_API_KEY as string,
       });
       const model = process.env.CODEN_LIVE_ANTHROPIC_MODEL ?? "claude-haiku-4-5";
       const text = await accumulateStream(

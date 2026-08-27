@@ -497,7 +497,7 @@ REPL 首版命令：
 CLI 参数 > 环境变量 > 项目 .coden/config.json > 用户配置 > 内置默认值
 ```
 
-API 凭据从 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `ANTHROPIC_API_KEY` 等环境变量读取。项目配置只保存 provider、model、插件路径和最大步骤等非凭据信息。
+API 凭据从 `CODEN_OPENAI_API_KEY`、`CODEN_OPENAI_BASE_URL` 和 `CODEN_ANTHROPIC_API_KEY` 等环境变量读取。项目配置只保存 provider、model、插件路径和最大步骤等非凭据信息。
 
 ## 14. 可选 Python 沙箱插件
 
