@@ -232,7 +232,9 @@ describe("context and sessions", () => {
 
     const list = await a.list();
     for (let i = 1; i < list.length; i++) {
-      expect(list[i - 1]!.lastActivity >= list[i]!.lastActivity).toBe(true);
+      expect(
+        Date.parse(list[i - 1]?.lastActivity ?? "") >= Date.parse(list[i]?.lastActivity ?? ""),
+      ).toBe(true);
     }
   });
 });
