@@ -23,3 +23,14 @@ check:
   bun run lint
   bun run typecheck
   bun run test
+
+# Verify exactly what npm would publish (no upload)
+publish-dry-run:
+  npm publish --dry-run
+
+# Lint, typecheck, test, then publish to npm (scoped package → --access public)
+publish:
+  bun run lint
+  bun run typecheck
+  bun run test
+  npm publish --access public

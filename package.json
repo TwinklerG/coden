@@ -1,8 +1,12 @@
 {
-  "name": "coden",
+  "name": "@twinklerg/coden",
   "version": "0.1.0",
   "description": "A minimal event-driven coding agent",
   "type": "module",
+  "files": [
+    "src",
+    "README.md"
+  ],
   "bin": {
     "coden": "./src/cli/index.ts"
   },
