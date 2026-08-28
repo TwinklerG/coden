@@ -161,6 +161,13 @@ describe("installed npm package loading", () => {
       /@fixtures\/left@1\.0\.0.*@fixtures\/right@2\.0\.0/s,
     );
   });
+
+  it("reports builtin-vs-npm conflicts with both sources", () => {
+    const npmPlugin = packageResult("@fixtures/shadow-read", "3.1.4", "read");
+    expect(() => composePackageRegistry(builtinTools(), [npmPlugin], [])).toThrow(
+      /plugin\.tool_conflict: read from builtin conflicts with @fixtures\/shadow-read@3\.1\.4/s,
+    );
+  });
 });
 
 async function copyFixtureRuntime(
