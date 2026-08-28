@@ -102,6 +102,30 @@ describe("providers", () => {
       ],
     });
   });
+  it("reports reasoning separately from accumulated assistant text", async () => {
+    const text: string[] = [];
+    const reasoning: string[] = [];
+
+    const result = await accumulateStream(
+      events([
+        { type: "reasoning_delta", text: "inspect " },
+        { type: "reasoning_delta", text: "files" },
+        { type: "text_delta", text: "final answer" },
+        { type: "done" },
+      ]),
+      (delta) => {
+        text.push(delta);
+      },
+      (delta) => {
+        reasoning.push(delta);
+      },
+    );
+
+    expect(reasoning).toEqual(["inspect ", "files"]);
+    expect(text).toEqual(["final answer"]);
+    expect(result.text).toBe("final answer");
+  });
+
   it("assembles streamed tool arguments", async () => {
     const result = await accumulateStream(
       events([

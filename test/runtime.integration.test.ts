@@ -107,6 +107,27 @@ describe("AgentRuntime integration", () => {
     const result = await h.runtime.run("edit");
     expect(result.answer).toContain("Permission denied");
   });
+  it("forwards reasoning events without adding them to the answer", async () => {
+    const provider = new ScriptedProvider([
+      [
+        { type: "reasoning_delta", text: "private analysis" },
+        { type: "text_delta", text: "public answer" },
+        { type: "reasoning_delta", text: "late analysis" },
+        { type: "done" },
+      ],
+    ]);
+    const h = await harness(provider);
+    const reasoning: string[] = [];
+    h.events.on((event) => {
+      if (event.type === "provider.reasoning_delta") reasoning.push(String(event.data?.text ?? ""));
+    });
+
+    const result = await h.runtime.run("hello");
+
+    expect(reasoning).toEqual(["private analysis", "late analysis"]);
+    expect(result.answer).toBe("public answer");
+  });
+
   it("retries temporary provider errors", async () => {
     const provider = new ScriptedProvider([
       Object.assign(new Error("rate limited"), { status: 429 }),

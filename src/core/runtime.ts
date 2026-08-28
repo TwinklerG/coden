@@ -256,9 +256,15 @@ export class AgentRuntime {
     for (let attempt = 0; ; attempt++) {
       try {
         await this.events.emit("provider.started", { attempt }, turnId);
-        const result = await accumulateStream(this.provider.stream(request), async (text) => {
-          await this.events.emit("provider.delta", { text }, turnId);
-        });
+        const result = await accumulateStream(
+          this.provider.stream(request),
+          async (text) => {
+            await this.events.emit("provider.delta", { text }, turnId);
+          },
+          async (text) => {
+            await this.events.emit("provider.reasoning_delta", { text }, turnId);
+          },
+        );
         await this.events.emit("provider.completed", { usage: result.usage }, turnId);
         return result;
       } catch (error) {
@@ -296,6 +302,7 @@ export class AgentRuntime {
 export async function accumulateStream(
   stream: AsyncIterable<ModelEvent>,
   onText?: (text: string) => void | Promise<void>,
+  onReasoning?: (text: string) => void | Promise<void>,
 ): Promise<{ text: string; toolCalls: ToolCall[]; usage: Usage }> {
   let text = "";
   let usage: Usage = { inputTokens: 0, outputTokens: 0 };
@@ -304,7 +311,9 @@ export async function accumulateStream(
     { callId: string; name: string; json: string; ended: boolean }
   >();
   for await (const event of stream) {
-    if (event.type === "text_delta") {
+    if (event.type === "reasoning_delta") {
+      await onReasoning?.(event.text);
+    } else if (event.type === "text_delta") {
       text += event.text;
       await onText?.(event.text);
     } else if (event.type === "tool_call_start")
