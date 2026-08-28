@@ -1,5 +1,5 @@
 import { truncateOutput } from "../../context/truncate.js";
-import type { ToolDefinition, ToolResult } from "../../core/types.js";
+import type { ToolDefinition } from "../../core/types.js";
 import { runProcess } from "../../process/runner.js";
 
 export const bashTool: ToolDefinition = {

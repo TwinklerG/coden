@@ -1,6 +1,6 @@
 import { truncateOutput } from "../context/truncate.js";
 import { CodeNError } from "../core/types.js";
-import { runProcess, type ProcessRunResult, type ProcessRunner } from "../process/runner.js";
+import { type ProcessRunner, type ProcessRunResult, runProcess } from "../process/runner.js";
 import type { PackageInstallRequest, PackageManager } from "./package-manager.js";
 
 function boundedInstallMessage(result: ProcessRunResult): string {

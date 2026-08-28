@@ -7,7 +7,8 @@ export interface NpmPluginSpecifier {
   raw: string;
 }
 
-const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
+const PACKAGE_NAME_PATTERN =
+  /^(?:@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*|[a-z0-9][a-z0-9._-]*)$/;
 
 export function isValidNpmPackageName(name: string): boolean {
   return PACKAGE_NAME_PATTERN.test(name) && !name.includes("..") && !name.includes("\\");

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { normalizePluginExport } from "../../src/plugins/api.js";
 import { builtinTools } from "../../src/tools/builtin/index.js";
 import { ToolRegistry } from "../../src/tools/registry.js";
-import { normalizePluginExport } from "../../src/plugins/api.js";
 
 const tool = {
   name: "hello",

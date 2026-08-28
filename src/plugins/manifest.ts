@@ -35,13 +35,17 @@ export function runtimePackageJson(manifest: PluginManifest): {
 } {
   const normalized = normalizePluginManifest(manifest);
   const dependencies: Record<string, string> = {};
-  for (const [name, entry] of Object.entries(normalized.plugins)) dependencies[name] = entry.requested;
+  for (const [name, entry] of Object.entries(normalized.plugins))
+    dependencies[name] = entry.requested;
   return { private: true, dependencies };
 }
 
 function normalizePluginManifest(value: unknown): PluginManifest {
   if (!value || typeof value !== "object") throw manifestError();
-  const manifest = value as Partial<PluginManifest> & { plugins?: unknown; schemaVersion?: unknown };
+  const manifest = value as Partial<PluginManifest> & {
+    plugins?: unknown;
+    schemaVersion?: unknown;
+  };
   if (manifest.schemaVersion !== 1) throw manifestError();
   if (!manifest.plugins || typeof manifest.plugins !== "object" || Array.isArray(manifest.plugins))
     throw manifestError();
@@ -52,7 +56,11 @@ function normalizePluginManifest(value: unknown): PluginManifest {
     const entry = (manifest.plugins as Record<string, unknown>)[name];
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw manifestError();
     const pluginEntry = entry as Partial<PluginManifestEntry>;
-    if (pluginEntry.source !== "npm" || typeof pluginEntry.requested !== "string" || !pluginEntry.requested)
+    if (
+      pluginEntry.source !== "npm" ||
+      typeof pluginEntry.requested !== "string" ||
+      !pluginEntry.requested
+    )
       throw manifestError();
     plugins[name] = { source: "npm", requested: pluginEntry.requested };
   }
@@ -61,7 +69,12 @@ function normalizePluginManifest(value: unknown): PluginManifest {
 }
 
 function isMissingFile(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "ENOENT";
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "ENOENT"
+  );
 }
 
 function manifestError(cause?: unknown, file?: string): CodeNError {
