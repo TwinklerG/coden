@@ -1,0 +1,12 @@
+{
+  "name": "@fixtures/with-dependency",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "plugin-message": "1.0.0"
+  },
+  "coden": {
+    "apiVersion": 1,
+    "plugin": "./dist/index.js"
+  }
+}

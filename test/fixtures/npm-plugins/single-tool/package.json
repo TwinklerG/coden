@@ -1,0 +1,9 @@
+{
+  "name": "@fixtures/single-tool",
+  "version": "1.0.0",
+  "type": "module",
+  "coden": {
+    "apiVersion": 1,
+    "plugin": "./dist/index.js"
+  }
+}
