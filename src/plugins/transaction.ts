@@ -81,18 +81,28 @@ export class PluginTransaction {
 
       await this.writeMarker(marker);
       await this.backupCurrent(marker);
-      marker = { ...marker, phase: "backed-up" };
-      await this.writeMarker(marker);
+
+      const backedUpMarker: TransactionMarker = { ...marker, phase: "backed-up" };
+      await this.writeMarker(backedUpMarker);
+      marker = backedUpMarker;
       this.fault("after-backup");
 
       await rename(candidate.runtimeDir, this.paths.runtimeDir);
-      marker = { ...marker, phase: "runtime-committed" };
-      await this.writeMarker(marker);
+      const runtimeCommittedMarker: TransactionMarker = {
+        ...marker,
+        phase: "runtime-committed",
+      };
+      await this.writeMarker(runtimeCommittedMarker);
+      marker = runtimeCommittedMarker;
       this.fault("after-runtime-commit");
 
       await rename(candidate.manifestPath, this.paths.manifestPath);
-      marker = { ...marker, phase: "manifest-committed" };
-      await this.writeMarker(marker);
+      const manifestCommittedMarker: TransactionMarker = {
+        ...marker,
+        phase: "manifest-committed",
+      };
+      await this.writeMarker(manifestCommittedMarker);
+      marker = manifestCommittedMarker;
       this.fault("after-manifest-commit");
 
       await this.cleanupCommitted(marker);
@@ -125,7 +135,7 @@ export class PluginTransaction {
       } catch (error) {
         if (!isFileSystemError(error, "EEXIST")) throw error;
         const owner = await this.readLockOwner();
-        if (owner && this.isProcessAlive(owner.pid)) {
+        if (!owner || this.isProcessAlive(owner.pid)) {
           throw new CodeNError(
             "plugin",
             "plugin.install_busy",
@@ -287,13 +297,13 @@ export class PluginTransaction {
     await rm(marker.backupRuntimeDir, { recursive: true, force: true });
     await rm(marker.stageDirectory, { recursive: true, force: true });
     await rm(this.paths.transactionPath, { force: true });
-    await rm(`${this.paths.transactionPath}.tmp`, { force: true });
+    await rm(`${this.paths.transactionPath}.tmp`, { recursive: true, force: true });
   }
 
   private async cleanupRecoveryArtifacts(marker: TransactionMarker): Promise<void> {
     await rm(marker.stageDirectory, { recursive: true, force: true });
     await rm(this.paths.transactionPath, { force: true });
-    await rm(`${this.paths.transactionPath}.tmp`, { force: true });
+    await rm(`${this.paths.transactionPath}.tmp`, { recursive: true, force: true });
   }
 
   private async removeCurrentTargets(): Promise<void> {

@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -48,6 +49,35 @@ it("rejects a concurrent live owner", async () => {
   );
 });
 
+it("treats a missing lock owner as busy without removing the lock", async () => {
+  const { paths } = await seededPaths();
+  await mkdir(paths.lockPath);
+
+  await expect(new PluginTransaction(paths).run(async () => undefined)).rejects.toThrow(
+    /plugin.install_busy/,
+  );
+
+  expect(await pathExists(paths.lockPath)).toBe(true);
+  await expectCurrent(paths, "old");
+});
+
+it("treats an invalid lock owner as busy without removing the lock", async () => {
+  const { paths } = await seededPaths();
+  await mkdir(paths.lockPath);
+  await writeFile(path.join(paths.lockPath, "owner.json"), "not json", { mode: 0o600 });
+
+  await expect(
+    new PluginTransaction(paths, {
+      isProcessAlive() {
+        throw new Error("invalid owner must not be checked as stale");
+      },
+    }).run(async () => undefined),
+  ).rejects.toThrow(/plugin.install_busy/);
+
+  expect(await pathExists(paths.lockPath)).toBe(true);
+  await expectCurrent(paths, "old");
+});
+
 it("removes a stale owner and retries the lock once", async () => {
   const { paths } = await seededPaths();
   await mkdir(paths.lockPath);
@@ -83,6 +113,22 @@ it.each(["after-backup", "after-runtime-commit", "after-manifest-commit"] as con
     expect(await pathExists(paths.lockPath)).toBe(false);
   },
 );
+
+it("rolls back when persisting the manifest-committed marker fails", async () => {
+  const { paths } = await seededPaths();
+
+  await expect(
+    new PluginTransaction(paths, {
+      fault(point) {
+        if (point === "after-runtime-commit") mkdirSync(`${paths.transactionPath}.tmp`);
+      },
+    }).run(writeNewCandidate),
+  ).rejects.toThrow();
+
+  await expectCurrent(paths, "old");
+  expect(await pathExists(paths.transactionPath)).toBe(false);
+  expect(await pathExists(`${paths.transactionPath}.tmp`)).toBe(false);
+});
 
 it("rolls back immediately when candidate paths are incomplete", async () => {
   const { paths } = await seededPaths();
