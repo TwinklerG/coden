@@ -15,9 +15,17 @@ it.each([
   expect(parseNpmPluginSpecifier(raw)).toMatchObject({ source: "npm", raw, ...expected });
 });
 
-it.each(["hello", "git:https://example.test/p.git", "file:../plugin", "npm:", "npm:../bad"])(
-  "rejects unsupported or invalid source %s",
-  (raw) => expect(() => parseNpmPluginSpecifier(raw)).toThrow(/plugin.specifier_invalid/),
+it.each([
+  "hello",
+  "git:https://example.test/p.git",
+  "file:../plugin",
+  "npm:",
+  "npm:../bad",
+  "npm:hello@github:user/repo",
+  "npm:@scope/hello@github:user/repo",
+  "npm:@scope/hello@github/user/repo",
+])("rejects unsupported or invalid source %s", (raw) =>
+  expect(() => parseNpmPluginSpecifier(raw)).toThrow(/plugin.specifier_invalid/),
 );
 
 it("derives project and global scope paths", () => {
@@ -25,10 +33,12 @@ it("derives project and global scope paths", () => {
     root: path.join("/work", ".coden"),
     manifestPath: path.join("/work", ".coden", "plugins.json"),
     runtimeDir: path.join("/work", ".coden", "plugin-runtime"),
+    lockPath: path.join("/work", ".coden", "plugin-lock"),
   });
   expect(resolvePluginPaths("/work", "global", "/data")).toMatchObject({
     root: path.join("/data", "plugins"),
     runtimeDir: path.join("/data", "plugins", "runtime"),
+    lockPath: path.join("/data", "plugins", "plugin-lock"),
   });
 });
 

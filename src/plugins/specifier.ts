@@ -21,9 +21,15 @@ export function parseNpmPluginSpecifier(raw: string): NpmPluginSpecifier {
 
   const { packageName, requested } = splitSpecifierBody(body);
   if (!isValidNpmPackageName(packageName)) throw invalidSpecifier(raw);
-  if (!requested || /\s/.test(requested) || requested.includes("\\") || requested.includes("//"))
+  if (
+    !requested ||
+    /\s/.test(requested) ||
+    requested.includes("\\") ||
+    requested.includes("/") ||
+    requested.includes(":") ||
+    requested.includes("..")
+  )
     throw invalidSpecifier(raw);
-  if (requested.includes("..")) throw invalidSpecifier(raw);
   return { source: "npm", packageName, requested, raw };
 }
 
@@ -31,8 +37,8 @@ function splitSpecifierBody(body: string): { packageName: string; requested: str
   if (body.startsWith("@")) {
     const slash = body.indexOf("/");
     if (slash < 2) throw invalidSpecifier(body);
-    const versionDelimiter = body.indexOf("@", slash + 1);
-    if (versionDelimiter === -1) return { packageName: body, requested: "latest" };
+    const versionDelimiter = body.lastIndexOf("@");
+    if (versionDelimiter <= slash) return { packageName: body, requested: "latest" };
     return {
       packageName: body.slice(0, versionDelimiter),
       requested: body.slice(versionDelimiter + 1),

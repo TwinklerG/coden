@@ -25,7 +25,7 @@ export function resolvePluginPaths(
       root,
       manifestPath: path.join(root, "plugins.json"),
       runtimeDir,
-      lockPath: path.join(runtimeDir, "bun.lock"),
+      lockPath: path.join(root, "plugin-lock"),
       transactionPath: path.join(runtimeDir, ".transaction.json"),
     };
   }
@@ -37,7 +37,7 @@ export function resolvePluginPaths(
     root,
     manifestPath: path.join(root, "plugins.json"),
     runtimeDir,
-    lockPath: path.join(runtimeDir, "bun.lock"),
+    lockPath: path.join(root, "plugin-lock"),
     transactionPath: path.join(runtimeDir, ".transaction.json"),
   };
 }
