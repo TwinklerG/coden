@@ -10,3 +10,4 @@ coverage/
 !.coden/plugin-runtime/.gitignore
 !.coden/plugin-runtime/bun.lock
 .agents/skills/
+.superpowers/
