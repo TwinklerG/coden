@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { classifyBashRisk, PermissionPolicy } from "../src/permissions/policy.js";
 import { readWorkspaceTextFile, resolveWorkspacePath } from "../src/permissions/workspace.js";
+import { runProcess } from "../src/process/runner.js";
 import { builtinTools } from "../src/tools/builtin/index.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 
@@ -112,6 +113,18 @@ describe("builtin tools", () => {
     );
     expect(result.content.length).toBeLessThanOrEqual(1000);
     expect(result.content).toContain("omitted");
+  });
+
+  it("shares the bounded runner contract directly", async () => {
+    const result = await runProcess(
+      process.execPath,
+      ["-e", "process.stdout.write('a'.repeat(4000)); process.stderr.write('problem')"],
+      { cwd: process.cwd(), timeoutMs: 5_000, maxOutputChars: 1_000 },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.length).toBeLessThanOrEqual(1_100);
+    expect(result.stdout).toContain("omitted");
+    expect(result.stderr).toBe("problem");
   });
 
   it.skipIf(process.platform === "win32")(
