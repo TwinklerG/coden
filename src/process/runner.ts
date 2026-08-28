@@ -82,6 +82,13 @@ export const runProcess: ProcessRunner = (command, args, options) =>
     };
     const finish = (exitCode: number | null, signal: NodeJS.Signals | null) => {
       if (settled) return;
+      if ((timedOut || cancelled) && grouped && child.pid) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          // The leader or group may already be gone; resolving below is still safe.
+        }
+      }
       settled = true;
       clearTimeout(timer);
       if (escalation) clearTimeout(escalation);
