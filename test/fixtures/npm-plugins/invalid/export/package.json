@@ -1,0 +1,9 @@
+{
+  "name": "@fixtures/invalid-export",
+  "version": "1.0.0",
+  "type": "module",
+  "coden": {
+    "apiVersion": 1,
+    "plugin": "./dist/index.js"
+  }
+}
