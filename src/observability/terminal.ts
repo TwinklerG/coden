@@ -2,6 +2,8 @@ import * as readline from "node:readline";
 import pc from "picocolors";
 import type { EventBus, RuntimeEvent } from "../core/events.js";
 
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+
 export interface TerminalOptions {
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
@@ -15,6 +17,9 @@ export class TerminalRenderer {
   private readonly tty: boolean;
   private spinner: NodeJS.Timeout | undefined;
   private frame = 0;
+  private providerStartedAt: number | undefined;
+  private reasoningText = "";
+  private contentStarted = false;
   // Non-TTY output is buffered until the provider attempt succeeds so that a
   // failed stream attempt followed by a retry cannot corrupt pipeline output.
   private pendingText = "";
@@ -29,26 +34,33 @@ export class TerminalRenderer {
     events.on((event) => this.render(event));
   }
   private render(event: RuntimeEvent): void {
-    if (event.type === "provider.started") this.startSpinner();
-    if (event.type === "provider.delta") {
-      this.stopSpinner();
+    if (event.type === "provider.started") this.startProviderAttempt();
+    if (event.type === "provider.reasoning_delta") {
       const text = String(event.data?.text ?? "");
+      if (this.tty && this.providerStartedAt !== undefined && !this.contentStarted && text) {
+        this.reasoningText += text;
+        this.renderThinkingLine();
+      }
+    }
+    if (event.type === "provider.delta") {
+      const text = String(event.data?.text ?? "");
+      if (text && !this.contentStarted) this.finishThinking();
       if (this.tty) this.stdout.write(text);
       else this.pendingText += text;
     }
     if (event.type === "provider.completed") {
-      this.stopSpinner();
       if (!this.tty && this.pendingText) {
         this.stdout.write(this.pendingText);
         this.pendingText = "";
       }
+      this.endProviderAttempt();
     }
     if (event.type === "provider.retry" || event.type === "turn.failed") {
-      this.stopSpinner();
+      this.endProviderAttempt();
       this.pendingText = "";
     }
     if (event.type === "tool.started") {
-      this.stopSpinner();
+      this.endProviderAttempt();
       this.status(`tool ${String(event.data?.name)} started`);
     }
     if (event.type === "tool.completed")
@@ -58,30 +70,83 @@ export class TerminalRenderer {
     if (event.type === "provider.retry" && this.options.verbose)
       this.status(`provider retry ${String(event.data?.attempt)}`);
     if (event.type === "turn.completed") {
-      this.stopSpinner();
+      this.endProviderAttempt();
       this.stdout.write("\n");
       this.status(
         `done: ${String(event.data?.tools)} tools, ${String(event.data?.durationMs)}ms, ${String(event.data?.inputTokens)}/${String(event.data?.outputTokens)} tokens`,
       );
     }
     if (event.type === "turn.failed") {
-      this.stopSpinner();
       this.status(pc.red(`failed: ${String(event.data?.message)}`));
     }
   }
   private status(message: string): void {
     this.stderr.write(this.tty ? `${pc.dim(message)}\n` : `[coden] ${message}\n`);
   }
+  private startProviderAttempt(): void {
+    this.endProviderAttempt();
+    this.providerStartedAt = Date.now();
+    this.startSpinner();
+  }
+  private endProviderAttempt(): void {
+    this.stopSpinner();
+    this.providerStartedAt = undefined;
+    this.reasoningText = "";
+    this.contentStarted = false;
+  }
+  private finishThinking(): void {
+    const startedAt = this.providerStartedAt;
+    const hadReasoning = Boolean(this.normalizedReasoning());
+    this.stopSpinner();
+    this.contentStarted = true;
+    if (this.tty && startedAt !== undefined && hadReasoning) {
+      const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+      this.stderr.write(`${pc.dim(`thought for ${seconds}s`)}\n`);
+    }
+  }
+  private normalizedReasoning(): string {
+    return this.reasoningText.replace(/\s+/g, " ").trim();
+  }
+  private renderThinkingLine(): void {
+    const normalized = this.normalizedReasoning();
+    if (!normalized) return;
+    const columns = (this.stderr as NodeJS.WritableStream & { columns?: number }).columns ?? 80;
+    const frame = SPINNER_FRAMES[this.frame++ % SPINNER_FRAMES.length] ?? "";
+    const visible = this.truncateTail(normalized, Math.max(0, columns - 2));
+    readline.clearLine(this.stderr, 0);
+    readline.cursorTo(this.stderr, 0);
+    this.stderr.write(pc.dim(`${frame} ${visible}`));
+  }
+  private truncateTail(text: string, maxColumns: number): string {
+    if (maxColumns <= 0) return "";
+    const characters = Array.from(text);
+    const width = (character: string) => ((character.codePointAt(0) ?? 0) <= 0xff ? 1 : 2);
+    const total = characters.reduce((sum, character) => sum + width(character), 0);
+    if (total <= maxColumns) return text;
+    const kept: string[] = [];
+    let used = 1;
+    for (let index = characters.length - 1; index >= 0; index--) {
+      const character = characters[index];
+      if (character === undefined || used + width(character) > maxColumns) break;
+      kept.unshift(character);
+      used += width(character);
+    }
+    return `…${kept.join("")}`;
+  }
   private startSpinner(): void {
     if (!this.tty || this.spinner) {
       if (!this.tty && this.options.verbose) this.status("requesting model");
       return;
     }
-    const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     this.spinner = setInterval(() => {
+      if (this.normalizedReasoning()) {
+        this.renderThinkingLine();
+        return;
+      }
       readline.clearLine(this.stderr, 0);
       readline.cursorTo(this.stderr, 0);
-      this.stderr.write(`${frames[this.frame++ % frames.length]} thinking`);
+      const frame = SPINNER_FRAMES[this.frame++ % SPINNER_FRAMES.length] ?? "";
+      this.stderr.write(`${frame} thinking`);
     }, 80);
   }
   private stopSpinner(): void {
@@ -92,6 +157,6 @@ export class TerminalRenderer {
     readline.cursorTo(this.stderr, 0);
   }
   dispose(): void {
-    this.stopSpinner();
+    this.endProviderAttempt();
   }
 }

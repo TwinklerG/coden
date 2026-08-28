@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/core/events.js";
 import { TerminalRenderer } from "../src/observability/terminal.js";
 import { builtinTools } from "../src/tools/builtin/index.js";
@@ -21,6 +21,11 @@ class Sink extends Writable {
     callback();
   }
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("plugins and terminal", () => {
   it("loads good plugins, isolates failures, and reloads changed modules", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "coden-plugin-"));
@@ -95,6 +100,109 @@ describe("plugins and terminal", () => {
     const result = await loader.load([{ path: path.join(root, "plugins"), project: true }]);
     expect(result.registry.list()).toHaveLength(4);
   });
+  it("folds temporary TTY reasoning when formal content starts", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-28T00:00:00.000Z"));
+    const out = new Sink();
+    const err = new Sink();
+    Object.assign(err, { columns: 40 });
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.reasoning_delta", { text: "reviewing\n  project files" });
+    expect(err.value).toContain("reviewing project files");
+    const beforeLongDelta = err.value.length;
+    await events.emit("provider.reasoning_delta", {
+      text: " while checking a deliberately long additional detail",
+    });
+    const latestRender = err.value.slice(beforeLongDelta);
+    expect(latestRender).toContain("…");
+    expect(latestRender).not.toContain("\n  ");
+
+    vi.advanceTimersByTime(3_200);
+    await events.emit("provider.delta", { text: "Answer" });
+
+    expect(err.value).toContain("thought for 3.2s");
+    expect(out.value).toBe("Answer");
+    renderer.dispose();
+  });
+
+  it("ignores reasoning after formal TTY content starts", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.reasoning_delta", { text: "first thought" });
+    await events.emit("provider.delta", { text: "answer" });
+    const afterContent = err.value;
+    await events.emit("provider.reasoning_delta", { text: "must not appear" });
+
+    expect(err.value).toBe(afterContent);
+    expect(err.value).not.toContain("must not appear");
+    renderer.dispose();
+  });
+
+  it("clears failed-attempt reasoning without folding it", async () => {
+    vi.useFakeTimers();
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.reasoning_delta", { text: "discard me" });
+    await events.emit("provider.retry", { attempt: 1 });
+    const afterRetry = err.value;
+    vi.advanceTimersByTime(200);
+
+    expect(err.value).toBe(afterRetry);
+    expect(err.value).not.toContain("thought for");
+    renderer.dispose();
+  });
+
+  it("does not expose reasoning in non-TTY output", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: false });
+
+    await events.emit("provider.started");
+    await events.emit("provider.reasoning_delta", { text: "hidden chain of thought" });
+    await events.emit("provider.delta", { text: "public answer" });
+    await events.emit("provider.completed", {});
+
+    expect(out.value).toBe("public answer");
+    expect(err.value).not.toContain("hidden chain of thought");
+    expect(err.value).not.toContain("thought for");
+    renderer.dispose();
+  });
+
+  it("cleans active reasoning on tool start and dispose", async () => {
+    vi.useFakeTimers();
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.reasoning_delta", { text: "calling a tool" });
+    await events.emit("tool.started", { name: "read" });
+    const afterToolStart = err.value;
+    vi.advanceTimersByTime(200);
+    expect(err.value).toBe(afterToolStart);
+    expect(err.value).not.toContain("thought for");
+
+    await events.emit("provider.started");
+    await events.emit("provider.reasoning_delta", { text: "active at dispose" });
+    renderer.dispose();
+    const afterDispose = err.value;
+    vi.advanceTimersByTime(200);
+    expect(err.value).toBe(afterDispose);
+  });
+
   it("stops the spinner before permission prompting", async () => {
     const out = new Sink();
     const err = new Sink();
