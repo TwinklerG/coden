@@ -37,7 +37,7 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
   const program = new Command()
     .name("coden")
     .description("CodeN — a minimal coding agent")
-    .version("0.1.0")
+    .version("0.1.1")
     .argument("[prompt]", "task to execute")
     .option("-p, --print", "non-interactive print mode", false)
     .option("--provider <provider>", "openai or anthropic", parseProvider)
