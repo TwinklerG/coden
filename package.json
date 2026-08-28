@@ -6,10 +6,11 @@
   "type": "module",
   "files": [
     "src",
+    "dist/index.js",
     "README.md"
   ],
   "bin": {
-    "coden": "./src/cli/index.ts"
+    "coden": "./dist/index.js"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -17,6 +18,8 @@
   },
   "scripts": {
     "start": "bun run src/cli/index.ts",
+    "build": "mkdir -p dist && bun build src/cli/index.ts --target=node --outfile dist/index.js && sed -i.bak '1s|^#!.*|#!/usr/bin/env node|' dist/index.js && rm -f dist/index.js.bak",
+    "prepack": "bun run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

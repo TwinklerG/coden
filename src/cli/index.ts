@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
+import { realpathSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { userConfigDir, userDataDir } from "../config/config.js";
 import { TrustStore } from "../config/trust.js";
@@ -128,7 +129,13 @@ async function createDefaultConfirm(message: string): Promise<boolean> {
 function isExecutableEntry(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
-  return pathToFileURL(fileURLToPath(import.meta.url)).href === pathToFileURL(entry).href;
+  // Compare canonical realpaths so symlinked prefixes (e.g. macOS /tmp -> /private/tmp)
+  // don't cause the CLI to silently no-op when it is directly executed.
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entry);
+  } catch {
+    return false;
+  }
 }
 
 if (isExecutableEntry()) {

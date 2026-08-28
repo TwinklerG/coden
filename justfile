@@ -5,10 +5,9 @@ set dotenv-load
 run *args:
   bun run src/cli/index.ts {{args}}
 
-# Build a standalone binary (bun build --compile) into dist/
+# Build a portable single-file Node CLI into dist/index.js (used as npm bin)
 build:
-  mkdir -p dist
-  bun build src/cli/index.ts --compile --outfile dist/coden
+  bun run build
 
 # Run the offline test suite
 test:
