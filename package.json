@@ -1,18 +1,26 @@
 {
   "name": "@twinklerg/coden",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A minimal event-driven coding agent",
   "license": "MIT",
   "type": "module",
   "files": [
-    "dist/index.js"
+    "dist/index.js",
+    "dist/plugin/index.js",
+    "dist/plugin/index.d.ts"
   ],
   "bin": {
     "coden": "./dist/index.js"
   },
+  "exports": {
+    "./plugin": {
+      "types": "./dist/plugin/index.d.ts",
+      "default": "./dist/plugin/index.js"
+    }
+  },
   "scripts": {
     "start": "bun run src/cli/index.ts",
-    "build": "mkdir -p dist && bun build src/cli/index.ts --target=node --minify --outfile dist/index.js && sed -i.bak '1s|^#!.*|#!/usr/bin/env node|' dist/index.js && rm -f dist/index.js.bak",
+    "build": "rm -rf dist && mkdir -p dist/plugin && bun build src/cli/index.ts --target=node --minify --outfile dist/index.js && bun build src/plugin/index.ts --target=node --format=esm --minify --outfile dist/plugin/index.js && tsc -p tsconfig.plugin.json && sed -i.bak '1s|^#!.*|#!/usr/bin/env node|' dist/index.js && rm -f dist/index.js.bak",
     "prepack": "bun run build",
     "test": "vitest run",
     "test:watch": "vitest",

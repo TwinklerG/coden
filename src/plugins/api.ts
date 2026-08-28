@@ -1,22 +1,20 @@
-import { CodeNError, type ToolDefinition } from "../core/types.js";
+import { CodeNError } from "../core/types.js";
+import {
+  CODEN_PLUGIN_API_VERSION,
+  type CodeNPlugin,
+  type ToolDefinition,
+} from "../plugin/index.js";
 
 export type {
+  CodeNPlugin,
   JsonSchema,
+  PluginModuleExport,
   ToolContext,
   ToolDefinition,
   ToolResult,
   ToolRisk,
-} from "../core/types.js";
-
-export const CODEN_PLUGIN_API_VERSION = 1 as const;
-
-export interface CodeNPlugin {
-  apiVersion: typeof CODEN_PLUGIN_API_VERSION;
-  name: string;
-  tools: ToolDefinition[];
-}
-
-export type PluginModuleExport = ToolDefinition | CodeNPlugin;
+} from "../plugin/index.js";
+export { CODEN_PLUGIN_API_VERSION } from "../plugin/index.js";
 
 export function normalizePluginExport(value: unknown, packageName: string): ToolDefinition[] {
   if (isToolDefinitionShape(value)) return [value];

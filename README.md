@@ -4,7 +4,19 @@
 
 CodeN（Code NJU）是一个用 TypeScript 独立实现的极简编程智能体。它直接使用模型原生 Tool Calling，在本地读取、修改文件和执行命令；不依赖 Agent 框架或服务端代码执行。
 
-## 要求与安装
+## 安装与使用
+
+### 从 npm 安装（发布后的 CLI）
+
+```bash
+bun add -g @twinklerg/coden     # 或 npm install -g @twinklerg/coden
+coden --version                 # 0.1.2
+coden --help
+```
+
+发布产物是构建后的单文件 Node CLI（`dist/index.js`，已 minify），运行时只需 Node，不需要 Bun。
+
+### 从源码运行（开发）
 
 - [Bun](https://bun.sh/) 1.1+
 - [Just](https://github.com/casey/just)
@@ -16,22 +28,23 @@ just check
 
 源码仅使用标准 Web/Node.js API；Bun 负责依赖、脚本和 TypeScript 插件运行。
 
-## 使用
+### 使用示例
 
 ```bash
 export CODEN_OPENAI_API_KEY=...
-bun run src/cli/index.ts "修复当前项目的测试失败"
-bun run src/cli/index.ts -p --auto "实现功能并运行测试"
+coden "修复当前项目的测试失败"
+coden -p --auto "实现功能并运行测试"
 
 export CODEN_ANTHROPIC_API_KEY=...
-bun run src/cli/index.ts --provider anthropic --model claude-sonnet-4-20250514
+coden --provider anthropic --model claude-sonnet-4-20250514
 
-bun run src/cli/index.ts --resume <session-id>
+coden --resume <session-id>      # 恢复指定会话
+coden --resume                   # 列出当前工作区的会话
 ```
 
-也可执行 `just run -- --help`。无 prompt 时进入 REPL，支持 `/help`、`/session`、`/compact`、`/reload`、`/new` 和 `/quit`。
+无 prompt 时进入 REPL，支持 `/help`、`/session`、`/sessions`、`/compact`、`/reload`、`/new` 和 `/quit`。启动横幅会显示当前版本与 16 位 workspace hash。
 
-核心选项：`--provider`、`--model`、`--resume`、`--auto`、`--verbose`、`--max-steps` 和可重复的 `--plugin`。
+核心选项：`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--auto`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。
 
 ## 配置
 
@@ -152,7 +165,7 @@ coden plugin remove @scope/coden-plugin-example
 单工具默认导出一个兼容 `ToolDefinition` 的对象：
 
 ```ts
-import type { ToolDefinition } from "coden/plugin";
+import type { ToolDefinition } from "@twinklerg/coden/plugin";
 
 const tool: ToolDefinition = {
   name: "example_echo",
@@ -176,7 +189,7 @@ export default tool;
 多工具默认导出 `CodeNPlugin`，其中 `name` 必须等于 npm 包名：
 
 ```ts
-import type { CodeNPlugin, ToolDefinition } from "coden/plugin";
+import type { CodeNPlugin, ToolDefinition } from "@twinklerg/coden/plugin";
 
 const readTool: ToolDefinition = {
   name: "example_read",
@@ -207,14 +220,19 @@ const plugin: CodeNPlugin = {
 export default plugin;
 ```
 
-插件可以把 `coden` 放入 `devDependencies` 以获得 `coden/plugin` 类型；构建产物中的类型导入会被移除，运行时不应加载另一份 CodeN。
+`@twinklerg/coden/plugin` 是 CodeN 提供给插件作者的公共契约子路径。插件把 `@twinklerg/coden` 放入 `devDependencies` 以在构建时获得类型；`import type` 会在构建时被移除，运行时不加载另一份 CodeN。`ToolContext.signal` 使用 `AbortSignal`，请确保 tsconfig 提供一个定义它的 lib（如 `@types/node` 或 DOM）。
+
+插件契约以 `src/plugin/index.ts` 为唯一来源；构建时自动生成 `dist/plugin/index.d.ts` 和仅包含公开常量的最小 JavaScript 入口，不发布 `src`。CodeN 的 npm 包只暴露 `/plugin` 这一条子路径，主入口 `"."` 未公开，`import "@twinklerg/coden"` 会被拒绝——它定位为 CLI，不作为程序化导入库。
 
 ## 开发与测试
 
 ```bash
-just fmt      # Biome format
-just test     # offline Vitest
-just check    # Biome lint + strict tsc + complete offline tests
+just fmt          # Biome format
+just test         # offline Vitest
+just check        # Biome lint + strict tsc + complete offline tests
+just build        # build the CLI and generate the public plugin contract in dist/
+just publish-dry-run  # verify exactly what npm would publish (no upload)
+just publish      # lint + typecheck + test, then publish to npm (--access public)
 ```
 
 离线集成测试用 `ScriptedProvider` 覆盖工具循环、拒绝、重试和恢复。真实 API 冒烟测试（`test/live.test.ts`）默认跳过，仅在显式设置后运行：

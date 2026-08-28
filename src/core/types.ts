@@ -1,5 +1,12 @@
-export type JsonSchema = Record<string, unknown>;
-export type ToolRisk = "read" | "modify" | "dangerous";
+import type { ToolDefinition } from "../plugin/index.js";
+
+export type {
+  JsonSchema,
+  ToolContext,
+  ToolDefinition,
+  ToolResult,
+  ToolRisk,
+} from "../plugin/index.js";
 
 export interface Usage {
   inputTokens: number;
@@ -35,23 +42,6 @@ export interface ToolResultMessage {
   isError: boolean;
 }
 export type AgentMessage = SystemMessage | UserMessage | AssistantMessage | ToolResultMessage;
-
-export interface ToolResult {
-  content: string;
-  isError?: boolean;
-  metadata?: Record<string, unknown>;
-}
-export interface ToolContext {
-  workspace: string;
-  signal: AbortSignal;
-}
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  inputSchema: JsonSchema;
-  risk: ToolRisk;
-  execute(input: unknown, context: ToolContext): Promise<ToolResult>;
-}
 
 export interface ModelRequest {
   model: string;
