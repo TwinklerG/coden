@@ -1,10 +1,16 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export class TrustStore {
   constructor(private readonly file: string) {}
   async isTrusted(realPath: string): Promise<boolean> {
     return (await this.read()).includes(realPath);
+  }
+  async isWorkspaceTrusted(workspace: string): Promise<boolean> {
+    return this.isTrusted(await realpath(workspace));
+  }
+  async trustWorkspace(workspace: string): Promise<void> {
+    return this.trust(await realpath(workspace));
   }
   async trust(realPath: string): Promise<void> {
     const values = await this.read();

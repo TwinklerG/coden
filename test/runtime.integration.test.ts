@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
+import { TrustStore } from "../src/config/trust.js";
 import { ContextManager } from "../src/context/manager.js";
 import { EventBus } from "../src/core/events.js";
 import { AgentRuntime } from "../src/core/runtime.js";
@@ -75,6 +76,13 @@ async function harness(
   return { workspace, events, observed, registry, session, runtime };
 }
 describe("AgentRuntime integration", () => {
+  it("trusts workspace subjects by their real path", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-trust-"));
+    const data = await mkdtemp(path.join(os.tmpdir(), "coden-trust-data-"));
+    const store = new TrustStore(path.join(data, "trusted.json"));
+    await store.trustWorkspace(workspace);
+    expect(await store.isWorkspaceTrusted(workspace)).toBe(true);
+  });
   it("runs read -> edit -> bash -> final answer", async () => {
     const provider = new ScriptedProvider([
       scriptedTool("r", "read", { path: "file.txt" }),

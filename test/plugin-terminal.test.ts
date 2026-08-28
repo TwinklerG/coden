@@ -79,6 +79,49 @@ describe("plugins and terminal", () => {
     );
     expect(result?.content).toBe("v2");
   });
+  it("extends an installed registry and preserves source metadata", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-plugin-"));
+    const directory = path.join(root, "plugins");
+    await mkdir(directory);
+    await writeFile(
+      path.join(directory, "local.ts"),
+      `export default { name: "local_extension", description: "local", risk: "read", inputSchema: { type: "object" }, async execute() { return { content: "ok" }; } };\n`,
+    );
+    const events = new EventBus();
+    const base = new ToolRegistry(builtinTools());
+    const installed = {
+      name: "installed_extension",
+      description: "installed",
+      risk: "read" as const,
+      inputSchema: { type: "object" },
+      async execute() {
+        return { content: "installed" };
+      },
+    };
+    base.register(installed, {
+      kind: "npm",
+      pluginName: "@acme/installed",
+      pluginVersion: "1.0.0",
+    });
+    const loaded = await new PluginLoader(builtinTools(), events, true, undefined, async () => ({
+      default: {
+        name: "local_extension",
+        description: "local",
+        risk: "read",
+        inputSchema: { type: "object" },
+        async execute() {
+          return { content: "ok" };
+        },
+      },
+    })).load([{ path: directory, project: true }], base);
+    expect(loaded.registry.get("installed_extension")).toBe(installed);
+    const localSource = loaded.registry.source("local_extension");
+    expect(localSource).toMatchObject({ kind: "local" });
+    expect(localSource && "path" in localSource ? localSource.path : undefined).toContain(
+      path.join("plugins", "local.ts"),
+    );
+  });
+
   it("fails closed when project trust callback is absent", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "coden-plugin-"));
     const directory = path.join(root, "plugins");

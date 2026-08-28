@@ -24,6 +24,14 @@ import { TerminalRenderer } from "../observability/terminal.js";
 import { JSONLTraceWriter } from "../observability/trace.js";
 import { type PermissionDecision, PermissionPolicy } from "../permissions/policy.js";
 import { readWorkspaceTextFile } from "../permissions/workspace.js";
+import {
+  composePackageRegistry,
+  InstalledPluginLoader,
+  type LoadedPackagePlugin,
+  type PackagePluginFailure,
+} from "../plugins/installed-loader.js";
+import { resolvePluginPaths } from "../plugins/paths.js";
+import { PluginTransaction } from "../plugins/transaction.js";
 import { AnthropicProvider } from "../providers/anthropic.js";
 import { OpenAICompatibleProvider } from "../providers/openai.js";
 import { SessionStore } from "../sessions/store.js";
@@ -121,13 +129,50 @@ export async function runAgentCommand(
     if (allowed) await trustStore.trust(directory);
     return allowed;
   });
+  const installedLoader = new InstalledPluginLoader();
+  const globalPaths = resolvePluginPaths(workspace, "global", config.dataDir);
+  const projectPaths = resolvePluginPaths(workspace, "project", config.dataDir);
   const pluginDirs = [
     { path: path.join(userConfigDir(), "plugins"), project: false },
     { path: path.join(workspace, ".coden", "plugins"), project: true },
     ...config.plugins.map((item) => ({ path: path.resolve(workspace, item), project: true })),
   ];
+  const loadedPackageVersions = new Map<string, string>();
+  const loadInstalled = async () => {
+    await new PluginTransaction(globalPaths).recover();
+    await new PluginTransaction(projectPaths).recover();
+    const global = await loadInstalledScope(installedLoader, globalPaths, events, "global");
+    const projectTrusted = options.auto || (await trustStore.isWorkspaceTrusted(workspace));
+    const project = projectTrusted
+      ? await loadInstalledScope(installedLoader, projectPaths, events, "project")
+      : { loaded: [], failed: [], unavailable: true };
+    if (project.unavailable) {
+      await events.emit("plugin.unavailable", {
+        source: "npm",
+        scope: "project",
+        path: projectPaths.root,
+        reason: "workspace is not trusted; run coden plugin install or sync after trusting",
+      });
+    }
+    const composed = composePackageRegistry(builtins, global.loaded, project.loaded);
+    for (const plugin of [...global.loaded, ...project.loaded]) {
+      const previous = loadedPackageVersions.get(plugin.packageName);
+      if (previous && previous !== plugin.version) {
+        await events.emit("plugin.restart_required", {
+          source: "npm",
+          packageName: plugin.packageName,
+          loadedVersion: previous,
+          diskVersion: plugin.version,
+          reason: "npm plugin metadata changed; restart CodeN to load it",
+        });
+      }
+      loadedPackageVersions.set(plugin.packageName, plugin.version);
+    }
+    return { composed, global, project };
+  };
   const reload = async () => {
-    const loaded = await loader.load(pluginDirs);
+    const installed = await loadInstalled();
+    const loaded = await loader.load(pluginDirs, installed.composed.registry);
     registry.replaceWith(loaded.registry);
     return loaded;
   };
@@ -166,6 +211,52 @@ export async function runAgentCommand(
     rl?.close();
     renderer.dispose();
     await trace.flush();
+  }
+}
+
+interface InstalledScopeResult {
+  loaded: LoadedPackagePlugin[];
+  failed: PackagePluginFailure[];
+  unavailable?: boolean;
+}
+
+async function loadInstalledScope(
+  loader: InstalledPluginLoader,
+  paths: ReturnType<typeof resolvePluginPaths>,
+  events: EventBus,
+  scope: "global" | "project",
+): Promise<InstalledScopeResult> {
+  try {
+    const result = await loader.loadScope(paths);
+    for (const plugin of result.loaded) {
+      await events.emit("plugin.loaded", {
+        source: "npm",
+        scope,
+        packageName: plugin.packageName,
+        version: plugin.version,
+        path: plugin.entryPath,
+        tools: plugin.tools.map((tool) => tool.name),
+      });
+    }
+    for (const failure of result.failed) {
+      await events.emit("plugin.failed", {
+        source: "npm",
+        scope,
+        packageName: failure.packageName,
+        path: failure.path,
+        message: `${failure.message}; run coden plugin sync to repair the runtime`,
+      });
+    }
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await events.emit("plugin.failed", {
+      source: "npm",
+      scope,
+      path: paths.runtimeDir,
+      message: `${message}; run coden plugin sync to repair the runtime`,
+    });
+    return { loaded: [], failed: [], unavailable: true };
   }
 }
 

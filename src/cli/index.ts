@@ -106,12 +106,12 @@ class TrustingPluginService implements PluginCommandService {
 
   private async ensureProjectTrust(): Promise<void> {
     const realWorkspace = await realpath(this.workspace);
-    if (await this.trustStore.isTrusted(realWorkspace)) return;
+    if (await this.trustStore.isWorkspaceTrusted(realWorkspace)) return;
     const allowed = await this.confirm(
       `Project npm plugins in ${realWorkspace} run in-process with full user permissions. Trust this workspace?`,
     );
     if (!allowed) throw new Error("workspace is not trusted for project npm plugins");
-    await this.trustStore.trust(realWorkspace);
+    await this.trustStore.trustWorkspace(realWorkspace);
   }
 }
 

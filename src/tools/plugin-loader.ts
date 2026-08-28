@@ -28,8 +28,11 @@ export class PluginLoader {
     private readonly trust?: ProjectTrust,
     private readonly importer: PluginImporter = PluginLoader.defaultImporter,
   ) {}
-  async load(directories: Array<{ path: string; project: boolean }>): Promise<PluginLoadResult> {
-    const registry = new ToolRegistry(this.builtins);
+  async load(
+    directories: Array<{ path: string; project: boolean }>,
+    baseRegistry?: ToolRegistry,
+  ): Promise<PluginLoadResult> {
+    const registry = baseRegistry?.clone() ?? new ToolRegistry(this.builtins);
     const loaded: string[] = [];
     const failed: string[] = [];
     for (const target of directories) {
@@ -60,7 +63,7 @@ export class PluginLoader {
             const module = await this.importPlugin(file);
             if (!isToolDefinition(module.default))
               throw new Error("default export is not a ToolDefinition");
-            registry.register(module.default);
+            registry.register(module.default, { kind: "local", path: file });
             loaded.push(module.default.name);
             await this.events.emit("plugin.loaded", { path: file, name: module.default.name });
           } catch (error) {
