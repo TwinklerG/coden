@@ -17,6 +17,7 @@ const globalOptions: PluginOperationOptions = { scope: "global", allowScripts: f
 class FakePackageManager implements PackageManager {
   readonly requests: PackageInstallRequest[] = [];
   failWith?: Error;
+  omitLockForEmptyDependencies = false;
   readonly fixtureOverrides = new Map<string, string>();
 
   async install(request: PackageInstallRequest): Promise<void> {
@@ -27,12 +28,11 @@ class FakePackageManager implements PackageManager {
     ) as {
       dependencies?: Record<string, string>;
     };
-    await materializeFixtureDependencies(
-      request.cwd,
-      packageJson.dependencies ?? {},
-      this.fixtureOverrides,
-    );
-    await writeFile(path.join(request.cwd, "bun.lock"), "fixture-lock\n", "utf8");
+    const dependencies = packageJson.dependencies ?? {};
+    await materializeFixtureDependencies(request.cwd, dependencies, this.fixtureOverrides);
+    if (!this.omitLockForEmptyDependencies || Object.keys(dependencies).length > 0) {
+      await writeFile(path.join(request.cwd, "bun.lock"), "fixture-lock\n", "utf8");
+    }
   }
 }
 
@@ -54,6 +54,41 @@ describe("PluginInstaller", () => {
     expect(await readPluginManifest(harness.projectPaths.manifestPath)).toMatchObject({
       plugins: { "@fixtures/single-tool": { source: "npm", requested: "^1" } },
     });
+    expect(await readFile(path.join(harness.projectPaths.runtimeDir, "bun.lock"), "utf8")).toBe(
+      "fixture-lock\n",
+    );
+  });
+
+  it("creates a deterministic lockfile for an empty manifest when the package manager omits it", async () => {
+    const h = await createInstallerHarness();
+    h.manager.omitLockForEmptyDependencies = true;
+
+    await h.installer.sync(projectOptions);
+
+    expect(await readFile(h.projectPaths.manifestPath, "utf8")).toBe(
+      '{\n  "schemaVersion": 1,\n  "plugins": {}\n}\n',
+    );
+    expect(await readFile(path.join(h.projectPaths.runtimeDir, "package.json"), "utf8")).toBe(
+      '{\n  "private": true,\n  "dependencies": {}\n}\n',
+    );
+    expect(await readFile(path.join(h.projectPaths.runtimeDir, "bun.lock"), "utf8")).toBe("");
+    expect(await readFile(path.join(h.projectPaths.runtimeDir, ".gitignore"), "utf8")).toBe(
+      "*\n!.gitignore\n!bun.lock\n",
+    );
+  });
+
+  it("removes the last package with the deterministic empty lockfile", async () => {
+    const h = await createInstallerHarness();
+    await h.installer.install("npm:@fixtures/single-tool", projectOptions);
+    h.manager.omitLockForEmptyDependencies = true;
+
+    await h.installer.remove("@fixtures/single-tool", projectOptions);
+
+    expect(await readPluginManifest(h.projectPaths.manifestPath)).toEqual({
+      schemaVersion: 1,
+      plugins: {},
+    });
+    expect(await readFile(path.join(h.projectPaths.runtimeDir, "bun.lock"), "utf8")).toBe("");
   });
 
   it("removes a package by rebuilding the candidate dependency tree", async () => {

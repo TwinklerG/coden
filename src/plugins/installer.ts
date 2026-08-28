@@ -185,6 +185,7 @@ export class PluginInstaller {
       throw mapPackageManagerError(error, frozenLockfile);
     }
 
+    await writeEmptyManifestLockfile(candidate.runtimeDir, manifest);
     await writeRuntimeGitignore(candidate.runtimeDir, sourcePaths.scope);
     const loaded = await this.loader.loadScope({
       ...sourcePaths,
@@ -233,6 +234,14 @@ export class PluginInstaller {
     }
     return listed;
   }
+}
+
+async function writeEmptyManifestLockfile(
+  runtimeDir: string,
+  manifest: PluginManifest,
+): Promise<void> {
+  if (Object.keys(manifest.plugins).length > 0) return;
+  await writeFile(path.join(runtimeDir, "bun.lock"), "", "utf8");
 }
 
 async function writeRuntimeGitignore(runtimeDir: string, scope: PluginScope): Promise<void> {
