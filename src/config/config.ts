@@ -12,9 +12,11 @@ export interface CodeNConfig {
   safetyMargin: number;
   plugins: string[];
   dataDir: string;
+  env: Record<string, string>;
 }
-export type ConfigOverrides = Partial<Omit<CodeNConfig, "plugins" | "dataDir">> & {
+export type ConfigOverrides = Partial<Omit<CodeNConfig, "plugins" | "dataDir" | "env">> & {
   plugins?: string[];
+  env?: Record<string, string>;
 };
 
 export function userConfigDir(): string {
@@ -50,7 +52,22 @@ function pickOverrides(raw: Record<string, unknown>): ConfigOverrides {
   if (typeof raw.safetyMargin === "number") overrides.safetyMargin = raw.safetyMargin;
   if (Array.isArray(raw.plugins))
     overrides.plugins = raw.plugins.filter((item): item is string => typeof item === "string");
+  if (raw.env !== undefined) {
+    if (typeof raw.env !== "object" || raw.env === null || Array.isArray(raw.env))
+      throw new Error("env must be an object");
+    const env: Record<string, string> = {};
+    for (const [entryKey, entryValue] of Object.entries(raw.env)) {
+      if (typeof entryValue !== "string") throw new Error(`env "${entryKey}" must be a string`);
+      env[entryKey] = entryValue;
+    }
+    overrides.env = env;
+  }
   return overrides;
+}
+
+function stripEnv(overrides: ConfigOverrides): ConfigOverrides {
+  const { env: _env, ...rest } = overrides;
+  return rest;
 }
 
 export async function loadConfig(
@@ -66,6 +83,7 @@ export async function loadConfig(
     safetyMargin: 4096,
     plugins: [],
     dataDir: userDataDir(),
+    env: {},
   };
   const user = await readJson(path.join(userConfigDir(), "config.json"));
   const project = await readJson(path.join(workspace, ".coden", "config.json"));
@@ -74,7 +92,18 @@ export async function loadConfig(
     env.provider = process.env.CODEN_PROVIDER;
   if (process.env.CODEN_MODEL) env.model = process.env.CODEN_MODEL;
   if (process.env.CODEN_MAX_STEPS) env.maxSteps = Number(process.env.CODEN_MAX_STEPS);
-  const merged = { ...defaults, ...user, ...project, ...env, ...cli };
+  const mergedEnv = { ...(user.env ?? {}), ...(project.env ?? {}) };
+  for (const [k, v] of Object.entries(mergedEnv)) {
+    if (process.env[k] === undefined) process.env[k] = v;
+  }
+  const merged = {
+    ...defaults,
+    ...stripEnv(user),
+    ...stripEnv(project),
+    ...env,
+    ...cli,
+    env: mergedEnv,
+  };
   merged.plugins = [...(user.plugins ?? []), ...(project.plugins ?? []), ...(cli.plugins ?? [])];
   if (merged.provider !== "openai" && merged.provider !== "anthropic")
     throw new Error("provider must be openai or anthropic");
