@@ -43,7 +43,10 @@ export function registerPluginCommand(
     .command("install")
     .argument("<specifier>", "npm:<package> or npm:<package>@<version-or-tag>")
     .option("--global", "install in the user-global scope")
-    .option("--allow-scripts", "allow npm lifecycle scripts during dependency install")
+    .option(
+      "--allow-scripts",
+      "allow npm lifecycle scripts with full user permissions during dependency install",
+    )
     .option("--yes", "skip confirmation prompts")
     .action((specifier: string, options: MutatingOptions) =>
       runPluginAction(dependencies, async () => {
@@ -58,7 +61,10 @@ export function registerPluginCommand(
     .command("remove")
     .argument("<package>", "installed npm package name")
     .option("--global", "remove from the user-global scope")
-    .option("--allow-scripts", "allow npm lifecycle scripts while rebuilding dependencies")
+    .option(
+      "--allow-scripts",
+      "allow npm lifecycle scripts with full user permissions while rebuilding dependencies",
+    )
     .option("--yes", "skip confirmation prompts")
     .action((packageName: string, options: MutatingOptions) =>
       runPluginAction(dependencies, async () => {
@@ -88,7 +94,10 @@ export function registerPluginCommand(
   plugin
     .command("sync")
     .option("--global", "sync the user-global plugin runtime")
-    .option("--allow-scripts", "allow npm lifecycle scripts during dependency install")
+    .option(
+      "--allow-scripts",
+      "allow npm lifecycle scripts with full user permissions during dependency install",
+    )
     .option("--yes", "skip confirmation prompts")
     .action((options: MutatingOptions) =>
       runPluginAction(dependencies, async () => {

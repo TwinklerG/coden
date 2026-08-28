@@ -3,5 +3,10 @@ dist/
 coverage/
 .env
 .DS_Store
-.coden/
+.coden/*
+!.coden/plugins.json
+!.coden/plugin-runtime/
+.coden/plugin-runtime/*
+!.coden/plugin-runtime/.gitignore
+!.coden/plugin-runtime/bun.lock
 .agents/skills/
