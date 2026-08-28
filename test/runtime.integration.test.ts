@@ -1,19 +1,24 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
+import { composeRuntimePackageRegistry, loadInstalledScope } from "../src/cli/agent-command.js";
 import { TrustStore } from "../src/config/trust.js";
 import { ContextManager } from "../src/context/manager.js";
 import { EventBus } from "../src/core/events.js";
 import { AgentRuntime } from "../src/core/runtime.js";
-import type { ModelEvent, ModelProvider, ModelRequest } from "../src/core/types.js";
+import type { ModelEvent, ModelProvider, ModelRequest, ToolDefinition } from "../src/core/types.js";
 import { TerminalRenderer } from "../src/observability/terminal.js";
 import { PermissionPolicy } from "../src/permissions/policy.js";
+import { InstalledPluginLoader } from "../src/plugins/installed-loader.js";
+import { serializePluginManifest } from "../src/plugins/manifest.js";
+import { resolvePluginPaths } from "../src/plugins/paths.js";
 import { ScriptedProvider, scriptedText, scriptedTool } from "../src/providers/scripted.js";
 import { SessionStore } from "../src/sessions/store.js";
 import { builtinTools } from "../src/tools/builtin/index.js";
 import { ToolExecutor } from "../src/tools/executor.js";
+import { PluginLoader } from "../src/tools/plugin-loader.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 
 class Sink extends Writable {
@@ -75,6 +80,31 @@ async function harness(
   );
   return { workspace, events, observed, registry, session, runtime };
 }
+function runtimePackage(
+  packageName: string,
+  ...toolNames: string[]
+): {
+  packageName: string;
+  version: string;
+  entryPath: string;
+  tools: ToolDefinition[];
+} {
+  return {
+    packageName,
+    version: "1.0.0",
+    entryPath: `/runtime/${packageName.replaceAll("/", "-")}.js`,
+    tools: toolNames.map((name) => ({
+      name,
+      description: name,
+      risk: "read" as const,
+      inputSchema: { type: "object" },
+      async execute() {
+        return { content: name };
+      },
+    })),
+  };
+}
+
 describe("AgentRuntime integration", () => {
   it("trusts workspace subjects by their real path", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-trust-"));
@@ -83,6 +113,149 @@ describe("AgentRuntime integration", () => {
     await store.trustWorkspace(workspace);
     expect(await store.isWorkspaceTrusted(workspace)).toBe(true);
   });
+  it("passes global and trusted project npm tools to the provider", async () => {
+    const provider = new ScriptedProvider([scriptedText("ready")]);
+    const h = await harness(provider);
+    const composed = await composeRuntimePackageRegistry(
+      builtinTools(),
+      [runtimePackage("@fixtures/global", "global_tool")],
+      [runtimePackage("@fixtures/project", "project_tool")],
+      h.events,
+    );
+    h.registry.replaceWith(composed.registry);
+    await h.runtime.run("use fixtures");
+    const names = provider.requests[0]?.tools.map((tool) => tool.name) ?? [];
+    expect(names).toEqual(expect.arrayContaining(["global_tool", "project_tool"]));
+  });
+
+  it("keeps global tools when an untrusted project is unavailable", async () => {
+    const provider = new ScriptedProvider([scriptedText("global only")]);
+    const h = await harness(provider);
+    await h.events.emit("plugin.unavailable", {
+      source: "npm",
+      scope: "project",
+      reason: "workspace is not trusted",
+    });
+    const composed = await composeRuntimePackageRegistry(
+      builtinTools(),
+      [runtimePackage("@fixtures/global", "global_tool")],
+      [],
+      h.events,
+    );
+    h.registry.replaceWith(composed.registry);
+    await h.runtime.run("list tools");
+    expect(provider.requests[0]?.tools.map((tool) => tool.name)).toContain("global_tool");
+    expect(h.observed).toContain("plugin.unavailable");
+  });
+
+  it("shadows a global package with the trusted project package", async () => {
+    const h = await harness(new ScriptedProvider([scriptedText("project package")]));
+    const composed = await composeRuntimePackageRegistry(
+      builtinTools(),
+      [runtimePackage("@fixtures/same", "global_tool")],
+      [runtimePackage("@fixtures/same", "project_tool")],
+      h.events,
+    );
+    expect(composed.registry.get("global_tool")).toBeUndefined();
+    h.registry.replaceWith(composed.registry);
+    await h.runtime.run("use project package");
+    expect(h.registry.get("global_tool")).toBeUndefined();
+    expect(h.registry.get("project_tool")).toBeDefined();
+  });
+
+  it("isolates a conflicting later npm package and emits its sources", async () => {
+    const h = await harness(new ScriptedProvider([scriptedText("continue")]));
+    const failures: string[] = [];
+    h.events.on((event) => {
+      if (event.type === "plugin.failed") failures.push(String(event.data?.message));
+    });
+    const composed = await composeRuntimePackageRegistry(
+      builtinTools(),
+      [runtimePackage("@fixtures/first", "shared_tool")],
+      [runtimePackage("@fixtures/later", "shared_tool", "later_tool")],
+      h.events,
+    );
+    h.registry.replaceWith(composed.registry);
+    await h.runtime.run("continue");
+    expect(h.registry.get("shared_tool")).toBeDefined();
+    expect(h.registry.get("later_tool")).toBeUndefined();
+    expect(h.observed).toContain("plugin.failed");
+    expect(failures.join(" ")).toMatch(/@fixtures\/first@1\.0\.0.*@fixtures\/later@1\.0\.0/s);
+  });
+
+  it("reports a missing npm runtime with a sync repair diagnostic", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-missing-runtime-"));
+    const paths = resolvePluginPaths(workspace, "project", path.join(workspace, "data"));
+    await mkdir(path.dirname(paths.manifestPath), { recursive: true });
+    await writeFile(
+      paths.manifestPath,
+      serializePluginManifest({
+        schemaVersion: 1,
+        plugins: { "@fixtures/missing": { source: "npm", requested: "latest" } },
+      }),
+    );
+    const events = new EventBus();
+    const messages: string[] = [];
+    events.on((event) => {
+      if (event.type === "plugin.failed") messages.push(String(event.data?.message));
+    });
+    const result = await loadInstalledScope(new InstalledPluginLoader(), paths, events, "project");
+    expect(result.loaded).toEqual([]);
+    expect(messages.join(" ")).toContain("coden plugin sync");
+  });
+
+  it("reloads local TypeScript tools while retaining npm tools", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-reload-"));
+    const directory = path.join(root, "plugins");
+    await mkdir(directory);
+    const file = path.join(directory, "local.ts");
+    await writeFile(file, "v1");
+    const base = new ToolRegistry(builtinTools());
+    const npmTool = runtimePackage("@fixtures/cached", "cached_npm").tools[0];
+    if (!npmTool) throw new Error("npm fixture tool missing");
+    base.register(npmTool, {
+      kind: "npm",
+      pluginName: "@fixtures/cached",
+      pluginVersion: "1.0.0",
+    });
+    const loader = new PluginLoader(
+      builtinTools(),
+      new EventBus(),
+      true,
+      undefined,
+      async (specifier) => {
+        const source = await readFile(new URL(specifier), "utf8");
+        return {
+          default: {
+            name: "local_reload",
+            description: "reload",
+            risk: "read" as const,
+            inputSchema: { type: "object" },
+            async execute() {
+              return { content: source };
+            },
+          },
+        };
+      },
+    );
+    const first = await loader.load([{ path: directory, project: true }], base);
+    const firstTool = first.registry.get("local_reload");
+    expect(first.registry.get("cached_npm")).toBeDefined();
+    expect(firstTool).toBeDefined();
+    expect(
+      (await firstTool?.execute({}, { workspace: root, signal: new AbortController().signal }))
+        ?.content,
+    ).toBe("v1");
+    await writeFile(file, "v2");
+    const second = await loader.load([{ path: directory, project: true }], base);
+    const secondTool = second.registry.get("local_reload");
+    expect(second.registry.get("cached_npm")).toBeDefined();
+    expect(
+      (await secondTool?.execute({}, { workspace: root, signal: new AbortController().signal }))
+        ?.content,
+    ).toBe("v2");
+  });
+
   it("runs read -> edit -> bash -> final answer", async () => {
     const provider = new ScriptedProvider([
       scriptedTool("r", "read", { path: "file.txt" }),

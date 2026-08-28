@@ -25,7 +25,6 @@ import { JSONLTraceWriter } from "../observability/trace.js";
 import { type PermissionDecision, PermissionPolicy } from "../permissions/policy.js";
 import { readWorkspaceTextFile } from "../permissions/workspace.js";
 import {
-  composePackageRegistry,
   InstalledPluginLoader,
   type LoadedPackagePlugin,
   type PackagePluginFailure,
@@ -38,7 +37,7 @@ import { SessionStore } from "../sessions/store.js";
 import { builtinTools } from "../tools/builtin/index.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { PluginLoader } from "../tools/plugin-loader.js";
-import { ToolRegistry } from "../tools/registry.js";
+import { ToolRegistry, type ToolSource } from "../tools/registry.js";
 import { formatSessionList, renderResumeBanner } from "./format.js";
 
 export interface AgentCommandOptions {
@@ -154,19 +153,27 @@ export async function runAgentCommand(
         reason: "workspace is not trusted; run coden plugin install or sync after trusting",
       });
     }
-    const composed = composePackageRegistry(builtins, global.loaded, project.loaded);
-    for (const plugin of [...global.loaded, ...project.loaded]) {
+    const composed = await composeRuntimePackageRegistry(
+      builtins,
+      global.loaded,
+      project.loaded,
+      events,
+    );
+    for (const { scope, plugin } of composed.effective) {
+      const identity = `${scope}:${plugin.version}`;
       const previous = loadedPackageVersions.get(plugin.packageName);
-      if (previous && previous !== plugin.version) {
+      if (previous && previous !== identity) {
         await events.emit("plugin.restart_required", {
           source: "npm",
           packageName: plugin.packageName,
-          loadedVersion: previous,
+          loadedIdentity: previous,
+          diskIdentity: identity,
+          loadedVersion: previous.split(":").slice(1).join(":"),
           diskVersion: plugin.version,
           reason: "npm plugin metadata changed; restart CodeN to load it",
         });
       }
-      loadedPackageVersions.set(plugin.packageName, plugin.version);
+      loadedPackageVersions.set(plugin.packageName, identity);
     }
     return { composed, global, project };
   };
@@ -220,7 +227,52 @@ interface InstalledScopeResult {
   unavailable?: boolean;
 }
 
-async function loadInstalledScope(
+export interface RuntimeEffectivePackage {
+  scope: "global" | "project";
+  plugin: LoadedPackagePlugin;
+}
+
+export async function composeRuntimePackageRegistry(
+  builtins: ToolDefinition[],
+  globalPlugins: LoadedPackagePlugin[],
+  projectPlugins: LoadedPackagePlugin[],
+  events: EventBus,
+): Promise<{ registry: ToolRegistry; effective: RuntimeEffectivePackage[] }> {
+  const registry = new ToolRegistry(builtins);
+  const projectNames = new Set(projectPlugins.map((plugin) => plugin.packageName));
+  const packages: RuntimeEffectivePackage[] = [
+    ...globalPlugins.map((plugin) => ({ scope: "global" as const, plugin })),
+    ...projectPlugins.map((plugin) => ({ scope: "project" as const, plugin })),
+  ];
+  const effective: RuntimeEffectivePackage[] = [];
+  for (const item of packages) {
+    if (item.scope === "global" && projectNames.has(item.plugin.packageName)) continue;
+    const candidate = registry.clone();
+    const source: ToolSource = {
+      kind: "npm",
+      pluginName: item.plugin.packageName,
+      pluginVersion: item.plugin.version,
+      path: item.plugin.entryPath,
+    };
+    try {
+      for (const tool of item.plugin.tools) candidate.register(tool, source);
+      registry.replaceWith(candidate);
+      effective.push(item);
+    } catch (error) {
+      await events.emit("plugin.failed", {
+        source: "npm",
+        scope: item.scope,
+        packageName: item.plugin.packageName,
+        version: item.plugin.version,
+        path: item.plugin.entryPath,
+        message: `${error instanceof Error ? error.message : String(error)}; package skipped to preserve earlier tools`,
+      });
+    }
+  }
+  return { registry, effective };
+}
+
+export async function loadInstalledScope(
   loader: InstalledPluginLoader,
   paths: ReturnType<typeof resolvePluginPaths>,
   events: EventBus,
