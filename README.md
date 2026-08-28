@@ -35,7 +35,7 @@ bun run src/cli/index.ts --resume <session-id>
 
 ## 配置
 
-优先级：CLI > 环境变量 > `<workspace>/.coden/config.json` > `~/.config/coden/config.json` > 默认值。
+配置字段来自五层（从高到低）：CLI 参数 > `CODEN_*` 环境变量 > `<workspace>/.coden/config.json`（项目级）> `~/.config/coden/config.json`（用户级）> 默认值。
 
 ```json
 {
@@ -45,13 +45,16 @@ bun run src/cli/index.ts --resume <session-id>
   "contextWindow": 128000,
   "reservedOutputTokens": 8192,
   "safetyMargin": 4096,
-  "plugins": []
+  "plugins": [],
+  "env": {
+    "CODEN_OPENAI_API_KEY": "sk-..."
+  }
 }
 ```
 
-支持 `CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`CODEN_OPENAI_API_KEY`、`CODEN_OPENAI_BASE_URL`、`CODEN_ANTHROPIC_API_KEY`、`XDG_CONFIG_HOME` 和 `XDG_DATA_HOME`。凭据只从环境读取。
+支持 `CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`CODEN_OPENAI_API_KEY`、`CODEN_OPENAI_BASE_URL`、`CODEN_ANTHROPIC_API_KEY`、`XDG_CONFIG_HOME` 和 `XDG_DATA_HOME`。
 
-配置文件（用户级 `~/.config/coden/config.json` 或项目级 `<workspace>/.coden/config.json`）可用 `env` 字段声明环境变量（含敏感密钥），加载时注入进程环境，无需手动 `export`。注入**不会覆盖** `shell` 中已导出的同名变量（CLI > shell 环境变量 > 配置 env）。密钥请放 `~/.config/coden/` 或 `.coden/`（`gitignore` 忽略、默认不入库），不要放进会被提交或共享的目录。
+`env` 字段（用户级与项目级均可）声明环境变量（含敏感密钥），加载配置时注入进程环境，无需手动 `export`。两级 `env` 合并时**项目级逐键覆盖用户级**；注入**不覆盖** `shell` 中已导出的同名变量（CLI > 环境变量 > 配置 env）。密钥请放 `~/.config/coden/` 或 `.coden/`（已被 `gitignore` 忽略、默认不入库），不要放进会被提交、共享或分发的目录。
 
 会话和 trace 位于 `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`（默认 `~/.local/share/coden`）。
 
