@@ -2,6 +2,7 @@
   "name": "@twinklerg/coden",
   "version": "0.1.0",
   "description": "A minimal event-driven coding agent",
+  "license": "MIT",
   "type": "module",
   "files": [
     "src",
