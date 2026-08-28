@@ -5,6 +5,11 @@ export interface OpenAIProviderOptions {
   apiKey: string;
   baseURL?: string;
 }
+
+type ReasoningDelta = {
+  reasoning_content?: string | null;
+};
+
 export class OpenAICompatibleProvider implements ModelProvider {
   private readonly client: OpenAI;
   constructor(options: OpenAIProviderOptions) {
@@ -36,6 +41,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
     const started = new Set<number>();
     for await (const chunk of response) {
       const delta = chunk.choices[0]?.delta;
+      const reasoning = (delta as (typeof delta & ReasoningDelta) | undefined)?.reasoning_content;
+      if (reasoning) yield { type: "reasoning_delta", text: reasoning };
       if (delta?.content) yield { type: "text_delta", text: delta.content };
       for (const call of delta?.tool_calls ?? []) {
         const index = call.index;

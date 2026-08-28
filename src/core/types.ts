@@ -62,6 +62,7 @@ export interface ModelRequest {
 }
 
 export type ModelEvent =
+  | { type: "reasoning_delta"; text: string }
   | { type: "text_delta"; text: string }
   | { type: "tool_call_start"; index: number; callId: string; name: string }
   | { type: "tool_call_delta"; index: number; argumentsDelta: string }

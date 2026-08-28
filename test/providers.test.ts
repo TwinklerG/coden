@@ -7,6 +7,11 @@ import { OpenAICompatibleProvider, toOpenAIMessages } from "../src/providers/ope
 async function* events(items: ModelEvent[]) {
   for (const item of items) yield item;
 }
+
+async function* chunks(items: unknown[]) {
+  for (const item of items) yield item;
+}
+
 describe("providers", () => {
   const messages: AgentMessage[] = [
     { role: "system", content: "system" },
@@ -31,6 +36,44 @@ describe("providers", () => {
     };
     expect(openai.client.maxRetries).toBe(0);
     expect(anthropic.client.maxRetries).toBe(0);
+  });
+
+  it("normalizes OpenAI-compatible reasoning content separately", async () => {
+    const provider = new OpenAICompatibleProvider({ apiKey: "test" });
+    const client = (
+      provider as unknown as {
+        client: {
+          chat: {
+            completions: {
+              create: () => Promise<AsyncIterable<unknown>>;
+            };
+          };
+        };
+      }
+    ).client;
+    client.chat.completions.create = async () =>
+      chunks([
+        { choices: [{ delta: { reasoning_content: "inspect " } }] },
+        { choices: [{ delta: { reasoning_content: "files" } }] },
+        { choices: [{ delta: { content: "done" } }] },
+      ]);
+
+    const streamed: ModelEvent[] = [];
+    for await (const event of provider.stream({
+      model: "test",
+      messages: [],
+      tools: [],
+      maxOutputTokens: 128,
+    })) {
+      streamed.push(event);
+    }
+
+    expect(streamed).toEqual([
+      { type: "reasoning_delta", text: "inspect " },
+      { type: "reasoning_delta", text: "files" },
+      { type: "text_delta", text: "done" },
+      { type: "done" },
+    ]);
   });
 
   it("converts normalized OpenAI messages", () => {
