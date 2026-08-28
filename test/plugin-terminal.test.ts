@@ -290,6 +290,76 @@ describe("plugins and terminal", () => {
     });
   });
 
+  it("renders plugin diagnostics without noisy default success output", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: false });
+
+    await events.emit("plugin.loaded", {
+      source: "npm",
+      scope: "project",
+      packageName: "@fixtures/ok",
+      version: "1.0.0",
+      tools: ["fixture_ok"],
+    });
+    await events.emit("plugin.failed", {
+      source: "npm",
+      scope: "project",
+      packageName: "@fixtures/bad",
+      version: "1.0.0",
+      message: "plugin.export_invalid; run coden plugin sync to repair the runtime",
+    });
+    await events.emit("plugin.unavailable", {
+      source: "npm",
+      scope: "project",
+      path: "/work/.coden",
+      reason: "workspace is not trusted",
+    });
+    await events.emit("plugin.restart_required", {
+      source: "npm",
+      packageName: "@fixtures/changed",
+      diskVersion: "2.0.0",
+      reason: "npm plugin metadata changed; restart CodeN to load it",
+    });
+    renderer.dispose();
+
+    expect(out.value).toBe("");
+    expect(err.value).not.toContain("plugin loaded: project @fixtures/ok");
+    expect(err.value).toContain(
+      "[coden] plugin failed: project @fixtures/bad@1.0.0 — plugin.export_invalid; run coden plugin sync to repair the runtime",
+    );
+    expect(err.value).toContain(
+      "[coden] plugin unavailable: project /work/.coden — workspace is not trusted",
+    );
+    expect(err.value).toContain(
+      "[coden] plugin restart required: @fixtures/changed@2.0.0 — npm plugin metadata changed; restart CodeN to load it",
+    );
+  });
+
+  it("renders plugin load success only in verbose mode", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, {
+      stdout: out,
+      stderr: err,
+      tty: false,
+      verbose: true,
+    });
+
+    await events.emit("plugin.loaded", {
+      source: "npm",
+      scope: "global",
+      packageName: "@fixtures/ok",
+      version: "1.0.0",
+    });
+    renderer.dispose();
+
+    expect(out.value).toBe("");
+    expect(err.value).toContain("[coden] plugin loaded: global @fixtures/ok@1.0.0");
+  });
+
   it("renders stable non-TTY output", async () => {
     const out = new Sink();
     const err = new Sink();

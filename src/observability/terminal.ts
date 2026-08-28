@@ -79,6 +79,20 @@ export class TerminalRenderer {
     if (event.type === "turn.failed") {
       this.status(pc.red(`failed: ${String(event.data?.message)}`));
     }
+    if (event.type === "plugin.loaded" && this.options.verbose) {
+      this.status(`plugin loaded: ${pluginLabel(event)}`);
+    }
+    if (event.type === "plugin.failed") {
+      this.status(pc.red(`plugin failed: ${pluginLabel(event)}${eventMessage(event)}`));
+    }
+    if (event.type === "plugin.unavailable") {
+      this.status(pc.yellow(`plugin unavailable: ${pluginLabel(event)}${eventMessage(event)}`));
+    }
+    if (event.type === "plugin.restart_required") {
+      this.status(
+        pc.yellow(`plugin restart required: ${pluginLabel(event)}${eventMessage(event)}`),
+      );
+    }
   }
   private status(message: string): void {
     this.stderr.write(this.tty ? `${pc.dim(message)}\n` : `[coden] ${message}\n`);
@@ -159,4 +173,29 @@ export class TerminalRenderer {
   dispose(): void {
     this.endProviderAttempt();
   }
+}
+
+function pluginLabel(event: RuntimeEvent): string {
+  const data = event.data ?? {};
+  const scope = stringValue(data.scope);
+  const packageName = stringValue(data.packageName);
+  const version = stringValue(data.version ?? data.diskVersion);
+  const name = stringValue(data.name);
+  const path = stringValue(data.path);
+  const source = stringValue(data.source);
+  if (packageName)
+    return `${scope ? `${scope} ` : ""}${packageName}${version ? `@${version}` : ""}`;
+  if (name) return name;
+  if (path) return `${scope ? `${scope} ` : ""}${path}`;
+  if (source) return source;
+  return "plugin";
+}
+
+function eventMessage(event: RuntimeEvent): string {
+  const message = stringValue(event.data?.message ?? event.data?.reason);
+  return message ? ` — ${message}` : "";
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

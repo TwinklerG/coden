@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type {
+  ToolDefinition as PluginToolDefinition,
+  ToolRisk as PluginToolRisk,
+} from "../../src/plugins/api.js";
 import { normalizePluginExport } from "../../src/plugins/api.js";
 import { builtinTools } from "../../src/tools/builtin/index.js";
 import { ToolRegistry } from "../../src/tools/registry.js";
@@ -14,6 +18,13 @@ const tool = {
 };
 
 describe("npm plugin API", () => {
+  it("exports plugin author tool types", () => {
+    const risk: PluginToolRisk = "read";
+    const authorTool: PluginToolDefinition = { ...tool, risk };
+
+    expect(normalizePluginExport(authorTool, "@acme/hello")).toEqual([authorTool]);
+  });
+
   it("normalizes a single tool", () => {
     expect(normalizePluginExport(tool, "@acme/hello")).toEqual([tool]);
   });
