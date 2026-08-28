@@ -228,6 +228,7 @@ async function repl(
   rl: Interface,
   resumeBanner?: string,
 ): Promise<void> {
+  stdout.write(CODEN_BANNER);
   stdout.write(
     resumeBanner
       ? `${resumeBanner}\nType /help for commands.\n`
@@ -354,3 +355,12 @@ function positiveInteger(value: string): number {
 function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
+
+const CODEN_BANNER = `
+ ██████╗ ██████╗ ██████╗ ███████╗   ███╗   ██╗
+██╔════╝██╔═══██╗██╔══██╗██╔════╝   ████╗  ██║
+██║     ██║   ██║██║  ██║█████╗     ██╔██╗ ██║
+██║     ██║   ██║██║  ██║██╔══╝     ██║╚██╗██║
+╚██████╗╚██████╔╝██████╔╝███████╗██╗██║ ╚████║
+ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝╚═╝  ╚═══╝
+`;
