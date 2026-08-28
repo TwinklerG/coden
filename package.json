@@ -6,6 +6,10 @@
   "bin": {
     "coden": "./src/cli/index.ts"
   },
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugin": "./src/plugins/api.ts"
+  },
   "scripts": {
     "start": "bun run src/cli/index.ts",
     "test": "vitest run",
