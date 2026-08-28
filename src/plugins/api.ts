@@ -1,5 +1,13 @@
 import { CodeNError, type ToolDefinition } from "../core/types.js";
 
+export type {
+  JsonSchema,
+  ToolContext,
+  ToolDefinition,
+  ToolResult,
+  ToolRisk,
+} from "../core/types.js";
+
 export const CODEN_PLUGIN_API_VERSION = 1 as const;
 
 export interface CodeNPlugin {
