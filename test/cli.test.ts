@@ -27,6 +27,17 @@ describe("CLI exit codes", () => {
     expect(result.stderr).toContain("CODEN_OPENAI_API_KEY");
   });
 
+  it("preserves positional prompt parsing", () => {
+    const result = spawnSync("bun", [cli, "fix tests"], {
+      encoding: "utf8",
+      env: baseEnv,
+      timeout: 30_000,
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("CODEN_OPENAI_API_KEY");
+    expect(result.stderr).not.toContain("unknown command");
+  });
+
   it("exits 1 for execution/session failures", () => {
     const result = spawnSync("bun", [cli, "-p", "--resume", "missing-session", "task"], {
       encoding: "utf8",
