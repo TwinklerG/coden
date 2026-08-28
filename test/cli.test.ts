@@ -4,7 +4,8 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { SessionStore } from "../src/sessions/store.js";
+import { SessionStore, workspaceHash } from "../src/sessions/store.js";
+import { CODEN_VERSION } from "../src/version.js";
 
 const cli = path.join(process.cwd(), "src", "cli", "index.ts");
 const baseEnv = {
@@ -87,6 +88,8 @@ describe("CLI session list and resume", () => {
       timeout: 30_000,
     });
     expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`Version: ${CODEN_VERSION}`);
+    expect(result.stdout).toContain(`Workspace hash: ${workspaceHash(workspace)}`);
     expect(result.stdout).toContain("Resumed session my-session");
     expect(result.stdout).toContain("Showing last");
   });

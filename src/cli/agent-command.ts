@@ -33,11 +33,12 @@ import { resolvePluginPaths } from "../plugins/paths.js";
 import { PluginTransaction } from "../plugins/transaction.js";
 import { AnthropicProvider } from "../providers/anthropic.js";
 import { OpenAICompatibleProvider } from "../providers/openai.js";
-import { SessionStore } from "../sessions/store.js";
+import { SessionStore, workspaceHash } from "../sessions/store.js";
 import { builtinTools } from "../tools/builtin/index.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { PluginLoader } from "../tools/plugin-loader.js";
 import { ToolRegistry, type ToolSource } from "../tools/registry.js";
+import { CODEN_VERSION } from "../version.js";
 import { formatSessionList, renderResumeBanner } from "./format.js";
 
 export interface AgentCommandOptions {
@@ -213,7 +214,15 @@ export async function runAgentCommand(
       return;
     }
     if (options.print) throw new Error("print mode requires a prompt");
-    await repl(runtime, session, reload, registry, requireInterface(rl), resumeBanner);
+    await repl(
+      runtime,
+      session,
+      reload,
+      registry,
+      requireInterface(rl),
+      workspaceHash(workspace),
+      resumeBanner,
+    );
   } finally {
     rl?.close();
     renderer.dispose();
@@ -348,9 +357,12 @@ async function repl(
   reload: () => Promise<{ loaded: string[]; failed: string[] }>,
   registry: ToolRegistry,
   rl: Interface,
+  workspaceId: string,
   resumeBanner?: string,
 ): Promise<void> {
   stdout.write(CODEN_BANNER);
+  stdout.write(`Version: ${CODEN_VERSION}\n`);
+  stdout.write(`Workspace hash: ${workspaceId}\n`);
   stdout.write(
     resumeBanner
       ? `${resumeBanner}\nType /help for commands.\n`

@@ -16,6 +16,7 @@ import {
   type PluginOperationOptions,
 } from "../plugins/installer.js";
 import { builtinTools } from "../tools/builtin/index.js";
+import { CODEN_VERSION } from "../version.js";
 import {
   type AgentCommandOptions,
   ConfigError,
@@ -37,7 +38,7 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
   const program = new Command()
     .name("coden")
     .description("CodeN — a minimal coding agent")
-    .version("0.1.1")
+    .version(CODEN_VERSION)
     .argument("[prompt]", "task to execute")
     .option("-p, --print", "non-interactive print mode", false)
     .option("--provider <provider>", "openai or anthropic", parseProvider)
