@@ -39,7 +39,7 @@ import { ToolExecutor } from "../tools/executor.js";
 import { PluginLoader } from "../tools/plugin-loader.js";
 import { ToolRegistry, type ToolSource } from "../tools/registry.js";
 import { CODEN_VERSION } from "../version.js";
-import { formatSessionList, renderResumeBanner } from "./format.js";
+import { formatPermissionQuestion, formatSessionList, renderResumeBanner } from "./format.js";
 
 export interface AgentCommandOptions {
   provider?: ProviderName;
@@ -416,11 +416,7 @@ function createPermissionPrompt(rl: Interface) {
     risk: ToolRisk,
     signal?: AbortSignal,
   ): Promise<PermissionDecision> => {
-    const answer = await question(
-      rl,
-      `${risk.toUpperCase()} tool ${tool.name} ${JSON.stringify(call.input)}: [y]es/[s]ession/[N]o? `,
-      signal,
-    );
+    const answer = await question(rl, formatPermissionQuestion(tool, call, risk), signal);
     return answer.toLowerCase() === "y"
       ? "allow_once"
       : answer.toLowerCase() === "s" && risk !== "dangerous"

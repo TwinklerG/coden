@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   formatDateTime,
+  formatPermissionQuestion,
   formatSessionList,
   renderResumeBanner,
   singleLine,
 } from "../src/cli/format.js";
-import type { AgentMessage } from "../src/core/types.js";
+import type { AgentMessage, ToolDefinition } from "../src/core/types.js";
 import type { SessionMeta } from "../src/sessions/store.js";
 
 describe("cli format helpers", () => {
@@ -51,6 +52,55 @@ describe("cli format helpers", () => {
     const out = formatSessionList(sessions, "a");
     expect(out).toContain("a  *");
     expect(out).toContain("Current session: a");
+  });
+
+  it("formats generic multiline tool permission questions", () => {
+    const tool: ToolDefinition = {
+      name: "third_party_write",
+      description: "writes content",
+      risk: "modify",
+      inputSchema: {
+        type: "object",
+        properties: { path: { type: "string" }, content: { type: "string" } },
+      },
+      async execute() {
+        return { content: "ok" };
+      },
+    };
+    const question = formatPermissionQuestion(
+      tool,
+      {
+        callId: "call-1",
+        name: tool.name,
+        input: { path: "a.txt", content: "line 1\nline 2" },
+      },
+      "modify",
+    );
+
+    expect(question).toContain("MODIFY  third_party_write");
+    expect(question).toContain("  path: a.txt");
+    expect(question).toContain("  content:\n    line 1\n    line 2");
+    expect(question).toContain("Allow? [y]es / [s]ession / [N]o: ");
+    expect(question).not.toContain("\\n");
+  });
+
+  it("does not offer session permission for dangerous tools", () => {
+    const tool = {
+      name: "deploy",
+      description: "deploy",
+      risk: "dangerous" as const,
+      inputSchema: { type: "object" },
+      async execute() {
+        return { content: "ok" };
+      },
+    };
+    const question = formatPermissionQuestion(
+      tool,
+      { callId: "call-2", name: "deploy", input: { target: "production" } },
+      "dangerous",
+    );
+    expect(question).toContain("Allow? [y]es / [N]o: ");
+    expect(question).not.toContain("session");
   });
 
   it("renders a resume banner with a preview of the last messages", () => {

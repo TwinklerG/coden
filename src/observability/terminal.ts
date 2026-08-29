@@ -1,6 +1,7 @@
 import * as readline from "node:readline";
 import pc from "picocolors";
 import type { EventBus, RuntimeEvent } from "../core/events.js";
+import { sanitizeTerminalText, truncateDisplay } from "./terminal-text.js";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 
@@ -77,12 +78,22 @@ export class TerminalRenderer {
     }
     if (event.type === "tool.started") {
       this.endProviderAttempt();
-      this.status(`tool ${String(event.data?.name)} started`);
+      const name = sanitizeTerminalText(String(event.data?.name ?? "tool"));
+      if (this.tty) {
+        const summary = sanitizeTerminalText(String(event.data?.summary ?? ""));
+        this.toolStatus(`◇ ${name}${summary ? `  ${summary}` : ""}`);
+      } else this.status(`tool ${name} started`);
     }
-    if (event.type === "tool.completed")
-      this.status(
-        `tool ${String(event.data?.name)} ${event.data?.isError ? "failed" : "completed"} (${String(event.data?.durationMs)}ms)`,
-      );
+    if (event.type === "tool.completed") {
+      const name = sanitizeTerminalText(String(event.data?.name ?? "tool"));
+      const duration = String(event.data?.durationMs ?? "?");
+      if (this.tty) {
+        const failed = Boolean(event.data?.isError);
+        this.toolStatus(`${failed ? "✗" : "✓"} ${name}  ${duration}ms`, failed);
+      } else {
+        this.status(`tool ${name} ${event.data?.isError ? "failed" : "completed"} (${duration}ms)`);
+      }
+    }
     if (event.type === "provider.retry" && this.options.verbose)
       this.status(`provider retry ${String(event.data?.attempt)}`);
     if (event.type === "turn.completed") {
@@ -112,6 +123,11 @@ export class TerminalRenderer {
   }
   private status(message: string): void {
     this.stderr.write(this.tty ? `${pc.dim(message)}\n` : `[coden] ${message}\n`);
+  }
+  private toolStatus(message: string, failed = false): void {
+    const columns = (this.stderr as NodeJS.WritableStream & { columns?: number }).columns ?? 80;
+    const visible = truncateDisplay(sanitizeTerminalText(message), columns);
+    this.stderr.write(`${failed ? pc.red(visible) : pc.dim(visible)}\n`);
   }
   private startProviderAttempt(): void {
     this.endProviderAttempt();

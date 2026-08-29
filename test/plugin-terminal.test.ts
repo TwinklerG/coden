@@ -473,6 +473,45 @@ describe("plugins and terminal", () => {
     expect(err.value).toContain("[coden] plugin loaded: global @fixtures/ok@1.0.0");
   });
 
+  it("renders concise tool lifecycle symbols and summaries only in TTY mode", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    Object.assign(err, { columns: 80 });
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("tool.started", {
+      name: "custom_search",
+      summary: "query: terminal markdown",
+    });
+    await events.emit("tool.completed", {
+      name: "custom_search",
+      isError: false,
+      durationMs: 12,
+    });
+    await events.emit("tool.completed", { name: "deploy", isError: true, durationMs: 438 });
+
+    expect(err.value).toContain("◇ custom_search  query: terminal markdown");
+    expect(err.value).toContain("✓ custom_search  12ms");
+    expect(err.value).toContain("✗ deploy  438ms");
+    renderer.dispose();
+  });
+
+  it("preserves generic non-TTY tool lifecycle messages", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: false });
+
+    await events.emit("tool.started", { name: "read", summary: "path: secret.txt" });
+    await events.emit("tool.completed", { name: "read", isError: false, durationMs: 2 });
+
+    expect(err.value).toContain("[coden] tool read started");
+    expect(err.value).toContain("[coden] tool read completed (2ms)");
+    expect(err.value).not.toContain("secret.txt");
+    renderer.dispose();
+  });
+
   it("renders stable non-TTY output", async () => {
     const out = new Sink();
     const err = new Sink();

@@ -1,4 +1,5 @@
-import type { AgentMessage } from "../core/types.js";
+import type { AgentMessage, ToolCall, ToolDefinition, ToolRisk } from "../core/types.js";
+import { formatToolInput } from "../observability/tool-input.js";
 import type { SessionMeta } from "../sessions/store.js";
 
 export function singleLine(text: string, max: number): string {
@@ -23,6 +24,22 @@ export function formatSessionList(sessions: SessionMeta[], currentId?: string): 
   });
   const header = currentId ? `Current session: ${currentId}\n` : "";
   return `${lines.join("\n")}\n${header}`;
+}
+
+export function formatPermissionQuestion(
+  tool: ToolDefinition,
+  call: ToolCall,
+  risk: ToolRisk,
+): string {
+  const display = formatToolInput({
+    name: tool.name,
+    risk,
+    inputSchema: tool.inputSchema,
+    input: call.input,
+  });
+  const values = display.lines.map((line) => `  ${line}`).join("\n");
+  const choices = risk === "dangerous" ? "[y]es / [N]o" : "[y]es / [s]ession / [N]o";
+  return `${risk.toUpperCase()}  ${tool.name}\n\n${values}\n\nAllow? ${choices}: `;
 }
 
 export function renderResumeBanner(sessionId: string, messages: AgentMessage[]): string {

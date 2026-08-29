@@ -1,6 +1,7 @@
 import { truncateOutput } from "../context/truncate.js";
 import type { EventBus } from "../core/events.js";
 import type { ToolCall, ToolResult } from "../core/types.js";
+import { formatToolInput } from "../observability/tool-input.js";
 import type { PermissionPolicy } from "../permissions/policy.js";
 import { resolveWorkspacePath } from "../permissions/workspace.js";
 import type { ToolRegistry } from "./registry.js";
@@ -41,7 +42,17 @@ export class ToolExecutor {
     );
     if (!permission.allowed)
       return { content: `permission.denied: ${call.name} was not authorized`, isError: true };
-    await this.events.emit("tool.started", { name: call.name, callId: call.callId }, turnId);
+    const display = formatToolInput({
+      name: tool.name,
+      risk: permission.risk,
+      inputSchema: tool.inputSchema,
+      input: call.input,
+    });
+    await this.events.emit(
+      "tool.started",
+      { name: call.name, callId: call.callId, summary: display.summary },
+      turnId,
+    );
     const start = Date.now();
     let result: ToolResult;
     const controller = new AbortController();

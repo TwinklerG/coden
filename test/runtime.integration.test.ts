@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { composeRuntimePackageRegistry, loadInstalledScope } from "../src/cli/agent-command.js";
 import { TrustStore } from "../src/config/trust.js";
 import { ContextManager } from "../src/context/manager.js";
-import { EventBus } from "../src/core/events.js";
+import { EventBus, type RuntimeEvent } from "../src/core/events.js";
 import { AgentRuntime } from "../src/core/runtime.js";
 import type { ModelEvent, ModelProvider, ModelRequest, ToolDefinition } from "../src/core/types.js";
 import { TerminalRenderer } from "../src/observability/terminal.js";
@@ -276,6 +276,41 @@ describe("AgentRuntime integration", () => {
     });
     expect(h.observed).toContain("turn.completed");
   });
+  it("adds only a bounded generic input summary to tool.started", async () => {
+    const provider = new ScriptedProvider([
+      scriptedTool("custom-1", "echo", { message: "hello", payload: "secret".repeat(100) }),
+      scriptedText("done"),
+    ]);
+    const h = await harness(provider);
+    h.registry.register({
+      name: "echo",
+      description: "echo input",
+      risk: "read",
+      inputSchema: {
+        type: "object",
+        required: ["message", "payload"],
+        properties: {
+          message: { type: "string" },
+          payload: { type: "string" },
+        },
+      },
+      async execute() {
+        return { content: "ok" };
+      },
+    });
+    const started: RuntimeEvent[] = [];
+    h.events.on((event) => {
+      if (event.type === "tool.started") started.push(event);
+    });
+
+    await h.runtime.run("use the tool");
+
+    expect(started).toHaveLength(1);
+    expect(started[0]?.data).toMatchObject({ name: "echo", callId: "custom-1" });
+    expect(started[0]?.data?.summary).toBe("message: hello");
+    expect(JSON.stringify(started[0]?.data)).not.toContain("secretsecret");
+  });
+
   it("feeds permission denial to the model", async () => {
     const provider = new ScriptedProvider([
       scriptedTool("e", "edit", { path: "a", oldText: "x", newText: "y" }),
