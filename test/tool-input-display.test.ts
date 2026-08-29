@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatToolInput } from "../src/observability/tool-input.js";
 import { sanitizeTerminalText, truncateDisplay } from "../src/observability/terminal-text.js";
+import { formatToolInput } from "../src/observability/tool-input.js";
 
 const request = (input: unknown, inputSchema: Record<string, unknown> = { type: "object" }) => ({
   name: "third_party_tool",

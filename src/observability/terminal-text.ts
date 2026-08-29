@@ -1,10 +1,12 @@
 import { stripVTControlCharacters } from "node:util";
 
 export function sanitizeTerminalText(text: string): string {
-  return stripVTControlCharacters(text).replace(
-    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g,
-    "",
-  );
+  return Array.from(stripVTControlCharacters(text))
+    .filter((character) => {
+      const point = character.codePointAt(0) ?? 0;
+      return point === 0x09 || point === 0x0a || point > 0x9f || (point > 0x1f && point < 0x7f);
+    })
+    .join("");
 }
 
 export function characterWidth(character: string): number {

@@ -165,6 +165,8 @@ describe("plugins and terminal", () => {
 
     vi.advanceTimersByTime(3_200);
     await events.emit("provider.delta", { text: "Answer" });
+    expect(out.value).toBe("");
+    await events.emit("provider.completed", {});
 
     expect(err.value).toContain("thought for 3.2s");
     expect(out.value).toBe("Answer");
@@ -471,6 +473,56 @@ describe("plugins and terminal", () => {
 
     expect(out.value).toBe("");
     expect(err.value).toContain("[coden] plugin loaded: global @fixtures/ok@1.0.0");
+  });
+
+  it("renders assistant Markdown by complete lines in TTY mode", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "**bo" });
+    expect(out.value).toBe("");
+    await events.emit("provider.delta", { text: "ld**\n`code`" });
+    expect(out.value).toContain("bold\n");
+    expect(out.value).not.toContain("**");
+    await events.emit("provider.completed", {});
+    expect(out.value).toContain("code");
+    expect(out.value).not.toContain("`code`");
+    renderer.dispose();
+  });
+
+  it("drops uncommitted TTY Markdown when a provider attempt retries", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "discard **me" });
+    await events.emit("provider.retry", { attempt: 1 });
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "keep **this**" });
+    await events.emit("provider.completed", {});
+
+    expect(out.value).toContain("keep this");
+    expect(out.value).not.toContain("discard");
+    renderer.dispose();
+  });
+
+  it("preserves raw Markdown in non-TTY and print modes", async () => {
+    for (const options of [{ tty: false }, { tty: true, printMode: true }]) {
+      const out = new Sink();
+      const err = new Sink();
+      const events = new EventBus();
+      const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, ...options });
+      await events.emit("provider.started");
+      await events.emit("provider.delta", { text: "**raw**\n" });
+      await events.emit("provider.completed", {});
+      expect(out.value).toBe("**raw**\n");
+      renderer.dispose();
+    }
   });
 
   it("renders concise tool lifecycle symbols and summaries only in TTY mode", async () => {

@@ -1,7 +1,8 @@
 import * as readline from "node:readline";
 import pc from "picocolors";
 import type { EventBus, RuntimeEvent } from "../core/events.js";
-import { sanitizeTerminalText, truncateDisplay } from "./terminal-text.js";
+import { MarkdownStreamRenderer } from "./markdown.js";
+import { displayWidth, sanitizeTerminalText, truncateDisplay } from "./terminal-text.js";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 
@@ -16,6 +17,7 @@ export class TerminalRenderer {
   private readonly stdout: NodeJS.WritableStream;
   private readonly stderr: NodeJS.WritableStream;
   private readonly tty: boolean;
+  private readonly markdown: MarkdownStreamRenderer;
   private spinner: NodeJS.Timeout | undefined;
   private frame = 0;
   private providerStartedAt: number | undefined;
@@ -33,7 +35,9 @@ export class TerminalRenderer {
     this.stdout = options.stdout ?? process.stdout;
     this.stderr = options.stderr ?? process.stderr;
     this.tty =
-      options.tty ?? Boolean(process.stderr.isTTY && !process.env.NO_COLOR && !process.env.CI);
+      !options.printMode &&
+      (options.tty ?? Boolean(process.stderr.isTTY && !process.env.NO_COLOR && !process.env.CI));
+    this.markdown = new MarkdownStreamRenderer((text) => this.stdout.write(text));
     events.on((event) => this.render(event));
   }
   private render(event: RuntimeEvent): void {
@@ -62,10 +66,11 @@ export class TerminalRenderer {
     if (event.type === "provider.delta") {
       const text = String(event.data?.text ?? "");
       if (text && !this.contentStarted) this.finishThinking();
-      if (this.tty) this.stdout.write(text);
+      if (this.tty) this.markdown.push(text);
       else this.pendingText += text;
     }
     if (event.type === "provider.completed") {
+      if (this.tty) this.markdown.complete();
       if (!this.tty && this.pendingText) {
         this.stdout.write(this.pendingText);
         this.pendingText = "";
@@ -137,6 +142,7 @@ export class TerminalRenderer {
   private endProviderAttempt(): void {
     this.stopSpinner();
     this.clearToolCallPreviews();
+    this.markdown.reset();
     this.providerStartedAt = undefined;
     this.reasoningText = "";
     this.contentStarted = false;
@@ -202,33 +208,15 @@ export class TerminalRenderer {
       const label = `preparing ${active.name}…`;
       const normalizedArguments = active.argumentsText.replace(/\s+/g, " ").trim();
       if (!normalizedArguments) return this.truncateTail(label, maxColumns);
-      const argumentColumns = Math.max(0, maxColumns - this.displayWidth(label) - 1);
+      const argumentColumns = Math.max(0, maxColumns - displayWidth(label) - 1);
       if (argumentColumns === 0) return this.truncateTail(label, maxColumns);
       return `${label} ${this.truncateTail(normalizedArguments, argumentColumns)}`;
     }
     const reasoning = this.normalizedReasoning();
     return reasoning ? this.truncateTail(reasoning, maxColumns) : "thinking";
   }
-  private displayWidth(text: string): number {
-    return Array.from(text).reduce(
-      (sum, character) => sum + ((character.codePointAt(0) ?? 0) <= 0xff ? 1 : 2),
-      0,
-    );
-  }
   private truncateTail(text: string, maxColumns: number): string {
-    if (maxColumns <= 0) return "";
-    const characters = Array.from(text);
-    const width = (character: string) => ((character.codePointAt(0) ?? 0) <= 0xff ? 1 : 2);
-    if (this.displayWidth(text) <= maxColumns) return text;
-    const kept: string[] = [];
-    let used = 1;
-    for (let index = characters.length - 1; index >= 0; index--) {
-      const character = characters[index];
-      if (character === undefined || used + width(character) > maxColumns) break;
-      kept.unshift(character);
-      used += width(character);
-    }
-    return `…${kept.join("")}`;
+    return truncateDisplay(text, maxColumns, "tail");
   }
   private startSpinner(): void {
     if (!this.tty || this.spinner) {
