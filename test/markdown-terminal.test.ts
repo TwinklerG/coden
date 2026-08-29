@@ -36,6 +36,33 @@ describe("MarkdownStreamRenderer", () => {
     expect(h.output()).toBe("bold\n");
   });
 
+  it("exposes the sanitized raw incomplete line as a preview", () => {
+    const h = harness();
+
+    h.renderer.push("**bo\u001b[31m");
+    expect(h.renderer.preview()).toBe("**bo");
+    expect(h.output()).toBe("");
+
+    h.renderer.push("ld**\n");
+    expect(h.renderer.preview()).toBeUndefined();
+    expect(h.output()).toBe("bold\n");
+  });
+
+  it("previews the latest buffered fenced-code line", () => {
+    const h = harness();
+
+    h.renderer.push("```ts\nconst first = 1;\n");
+    expect(h.output()).toBe("");
+    expect(h.renderer.preview()).toBe("const first = 1;");
+
+    h.renderer.push("const second");
+    expect(h.renderer.preview()).toBe("const second");
+
+    h.renderer.push(" = 2;\n```\n");
+    expect(h.renderer.preview()).toBeUndefined();
+    expect(h.output()).toContain("const first = 1;\nconst second = 2;");
+  });
+
   it("buffers a fenced block until its closing fence", () => {
     const h = harness();
     h.renderer.push("```ts\nconst value");
@@ -48,7 +75,9 @@ describe("MarkdownStreamRenderer", () => {
   it("flushes incomplete lines and unclosed fences on completion", () => {
     const line = harness();
     line.renderer.push("**final**");
+    expect(line.renderer.preview()).toBe("**final**");
     line.renderer.complete();
+    expect(line.renderer.preview()).toBeUndefined();
     expect(line.output()).toBe("final");
 
     const fence = harness();
@@ -61,7 +90,9 @@ describe("MarkdownStreamRenderer", () => {
   it("drops pending content on reset and strips terminal controls", () => {
     const h = harness();
     h.renderer.push("discard me");
+    expect(h.renderer.preview()).toBe("discard me");
     h.renderer.reset();
+    expect(h.renderer.preview()).toBeUndefined();
     h.renderer.push("safe\u001b[31mred\u001b[0m\u0007\n");
     expect(h.output()).toBe("safered\n");
   });

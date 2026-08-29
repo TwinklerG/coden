@@ -32,6 +32,13 @@ export class MarkdownStreamRenderer {
     }
   }
 
+  preview(): string | undefined {
+    if (this.pending) return this.pending;
+    const latestFenceLine = this.fence?.lines.at(-1);
+    if (latestFenceLine === undefined) return undefined;
+    return latestFenceLine.endsWith("\n") ? latestFenceLine.slice(0, -1) : latestFenceLine;
+  }
+
   complete(): void {
     if (this.pending) {
       const line = this.pending;
