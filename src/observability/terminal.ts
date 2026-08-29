@@ -37,7 +37,14 @@ export class TerminalRenderer {
     this.tty =
       !options.printMode &&
       (options.tty ?? Boolean(process.stderr.isTTY && !process.env.NO_COLOR && !process.env.CI));
-    this.markdown = new MarkdownStreamRenderer((text) => this.stdout.write(text));
+    this.markdown = new MarkdownStreamRenderer(
+      (text) => this.stdout.write(text),
+      () => {
+        const stdoutColumns = (this.stdout as NodeJS.WritableStream & { columns?: number }).columns;
+        const stderrColumns = (this.stderr as NodeJS.WritableStream & { columns?: number }).columns;
+        return stdoutColumns ?? stderrColumns ?? 80;
+      },
+    );
     events.on((event) => this.render(event));
   }
   private render(event: RuntimeEvent): void {

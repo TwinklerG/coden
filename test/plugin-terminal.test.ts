@@ -7,6 +7,7 @@ import { stripVTControlCharacters } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/core/events.js";
 import { TerminalRenderer } from "../src/observability/terminal.js";
+import { displayWidth } from "../src/observability/terminal-text.js";
 import { builtinTools } from "../src/tools/builtin/index.js";
 import { PluginLoader } from "../src/tools/plugin-loader.js";
 import { ToolRegistry } from "../src/tools/registry.js";
@@ -593,16 +594,59 @@ describe("plugins and terminal", () => {
     renderer.dispose();
   });
 
+  it("renders Markdown tables at the latest stdout terminal width", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    Object.assign(out, { columns: 40 });
+    Object.assign(err, { columns: 30 });
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.delta", {
+      text: "ID | Description\n--- | ---\n1 | alpha beta gamma delta\n",
+    });
+    Object.assign(out, { columns: 18 });
+    await events.emit("provider.completed", {});
+    renderer.dispose();
+
+    const tableLines = visibleTerminal(out.value)
+      .split("\n")
+      .filter((line) => /^[┌├└│]/u.test(line));
+    expect(tableLines.length).toBeGreaterThan(4);
+    expect(tableLines.every((line) => displayWidth(line) <= 18)).toBe(true);
+    expect(visibleTerminal(out.value)).toContain("delta");
+  });
+
+  it("drops a buffered Markdown table when a provider attempt retries", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "old | table\n--- | ---\nstale | value\n" });
+    await events.emit("provider.retry", { attempt: 1 });
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "new | table\n--- | ---\nkept | value\n" });
+    await events.emit("provider.completed", {});
+    renderer.dispose();
+
+    expect(visibleTerminal(out.value)).toContain("kept");
+    expect(visibleTerminal(out.value)).not.toContain("stale");
+  });
+
   it("preserves raw Markdown in non-TTY and print modes", async () => {
+    const raw = "| a | b |\n| - | - |\n| 1 | 2 |\n";
     for (const options of [{ tty: false }, { tty: true, printMode: true }]) {
       const out = new Sink();
       const err = new Sink();
       const events = new EventBus();
       const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, ...options });
       await events.emit("provider.started");
-      await events.emit("provider.delta", { text: "**raw**\n" });
+      await events.emit("provider.delta", { text: raw });
       await events.emit("provider.completed", {});
-      expect(out.value).toBe("**raw**\n");
+      expect(out.value).toBe(raw);
       renderer.dispose();
     }
   });

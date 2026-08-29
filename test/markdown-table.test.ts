@@ -52,7 +52,7 @@ describe("renderTerminalTable", () => {
     expect(lines.map(visible)).toEqual(["abc", "def"]);
     for (const line of lines) {
       expect(visibleWidth(line)).toBeLessThanOrEqual(3);
-      expect(`${line}│`).toMatch(/\u001b\[0m│$/);
+      expect(`${line}│`.endsWith("\u001b[0m│")).toBe(true);
     }
   });
 

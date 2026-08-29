@@ -16,8 +16,9 @@ type StyledGlyph = {
   state: string;
 };
 
-const RESET = "\u001b[0m";
-const ANSI_PREFIX = /^\u001b\[[0-?]*[ -/]*[@-~]/;
+const ESCAPE = "\u001b";
+const RESET = `${ESCAPE}[0m`;
+const ANSI_PREFIX = new RegExp(`^${ESCAPE}\\[[0-?]*[ -/]*[@-~]`);
 
 export function visibleWidth(text: string): number {
   return displayWidth(stripVTControlCharacters(text));
@@ -31,7 +32,7 @@ function styledGlyphs(text: string): StyledGlyph[] {
     const ansi = text.slice(offset).match(ANSI_PREFIX)?.[0];
     if (ansi) {
       if (ansi.endsWith("m")) {
-        state = /^\u001b\[(?:0)?m$/.test(ansi) ? "" : `${state}${ansi}`;
+        state = ansi === `${ESCAPE}[m` || ansi === RESET ? "" : `${state}${ansi}`;
       }
       offset += ansi.length;
       continue;
