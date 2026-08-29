@@ -154,6 +154,7 @@ export class TerminalRenderer {
     this.endProviderAttempt();
     this.providerStartedAt = Date.now();
     this.startSpinner();
+    this.renderActivityLine();
   }
   private endProviderAttempt(): void {
     this.stopSpinner();

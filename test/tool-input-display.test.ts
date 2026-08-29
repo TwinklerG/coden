@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeTerminalText, truncateDisplay } from "../src/observability/terminal-text.js";
+import {
+  displayWidth,
+  sanitizeTerminalText,
+  truncateDisplay,
+} from "../src/observability/terminal-text.js";
 import { formatToolInput } from "../src/observability/tool-input.js";
 
 const request = (input: unknown, inputSchema: Record<string, unknown> = { type: "object" }) => ({
@@ -83,6 +87,9 @@ describe("tool input display", () => {
 
   it("removes terminal controls and truncates wide text by display columns", () => {
     expect(sanitizeTerminalText("safe\u001b[31mred\u001b[0m\u0007\nnext")).toBe("safered\nnext");
+    expect(displayWidth("e\u0301")).toBe(1);
+    expect(displayWidth("中")).toBe(2);
+    expect(displayWidth("─")).toBe(1);
     expect(truncateDisplay("ab中文cd", 7)).toBe("ab中文…");
     expect(truncateDisplay("abcdef", 4, "tail")).toBe("…def");
   });

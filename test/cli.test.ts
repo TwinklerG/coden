@@ -4,6 +4,7 @@ import { mkdtemp, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { classifyReplInput, collectFallbackInput } from "../src/cli/agent-command.js";
 import { SessionStore, workspaceHash } from "../src/sessions/store.js";
 import { CODEN_VERSION } from "../src/version.js";
 
@@ -16,6 +17,43 @@ const baseEnv = {
   CODEN_MODEL: "",
   CODEN_MAX_STEPS: "",
 };
+
+describe("REPL input helpers", () => {
+  it("classifies commands without trimming messages", () => {
+    expect(classifyReplInput("  /help  ")).toEqual({ type: "command", command: "/help" });
+    expect(classifyReplInput("/help\nmore")).toEqual({ type: "message", text: "/help\nmore" });
+    expect(classifyReplInput("  code\n    indented\n")).toEqual({
+      type: "message",
+      text: "  code\n    indented\n",
+    });
+    expect(classifyReplInput(" \n\t ")).toEqual({ type: "empty" });
+  });
+
+  it("collects fallback continuation input", async () => {
+    const lines = ["first\\", "second"];
+    await expect(
+      collectFallbackInput(async (prompt) => {
+        expect(prompt).toBe(lines.length === 2 ? "> " : "  ");
+        return lines.shift();
+      }),
+    ).resolves.toEqual({ type: "submit", text: "first\nsecond" });
+  });
+
+  it("handles fallback EOF and literal trailing backslashes", async () => {
+    await expect(collectFallbackInput(async () => undefined)).resolves.toEqual({ type: "eof" });
+
+    const eofAfterContinuation = ["first\\", undefined];
+    await expect(collectFallbackInput(async () => eofAfterContinuation.shift())).resolves.toEqual({
+      type: "eof",
+    });
+
+    const literalSlash = ["path\\\\"];
+    await expect(collectFallbackInput(async () => literalSlash.shift())).resolves.toEqual({
+      type: "submit",
+      text: "path\\",
+    });
+  });
+});
 
 describe("CLI exit codes", () => {
   it("exits 2 for configuration errors (missing API key)", () => {
@@ -90,6 +128,20 @@ describe("CLI session list and resume", () => {
     expect(result.status).toBe(0);
     const directory = path.join(xdgHome, "coden", "sessions", workspaceHash(workspace));
     await expect(readdir(directory)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("exits cleanly on empty stdin", async () => {
+    const workspace = await makeWorkspace();
+    const xdgHome = await mkdtemp(path.join(os.tmpdir(), "coden-xdg-"));
+    const result = spawnSync("bun", [cli], {
+      cwd: workspace,
+      encoding: "utf8",
+      input: "",
+      env: { ...baseEnv, CODEN_OPENAI_API_KEY: "test-key", XDG_DATA_HOME: xdgHome },
+      timeout: 30_000,
+    });
+
+    expect(result.status).toBe(0);
   });
 
   it("shows a resume banner when resuming a session", async () => {

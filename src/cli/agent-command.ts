@@ -39,7 +39,9 @@ import { ToolExecutor } from "../tools/executor.js";
 import { PluginLoader } from "../tools/plugin-loader.js";
 import { ToolRegistry, type ToolSource } from "../tools/registry.js";
 import { CODEN_VERSION } from "../version.js";
+import { resolveEnter } from "./editor-state.js";
 import { formatPermissionQuestion, formatSessionList, renderResumeTranscript } from "./format.js";
+import { type MainInputResult, MultilineEditor } from "./multiline-editor.js";
 
 export interface AgentCommandOptions {
   provider?: ProviderName;
@@ -80,8 +82,23 @@ export async function runAgentCommand(
     plugins: options.plugin,
   });
   const events = new EventBus();
+  const richRepl =
+    !initialPrompt &&
+    !options.print &&
+    MultilineEditor.supported(stdin, process.stderr, process.env.TERM);
   const needsInput = !options.auto || (!initialPrompt && !options.print);
-  const rl = needsInput ? createInterface({ input: stdin, output: process.stderr }) : undefined;
+  const rl =
+    needsInput && !richRepl ? createInterface({ input: stdin, output: process.stderr }) : undefined;
+  const transientQuestion: Question = async (message, signal) => {
+    const transient = createInterface({ input: stdin, output: process.stderr });
+    try {
+      return await question(transient, message, signal);
+    } finally {
+      transient.close();
+    }
+  };
+  const ask: Question = rl ? (message, signal) => question(rl, message, signal) : transientQuestion;
+  const editor = richRepl ? new MultilineEditor() : undefined;
   const resumedId = typeof options.resume === "string" ? options.resume : undefined;
   const session = new SessionStore(config.dataDir, workspace, resumedId);
   if (options.resume === true) {
@@ -116,7 +133,7 @@ export async function runAgentCommand(
     });
   }
   const builtins = builtinTools();
-  const permissionPrompt = options.auto ? undefined : createPermissionPrompt(requireInterface(rl));
+  const permissionPrompt = options.auto ? undefined : createPermissionPrompt(ask);
   const permissions = new PermissionPolicy(options.auto, permissionPrompt);
   const registry = new ToolRegistry(builtins);
   const executor = new ToolExecutor(registry, permissions, events, workspace);
@@ -124,7 +141,7 @@ export async function runAgentCommand(
   const loader = new PluginLoader(builtins, events, options.auto, async (directory) => {
     if (await trustStore.isTrusted(directory)) return true;
     const allowed = await yesNo(
-      requireInterface(rl),
+      ask,
       `Project plugins at ${directory} run with full process permissions. Trust? [y/N] `,
     );
     if (allowed) await trustStore.trust(directory);
@@ -220,11 +237,13 @@ export async function runAgentCommand(
       session,
       reload,
       registry,
-      requireInterface(rl),
+      rl,
+      editor,
       workspaceHash(workspace),
       resumeTranscript,
     );
   } finally {
+    editor?.dispose();
     rl?.close();
     renderer.dispose();
     await trace.flush();
@@ -357,7 +376,8 @@ async function repl(
   session: SessionStore,
   reload: () => Promise<{ loaded: string[]; failed: string[] }>,
   registry: ToolRegistry,
-  rl: Interface,
+  rl: Interface | undefined,
+  editor: MultilineEditor | undefined,
   workspaceId: string,
   resumeTranscript?: string,
 ): Promise<void> {
@@ -370,33 +390,40 @@ async function repl(
       : `CodeN session ${session.sessionId}. Type /help for commands.\n`,
   );
   while (true) {
-    const line = (await question(rl, "> ")).trim();
-    if (line === EOF) break;
-    if (!line) continue;
-    if (line === "/quit") break;
-    if (line === "/help") {
+    const result = editor
+      ? await editor.read()
+      : await collectFallbackInput(async (prompt) => {
+          const line = await question(requireInterface(rl), prompt);
+          return line === EOF ? undefined : line;
+        });
+    if (result.type === "eof") break;
+
+    const classified = classifyReplInput(result.text);
+    if (classified.type === "empty") continue;
+    if (classified.type === "command" && classified.command === "/quit") break;
+    if (classified.type === "command" && classified.command === "/help") {
       stdout.write("/help /session /sessions /compact /reload /new /quit\n");
       continue;
     }
-    if (line === "/sessions") {
+    if (classified.type === "command" && classified.command === "/sessions") {
       stdout.write(formatSessionList(await session.list(), session.sessionId));
       continue;
     }
-    if (line === "/session") {
+    if (classified.type === "command" && classified.command === "/session") {
       stdout.write(`${session.sessionId}\n`);
       continue;
     }
-    if (line === "/compact") {
+    if (classified.type === "command" && classified.command === "/compact") {
       await runtime.compact();
       stdout.write("Context compacted.\n");
       continue;
     }
-    if (line === "/new") {
+    if (classified.type === "command" && classified.command === "/new") {
       await runtime.reset();
       stdout.write("Started a new conversation in this session.\n");
       continue;
     }
-    if (line === "/reload") {
+    if (classified.type === "command" && classified.command === "/reload") {
       const result = await reload();
       stdout.write(
         `Loaded: ${result.loaded.join(", ") || "none"}; failed: ${result.failed.length}; tools: ${registry
@@ -406,11 +433,13 @@ async function repl(
       );
       continue;
     }
-    await runTurn(runtime, line, rl);
+    if (classified.type === "message") await runTurn(runtime, classified.text, rl);
   }
 }
 
-function createPermissionPrompt(rl: Interface) {
+type Question = (message: string, signal?: AbortSignal) => Promise<string>;
+
+function createPermissionPrompt(ask: Question) {
   return async (
     tool: ToolDefinition,
     call: ToolCall,
@@ -418,7 +447,7 @@ function createPermissionPrompt(rl: Interface) {
     signal?: AbortSignal,
   ): Promise<PermissionDecision> => {
     const columns = (stdout as NodeJS.WritableStream & { columns?: number }).columns ?? 80;
-    const answer = await question(rl, formatPermissionQuestion(tool, call, risk, columns), signal);
+    const answer = await ask(formatPermissionQuestion(tool, call, risk, columns), signal);
     return answer.toLowerCase() === "y"
       ? "allow_once"
       : answer.toLowerCase() === "s" && risk !== "dangerous"
@@ -456,8 +485,45 @@ async function question(rl: Interface, message: string, signal?: AbortSignal): P
   }
 }
 
-async function yesNo(rl: Interface, message: string): Promise<boolean> {
-  return /^y(?:es)?$/i.test(await question(rl, message));
+async function yesNo(ask: Question, message: string): Promise<boolean> {
+  return /^y(?:es)?$/i.test(await ask(message));
+}
+
+const REPL_COMMANDS = new Set([
+  "/help",
+  "/session",
+  "/sessions",
+  "/compact",
+  "/reload",
+  "/new",
+  "/quit",
+]);
+
+export function classifyReplInput(
+  text: string,
+): { type: "empty" } | { type: "command"; command: string } | { type: "message"; text: string } {
+  if (!text.trim()) return { type: "empty" };
+  const trimmed = text.trim();
+  if (!text.includes("\n") && REPL_COMMANDS.has(trimmed)) {
+    return { type: "command", command: trimmed };
+  }
+  return { type: "message", text };
+}
+
+export async function collectFallbackInput(
+  readLine: (prompt: string) => Promise<string | undefined>,
+): Promise<MainInputResult> {
+  let draft = "";
+  let firstLine = true;
+  while (true) {
+    const line = await readLine(firstLine ? "> " : "  ");
+    if (line === undefined) return { type: "eof" };
+    const candidate = `${draft}${line}`;
+    const resolved = resolveEnter(candidate, candidate.length, false);
+    if (resolved.type === "submit") return resolved;
+    draft = resolved.text;
+    firstLine = false;
+  }
 }
 
 function requireInterface(rl: Interface | undefined): Interface {

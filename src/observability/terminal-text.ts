@@ -1,5 +1,9 @@
 import { stripVTControlCharacters } from "node:util";
 
+const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+const MARK = /\p{Mark}/u;
+const EMOJI = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u;
+
 export function sanitizeTerminalText(text: string): string {
   return Array.from(stripVTControlCharacters(text))
     .filter((character) => {
@@ -15,8 +19,21 @@ export function characterWidth(character: string): number {
   return point <= 0xff ? 1 : 2;
 }
 
+export function graphemes(text: string): string[] {
+  return Array.from(segmenter.segment(text), ({ segment }) => segment);
+}
+
+export function graphemeWidth(grapheme: string): number {
+  if (!grapheme) return 0;
+  if (EMOJI.test(grapheme) || grapheme.includes("\ufe0f")) return 2;
+  const visible = Array.from(grapheme).filter(
+    (character) => !MARK.test(character) && character !== "\u200d" && character !== "\ufe0e",
+  );
+  return visible.reduce((width, character) => Math.max(width, characterWidth(character)), 0);
+}
+
 export function displayWidth(text: string): number {
-  return Array.from(text).reduce((sum, character) => sum + characterWidth(character), 0);
+  return graphemes(text).reduce((sum, grapheme) => sum + graphemeWidth(grapheme), 0);
 }
 
 export function truncateDisplay(
@@ -27,7 +44,7 @@ export function truncateDisplay(
   if (maxColumns <= 0) return "";
   if (displayWidth(text) <= maxColumns) return text;
   if (maxColumns === 1) return "…";
-  const source = Array.from(text);
+  const source = graphemes(text);
   const kept: string[] = [];
   let used = 1;
   const indexes =
@@ -35,11 +52,11 @@ export function truncateDisplay(
       ? source.map((_, index) => index)
       : source.map((_, index) => source.length - index - 1);
   for (const index of indexes) {
-    const character = source[index];
-    if (character === undefined || used + characterWidth(character) > maxColumns) break;
-    if (mode === "head") kept.push(character);
-    else kept.unshift(character);
-    used += characterWidth(character);
+    const grapheme = source[index];
+    if (grapheme === undefined || used + graphemeWidth(grapheme) > maxColumns) break;
+    if (mode === "head") kept.push(grapheme);
+    else kept.unshift(grapheme);
+    used += graphemeWidth(grapheme);
   }
   return mode === "head" ? `${kept.join("")}…` : `…${kept.join("")}`;
 }

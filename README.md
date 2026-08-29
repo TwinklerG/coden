@@ -42,7 +42,9 @@ coden --resume <session-id>      # 恢复指定会话
 coden --resume                   # 列出当前工作区的会话
 ```
 
-无 prompt 时进入 REPL，支持 `/help`、`/session`、`/sessions`、`/compact`、`/reload`、`/new` 和 `/quit`。启动横幅会显示当前版本与 16 位 workspace hash。
+无 prompt 时进入 REPL。交互式 REPL 支持完整多行编辑：Enter 提交；终端可区分该按键时，Shift+Enter 插入换行；所有终端均可在行尾输入单个 `\` 后按 Enter 继续下一行（`\\` 表示保留一个字面反斜杠）。支持多行粘贴、跨行方向键编辑和当前进程内输入历史。传统终端若无法区分 Shift+Enter，请使用行尾 `\`。
+
+支持 `/help`、`/session`、`/sessions`、`/compact`、`/reload`、`/new` 和 `/quit`。启动横幅会显示当前版本与 16 位 workspace hash。
 
 核心选项：`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--auto`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。
 

@@ -154,6 +154,20 @@ describe("plugins and terminal", () => {
     const result = await loader.load([{ path: path.join(root, "plugins"), project: true }]);
     expect(result.registry.list()).toHaveLength(4);
   });
+  it("renders the first thinking frame immediately", async () => {
+    vi.useFakeTimers();
+    const out = new Sink();
+    const err = new Sink();
+    Object.assign(err, { columns: 80 });
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+
+    expect(err.value).toContain("thinking");
+    renderer.dispose();
+  });
+
   it("folds temporary TTY reasoning when formal content starts", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-28T00:00:00.000Z"));

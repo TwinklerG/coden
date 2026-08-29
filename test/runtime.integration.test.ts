@@ -472,6 +472,16 @@ describe("AgentRuntime integration", () => {
     ).toBe(true);
   });
 
+  it("persists multiline user input byte-for-byte", async () => {
+    const h = await harness(new ScriptedProvider([scriptedText("answer")]));
+    const input = "  first\n    second\n";
+
+    await h.runtime.run(input);
+
+    const recovered = await h.session.recover();
+    expect(recovered.messages).toContainEqual({ role: "user", content: input });
+  });
+
   it("persists and resumes a completed session", async () => {
     const h = await harness(new ScriptedProvider([scriptedText("first")]));
     await h.runtime.run("one");
