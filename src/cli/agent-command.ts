@@ -417,7 +417,8 @@ function createPermissionPrompt(rl: Interface) {
     risk: ToolRisk,
     signal?: AbortSignal,
   ): Promise<PermissionDecision> => {
-    const answer = await question(rl, formatPermissionQuestion(tool, call, risk), signal);
+    const columns = (stdout as NodeJS.WritableStream & { columns?: number }).columns ?? 80;
+    const answer = await question(rl, formatPermissionQuestion(tool, call, risk, columns), signal);
     return answer.toLowerCase() === "y"
       ? "allow_once"
       : answer.toLowerCase() === "s" && risk !== "dangerous"

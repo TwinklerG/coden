@@ -40,16 +40,26 @@ export function formatPermissionQuestion(
   tool: ToolDefinition,
   call: ToolCall,
   risk: ToolRisk,
+  columns: number = 80,
 ): string {
-  const display = formatToolInput({
-    name: tool.name,
-    risk,
-    inputSchema: tool.inputSchema,
-    input: call.input,
-  });
+  const display = formatToolInput(
+    {
+      name: tool.name,
+      risk,
+      inputSchema: tool.inputSchema,
+      input: call.input,
+    },
+    { maxLines: Infinity, maxValueChars: Infinity, maxDepth: Infinity },
+  );
+  const header = `${risk.toUpperCase()}  ${tool.name}`;
   const values = display.lines.map((line) => `  ${line}`).join("\n");
   const choices = risk === "dangerous" ? "[y]es / [N]o" : "[y]es / [s]ession / [N]o";
-  return `${risk.toUpperCase()}  ${tool.name}\n\n${values}\n\nAllow? ${choices}: `;
+  const rule = horizontalRule(columns);
+  return `${rule}\n${header}\n\n${values}\n${rule}\nAllow? ${choices}: `;
+}
+
+function horizontalRule(width: number): string {
+  return "─".repeat(Math.max(1, width));
 }
 
 export function renderResumeTranscript(sessionId: string, messages: AgentMessage[]): string {

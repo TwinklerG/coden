@@ -86,6 +86,59 @@ describe("cli format helpers", () => {
     expect(question).not.toContain("\\n");
   });
 
+  it("frames the permission question with full-width rules", () => {
+    const tool: ToolDefinition = {
+      name: "read",
+      description: "reads a file",
+      risk: "modify",
+      inputSchema: {
+        type: "object",
+        properties: { path: { type: "string" } },
+      },
+      async execute() {
+        return { content: "ok" };
+      },
+    };
+    const question = formatPermissionQuestion(
+      tool,
+      { callId: "call-3", name: tool.name, input: { path: "a.txt" } },
+      "modify",
+      40,
+    );
+    const lines = question.split("\n");
+    expect(lines[0]).toBe("─".repeat(40));
+    expect(lines[lines.length - 1]).toContain("Allow? [y]es / [s]ession / [N]o: ");
+    expect(question).toContain(`\n${("─").repeat(40)}\nAllow?`);
+  });
+
+  it("shows every parameter line without omission", () => {
+    const input: Record<string, string> = {};
+    const properties: Record<string, { type: string }> = {};
+    for (let i = 0; i < 30; i += 1) {
+      const key = `param_${i}`;
+      input[key] = `value ${i}`;
+      properties[key] = { type: "string" };
+    }
+    const tool: ToolDefinition = {
+      name: "bulk",
+      description: "bulk",
+      risk: "modify",
+      inputSchema: { type: "object", properties },
+      async execute() {
+        return { content: "ok" };
+      },
+    };
+    const question = formatPermissionQuestion(
+      tool,
+      { callId: "call-4", name: tool.name, input },
+      "modify",
+      40,
+    );
+    expect(question).not.toContain("omitted");
+    expect(question).toContain("param_0: value 0");
+    expect(question).toContain("param_29: value 29");
+  });
+
   it("does not offer session permission for dangerous tools", () => {
     const tool = {
       name: "deploy",
