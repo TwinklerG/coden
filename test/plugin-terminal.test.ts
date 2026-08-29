@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
+import { stripVTControlCharacters } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/core/events.js";
 import { TerminalRenderer } from "../src/observability/terminal.js";
@@ -20,6 +21,10 @@ class Sink extends Writable {
     this.value += chunk.toString();
     callback();
   }
+}
+
+function visibleTerminal(value: string): string {
+  return stripVTControlCharacters(value);
 }
 
 afterEach(() => {
@@ -473,6 +478,83 @@ describe("plugins and terminal", () => {
 
     expect(out.value).toBe("");
     expect(err.value).toContain("[coden] plugin loaded: global @fixtures/ok@1.0.0");
+  });
+
+  it("previews a raw incomplete Markdown line and commits it when complete", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    Object.assign(err, { columns: 80 });
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "**bo" });
+    expect(out.value).toBe("");
+    expect(visibleTerminal(err.value)).toContain("**bo");
+
+    await events.emit("provider.delta", { text: "ld**\n" });
+    expect(visibleTerminal(out.value)).toContain("bold\n");
+    expect(visibleTerminal(err.value)).toContain("rendering…");
+
+    await events.emit("provider.completed", {});
+    renderer.dispose();
+  });
+
+  it("previews the newest fenced-code line within terminal width", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    Object.assign(err, { columns: 18 });
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "```ts\nfirst completed code line\n" });
+    expect(out.value).toBe("");
+    expect(visibleTerminal(err.value)).toContain("…leted code line");
+
+    await events.emit("provider.delta", { text: "second partial" });
+    expect(visibleTerminal(err.value)).toContain("second partial");
+
+    await events.emit("provider.delta", { text: "\n```\n" });
+    expect(visibleTerminal(out.value)).toContain("first completed code line\nsecond partial");
+    renderer.dispose();
+  });
+
+  it("does not revive assistant previews after lifecycle cleanup", async () => {
+    vi.useFakeTimers();
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "stale retry text" });
+    await events.emit("provider.retry", { attempt: 1 });
+    const retryBoundary = err.value.length;
+    await events.emit("provider.started");
+    vi.advanceTimersByTime(80);
+    expect(visibleTerminal(err.value.slice(retryBoundary))).not.toContain("stale retry text");
+
+    await events.emit("provider.delta", { text: "stale failure text" });
+    await events.emit("turn.failed", { message: "failed" });
+    const failureBoundary = err.value.length;
+    await events.emit("provider.started");
+    vi.advanceTimersByTime(80);
+    expect(visibleTerminal(err.value.slice(failureBoundary))).not.toContain("stale failure text");
+
+    await events.emit("provider.delta", { text: "stale tool text" });
+    await events.emit("tool.started", { name: "read", summary: "path: a.ts" });
+    const toolBoundary = err.value.length;
+    await events.emit("provider.started");
+    vi.advanceTimersByTime(80);
+    expect(visibleTerminal(err.value.slice(toolBoundary))).not.toContain("stale tool text");
+
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "stale disposed text" });
+    renderer.dispose();
+    const disposeBoundary = err.value.length;
+    vi.advanceTimersByTime(80);
+    expect(visibleTerminal(err.value.slice(disposeBoundary))).not.toContain("stale disposed text");
   });
 
   it("renders assistant Markdown by complete lines in TTY mode", async () => {

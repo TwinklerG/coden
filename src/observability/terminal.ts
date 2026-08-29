@@ -66,11 +66,20 @@ export class TerminalRenderer {
     if (event.type === "provider.delta") {
       const text = String(event.data?.text ?? "");
       if (text && !this.contentStarted) this.finishThinking();
-      if (this.tty) this.markdown.push(text);
-      else this.pendingText += text;
+      if (this.tty) {
+        this.clearActivityLine();
+        this.markdown.push(text);
+        if (text) {
+          this.startSpinner();
+          this.renderActivityLine();
+        }
+      } else this.pendingText += text;
     }
     if (event.type === "provider.completed") {
-      if (this.tty) this.markdown.complete();
+      if (this.tty) {
+        this.clearActivityLine();
+        this.markdown.complete();
+      }
       if (!this.tty && this.pendingText) {
         this.stdout.write(this.pendingText);
         this.pendingText = "";
@@ -212,6 +221,10 @@ export class TerminalRenderer {
       if (argumentColumns === 0) return this.truncateTail(label, maxColumns);
       return `${label} ${this.truncateTail(normalizedArguments, argumentColumns)}`;
     }
+    if (this.contentStarted) {
+      const preview = this.markdown.preview();
+      return preview === undefined ? "rendering…" : this.truncateTail(preview, maxColumns);
+    }
     const reasoning = this.normalizedReasoning();
     return reasoning ? this.truncateTail(reasoning, maxColumns) : "thinking";
   }
@@ -227,12 +240,16 @@ export class TerminalRenderer {
       this.renderActivityLine();
     }, 80);
   }
+  private clearActivityLine(): void {
+    if (!this.tty) return;
+    readline.clearLine(this.stderr, 0);
+    readline.cursorTo(this.stderr, 0);
+  }
   private stopSpinner(): void {
     if (!this.spinner) return;
     clearInterval(this.spinner);
     this.spinner = undefined;
-    readline.clearLine(this.stderr, 0);
-    readline.cursorTo(this.stderr, 0);
+    this.clearActivityLine();
   }
   dispose(): void {
     this.endProviderAttempt();
