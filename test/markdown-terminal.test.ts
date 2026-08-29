@@ -2,11 +2,14 @@ import { stripVTControlCharacters } from "node:util";
 import { describe, expect, it } from "vitest";
 import { MarkdownStreamRenderer } from "../src/observability/markdown.js";
 
-function harness() {
+function harness(columns = 80) {
   let output = "";
-  const renderer = new MarkdownStreamRenderer((text) => {
-    output += text;
-  });
+  const renderer = new MarkdownStreamRenderer(
+    (text) => {
+      output += text;
+    },
+    () => columns,
+  );
   return { renderer, output: () => stripVTControlCharacters(output) };
 }
 
@@ -97,11 +100,74 @@ describe("MarkdownStreamRenderer", () => {
     expect(h.output()).toBe("safered\n");
   });
 
-  it("keeps unsupported table syntax readable", () => {
+  it("buffers and renders a complete GFM table", () => {
     const h = harness();
-    h.renderer.push("| a | b |\n| - | - |\n| 1 | 2 |\n");
+    h.renderer.push("| Name | Status |\n");
+    expect(h.output()).toBe("");
+    expect(h.renderer.preview()).toBe("| Name | Status |");
+
+    h.renderer.push("|:---|---:|\n| **项目** | `ok` |\n");
+    expect(h.output()).toBe("");
+    expect(h.renderer.preview()).toBe("| **项目** | `ok` |");
+
+    h.renderer.complete();
+    expect(h.output()).toContain("┌");
+    expect(h.output()).toContain("│ Name");
+    expect(h.output()).toContain("项目");
+    expect(h.output()).toContain("ok");
+    expect(h.output()).not.toContain("|:---|---:|");
+  });
+
+  it("supports GFM tables without outer pipes and flushes on a blank line", () => {
+    const h = harness();
+    h.renderer.push("Name | Value\n--- | ---:\na | 1\n\nAfter\n");
+
+    expect(h.output()).toContain("┌");
+    expect(h.output()).toContain("│ Name");
+    expect(h.output()).toContain("After\n");
+    expect(h.output().indexOf("└")).toBeLessThan(h.output().indexOf("After"));
+  });
+
+  it("falls back without losing pipe-containing prose or invalid delimiters", () => {
+    const h = harness();
+    h.renderer.push("use a | b here\nnot a delimiter\nAfter\n");
+    h.renderer.complete();
+
+    expect(h.output()).toContain("use a | b here\nnot a delimiter\nAfter\n");
+    expect(h.output()).not.toContain("┌");
+  });
+
+  it("does not detect tables inside fenced code", () => {
+    const h = harness();
+    h.renderer.push("```text\n| a | b |\n| - | - |\n| 1 | 2 |\n```\n");
+
+    expect(h.output()).toContain("| a | b |");
+    expect(h.output()).not.toContain("┌");
+  });
+
+  it("recognizes table syntax split across provider deltas", () => {
+    const h = harness();
+    h.renderer.push("Name | Va");
+    h.renderer.push("lue\n--- | ---");
+    expect(h.output()).toBe("");
+    h.renderer.push("\na | b");
+    h.renderer.complete();
+
+    expect(h.output()).toContain("┌");
+    expect(h.output()).toContain("Value");
     expect(h.output()).toContain("a");
-    expect(h.output()).toContain("1");
-    expect(h.output()).toContain("2");
+  });
+
+  it("flushes a lone candidate on completion and drops table state on reset", () => {
+    const lone = harness();
+    lone.renderer.push("a | b");
+    lone.renderer.complete();
+    expect(lone.output()).toBe("a | b");
+
+    const reset = harness();
+    reset.renderer.push("a | b\n--- | ---\n1 | 2\n");
+    reset.renderer.reset();
+    reset.renderer.push("clean\n");
+    expect(reset.output()).toBe("clean\n");
   });
 });
