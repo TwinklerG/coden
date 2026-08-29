@@ -309,6 +309,38 @@ describe("AgentRuntime integration", () => {
     expect(result.answer).toBe("public answer");
   });
 
+  it("forwards streamed tool-call lifecycle events with one turn ID", async () => {
+    const provider = new ScriptedProvider([
+      scriptedTool("w", "write", { path: "a.txt", content: "hello" }),
+      scriptedText("done"),
+    ]);
+    const h = await harness(provider);
+    const lifecycle: Array<{
+      type: string;
+      turnId?: string;
+      data?: Record<string, unknown>;
+    }> = [];
+    h.events.on((event) => {
+      if (event.type.startsWith("provider.tool_call_")) lifecycle.push(event);
+    });
+
+    await h.runtime.run("write a file");
+
+    expect(lifecycle.map(({ type, data }) => ({ type, data }))).toEqual([
+      {
+        type: "provider.tool_call_start",
+        data: { index: 0, callId: "w", name: "write" },
+      },
+      {
+        type: "provider.tool_call_delta",
+        data: { index: 0, argumentsDelta: '{"path":"a.txt","content":"hello"}' },
+      },
+      { type: "provider.tool_call_end", data: { index: 0 } },
+    ]);
+    expect(lifecycle[0]?.turnId).toBeTruthy();
+    expect(new Set(lifecycle.map((event) => event.turnId)).size).toBe(1);
+  });
+
   it("retries temporary provider errors", async () => {
     const provider = new ScriptedProvider([
       Object.assign(new Error("rate limited"), { status: 429 }),

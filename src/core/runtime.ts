@@ -264,6 +264,23 @@ export class AgentRuntime {
           async (text) => {
             await this.events.emit("provider.reasoning_delta", { text }, turnId);
           },
+          async (event) => {
+            if (event.type === "tool_call_start") {
+              await this.events.emit(
+                "provider.tool_call_start",
+                { index: event.index, callId: event.callId, name: event.name },
+                turnId,
+              );
+            } else if (event.type === "tool_call_delta") {
+              await this.events.emit(
+                "provider.tool_call_delta",
+                { index: event.index, argumentsDelta: event.argumentsDelta },
+                turnId,
+              );
+            } else {
+              await this.events.emit("provider.tool_call_end", { index: event.index }, turnId);
+            }
+          },
         );
         await this.events.emit("provider.completed", { usage: result.usage }, turnId);
         return result;
@@ -299,10 +316,16 @@ export class AgentRuntime {
   }
 }
 
+export type ToolCallStreamEvent = Extract<
+  ModelEvent,
+  { type: "tool_call_start" | "tool_call_delta" | "tool_call_end" }
+>;
+
 export async function accumulateStream(
   stream: AsyncIterable<ModelEvent>,
   onText?: (text: string) => void | Promise<void>,
   onReasoning?: (text: string) => void | Promise<void>,
+  onToolCall?: (event: ToolCallStreamEvent) => void | Promise<void>,
 ): Promise<{ text: string; toolCalls: ToolCall[]; usage: Usage }> {
   let text = "";
   let usage: Usage = { inputTokens: 0, outputTokens: 0 };
@@ -316,9 +339,15 @@ export async function accumulateStream(
     } else if (event.type === "text_delta") {
       text += event.text;
       await onText?.(event.text);
-    } else if (event.type === "tool_call_start")
-      builders.set(event.index, { callId: event.callId, name: event.name, json: "", ended: false });
-    else if (event.type === "tool_call_delta") {
+    } else if (event.type === "tool_call_start") {
+      builders.set(event.index, {
+        callId: event.callId,
+        name: event.name,
+        json: "",
+        ended: false,
+      });
+      await onToolCall?.(event);
+    } else if (event.type === "tool_call_delta") {
       const builder = builders.get(event.index);
       if (!builder)
         throw new CodeNError(
@@ -327,9 +356,13 @@ export async function accumulateStream(
           "Tool arguments arrived before tool start",
         );
       builder.json += event.argumentsDelta;
+      await onToolCall?.(event);
     } else if (event.type === "tool_call_end") {
       const builder = builders.get(event.index);
-      if (builder) builder.ended = true;
+      if (builder) {
+        builder.ended = true;
+        await onToolCall?.(event);
+      }
     } else if (event.type === "usage")
       usage = {
         inputTokens: Math.max(usage.inputTokens, event.usage.inputTokens),

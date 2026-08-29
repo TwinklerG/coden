@@ -126,7 +126,8 @@ describe("providers", () => {
     expect(result.text).toBe("final answer");
   });
 
-  it("assembles streamed tool arguments", async () => {
+  it("assembles streamed tool arguments and reports their lifecycle", async () => {
+    const toolEvents: ModelEvent[] = [];
     const result = await accumulateStream(
       events([
         { type: "text_delta", text: "checking" },
@@ -137,7 +138,19 @@ describe("providers", () => {
         { type: "usage", usage: { inputTokens: 10, outputTokens: 3 } },
         { type: "done" },
       ]),
+      undefined,
+      undefined,
+      (event) => {
+        toolEvents.push(event);
+      },
     );
+
+    expect(toolEvents).toEqual([
+      { type: "tool_call_start", index: 0, callId: "c1", name: "read" },
+      { type: "tool_call_delta", index: 0, argumentsDelta: '{"path":' },
+      { type: "tool_call_delta", index: 0, argumentsDelta: '"a"}' },
+      { type: "tool_call_end", index: 0 },
+    ]);
     expect(result).toEqual({
       text: "checking",
       toolCalls: [{ callId: "c1", name: "read", input: { path: "a" } }],
