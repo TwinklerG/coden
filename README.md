@@ -10,7 +10,7 @@ CodeN（Code NJU）是一个用 TypeScript 独立实现的极简编程智能体�
 
 ```bash
 bun add -g @twinklerg/coden     # 或 npm install -g @twinklerg/coden
-coden --version                 # 0.1.3
+coden --version                 # 0.1.4
 coden --help
 ```
 
