@@ -107,6 +107,6 @@ describe("CLI session list and resume", () => {
     expect(result.stdout).toContain(`Version: ${CODEN_VERSION}`);
     expect(result.stdout).toContain(`Workspace hash: ${workspaceHash(workspace)}`);
     expect(result.stdout).toContain("Resumed session my-session");
-    expect(result.stdout).toContain("Showing last");
+    expect(result.stdout).toContain("> hello world");
   });
 });

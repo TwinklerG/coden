@@ -1,11 +1,10 @@
-import { describe, expect, it } from "vitest";
 import { stripVTControlCharacters } from "node:util";
+import { describe, expect, it } from "vitest";
 import {
   ASSISTANT_TRUNCATE_LIMIT,
   formatDateTime,
   formatPermissionQuestion,
   formatSessionList,
-  renderResumeBanner,
   renderResumeTranscript,
   singleLine,
 } from "../src/cli/format.js";
@@ -104,19 +103,6 @@ describe("cli format helpers", () => {
     );
     expect(question).toContain("Allow? [y]es / [N]o: ");
     expect(question).not.toContain("session");
-  });
-
-  it("renders a resume banner with a preview of the last messages", () => {
-    const messages: AgentMessage[] = [
-      { role: "system", content: "You are CodeN." },
-      { role: "user", content: "hello world" },
-      { role: "assistant", content: "hi there", toolCalls: [] },
-    ];
-    const banner = renderResumeBanner("sess-id", messages);
-    expect(banner).toContain("Resumed session sess-id (3 messages).");
-    expect(banner).toContain("Showing last 2 of 3 messages.");
-    expect(banner).toContain("┌ user      hello world");
-    expect(banner).toContain("┌ assistant hi there");
   });
 
   it("renders the full user/assistant transcript and hides system/tool messages", () => {

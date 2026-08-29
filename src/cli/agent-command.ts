@@ -39,7 +39,7 @@ import { ToolExecutor } from "../tools/executor.js";
 import { PluginLoader } from "../tools/plugin-loader.js";
 import { ToolRegistry, type ToolSource } from "../tools/registry.js";
 import { CODEN_VERSION } from "../version.js";
-import { formatPermissionQuestion, formatSessionList, renderResumeBanner } from "./format.js";
+import { formatPermissionQuestion, formatSessionList, renderResumeTranscript } from "./format.js";
 
 export interface AgentCommandOptions {
   provider?: ProviderName;
@@ -92,14 +92,15 @@ export async function runAgentCommand(
   let initialMessages: AgentMessage[] | undefined;
   let recoveredSummary: string | undefined;
   let recoveredCompactionEnd = 0;
-  let resumeBanner: string | undefined;
+  let resumeTranscript: string | undefined;
   if (typeof options.resume === "string") {
     const recovered = await session.recover();
     initialMessages = recovered.messages;
     recoveredSummary = recovered.summary;
     recoveredCompactionEnd = recovered.compactionRange?.end ?? 0;
     for (const warning of recovered.warnings) process.stderr.write(`coden: ${warning}\n`);
-    if (!options.print) resumeBanner = renderResumeBanner(session.sessionId, recovered.messages);
+    if (!options.print)
+      resumeTranscript = renderResumeTranscript(session.sessionId, recovered.messages);
   }
   const trace = new JSONLTraceWriter(session.tracePath, events, () => session.isCreated);
   const renderer = new TerminalRenderer(events, {
@@ -221,7 +222,7 @@ export async function runAgentCommand(
       registry,
       requireInterface(rl),
       workspaceHash(workspace),
-      resumeBanner,
+      resumeTranscript,
     );
   } finally {
     rl?.close();
@@ -358,14 +359,14 @@ async function repl(
   registry: ToolRegistry,
   rl: Interface,
   workspaceId: string,
-  resumeBanner?: string,
+  resumeTranscript?: string,
 ): Promise<void> {
   stdout.write(CODEN_BANNER);
   stdout.write(`Version: ${CODEN_VERSION}\n`);
   stdout.write(`Workspace hash: ${workspaceId}\n`);
   stdout.write(
-    resumeBanner
-      ? `${resumeBanner}\nType /help for commands.\n`
+    resumeTranscript
+      ? `${resumeTranscript}\n\nType /help for commands.\n`
       : `CodeN session ${session.sessionId}. Type /help for commands.\n`,
   );
   while (true) {

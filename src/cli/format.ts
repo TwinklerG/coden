@@ -6,8 +6,8 @@ import type {
   ToolRisk,
   UserMessage,
 } from "../core/types.js";
-import { formatToolInput } from "../observability/tool-input.js";
 import { MarkdownStreamRenderer } from "../observability/markdown.js";
+import { formatToolInput } from "../observability/tool-input.js";
 import type { SessionMeta } from "../sessions/store.js";
 
 export const ASSISTANT_TRUNCATE_LIMIT = 2000;
@@ -50,22 +50,6 @@ export function formatPermissionQuestion(
   const values = display.lines.map((line) => `  ${line}`).join("\n");
   const choices = risk === "dangerous" ? "[y]es / [N]o" : "[y]es / [s]ession / [N]o";
   return `${risk.toUpperCase()}  ${tool.name}\n\n${values}\n\nAllow? ${choices}: `;
-}
-
-export function renderResumeBanner(sessionId: string, messages: AgentMessage[]): string {
-  const count = messages.length;
-  const preview = messages
-    .filter((message) => message.role === "user" || message.role === "assistant")
-    .slice(-3);
-  const lines = [
-    `Resumed session ${sessionId} (${count} messages).`,
-    `Showing last ${preview.length} of ${count} messages.`,
-  ];
-  for (const message of preview) {
-    const role = message.role === "user" ? "user" : "assistant";
-    lines.push(`┌ ${role.padEnd(9)} ${singleLine(message.content, 120)}`);
-  }
-  return lines.join("\n");
 }
 
 export function renderResumeTranscript(sessionId: string, messages: AgentMessage[]): string {
