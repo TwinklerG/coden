@@ -159,6 +159,16 @@ describe("MultilineEditor", () => {
     expect(h.screen.lines().slice(0, 3)).toEqual(["> a", "  x", "  b"]);
   });
 
+  it("exits on Ctrl+D from an initially empty draft and pauses input", async () => {
+    const h = editorHarness(20);
+    const result = h.editor.read();
+    h.input.write("\u0004");
+    await expect(result).resolves.toEqual({ type: "eof" });
+    expect(h.input.isPaused()).toBe(true);
+    expect(h.rawTransitions).toEqual([true, false]);
+    expect(h.listenerCounts()).toEqual({ data: 0, resize: 0 });
+  });
+
   it("Ctrl+D deletes forward and exits only when empty", async () => {
     const h = editorHarness(20);
     const result = h.editor.read();
@@ -166,6 +176,7 @@ describe("MultilineEditor", () => {
     expect(h.screen.lines()).toEqual(["> a"]);
     h.input.write("\u007f\u0004");
     await expect(result).resolves.toEqual({ type: "eof" });
+    expect(h.input.isPaused()).toBe(true);
   });
 
   it("continues on a trailing backslash", async () => {

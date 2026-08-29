@@ -144,6 +144,7 @@ export class MultilineEditor {
     this.signalEmitter.removeListener("SIGTERM", active.sigterm);
     this.output.write(BRACKETED_PASTE_DISABLE);
     this.input.setRawMode(active.rawMode ?? false);
+    this.input.pause();
     this.renderedRows = 0;
     this.renderedCursorRow = 0;
     return active;
