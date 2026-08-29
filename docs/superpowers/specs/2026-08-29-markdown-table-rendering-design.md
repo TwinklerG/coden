@@ -57,7 +57,7 @@ Each cell has one display column of padding on both sides. The header is separat
 
 ## Width Allocation and Wrapping
 
-Width calculations operate on terminal display columns, not JavaScript string length. ANSI styling sequences occupy zero columns, ASCII occupies one column, and Chinese and other characters covered by the existing wide-character rule occupy two columns.
+Width calculations operate on terminal display columns, not JavaScript string length. ANSI styling sequences occupy zero columns, ASCII occupies one column, Unicode box-drawing characters occupy one structural column, and Chinese and other characters covered by the existing wide-character rule occupy two columns. The existing broad width helper will gain only the box-drawing exception needed by this feature; replacing it with a full Unicode width engine remains out of scope.
 
 The renderer first computes every column's natural content width from its header and body cells. The table's structural width is:
 
