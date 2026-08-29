@@ -66,7 +66,7 @@ The renderer first computes every column's natural content width from its header
 - two padding columns per cell;
 - the allocated content width of every column.
 
-If the natural table fits, all natural widths are retained. Otherwise, the renderer repeatedly reduces the widest reducible columns until the table fits or every column reaches a minimum content width of one display column. This largest-first policy avoids shrinking already narrow identifier or status columns while one prose-heavy column dominates the table.
+If the natural table fits, all natural widths are retained. Otherwise, the renderer repeatedly reduces the widest reducible columns until the table fits or every column reaches its minimum content width. A column's minimum is one display column when it contains only one-column characters and two when it contains any indivisible two-column character. This largest-first policy avoids shrinking already narrow identifier or status columns while one prose-heavy column dominates the table, and it never assigns a width that cannot contain one of the column's characters.
 
 Cell content wraps independently to its allocated column width:
 
@@ -77,7 +77,7 @@ Cell content wraps independently to its allocated column width:
 
 ANSI-aware wrapping measures styled text after removing control sequences and ensures each visual fragment has balanced styling so color or emphasis cannot leak into padding and borders. After wrapping all cells in one logical row, shorter cells receive blank visual lines until they match that row's maximum height. Each visual fragment is padded according to the column's GFM alignment: left by default, centered for `:---:`, and right-aligned for `---:`.
 
-If the terminal is narrower than the structural minimum of borders, padding, separators, and one content column per Markdown column, the table retains every column at the one-column minimum. This is the only case where output may exceed the terminal width; preserving the complete table and content takes priority over silently dropping columns.
+If the terminal is narrower than the structural minimum of borders, padding, separators, and each column's one- or two-column character minimum, the table retains every column at that minimum. This is the only case where output may exceed the terminal width; preserving the complete table, content, and aligned borders takes priority over silently dropping columns.
 
 ## Streaming Data Flow
 
@@ -122,7 +122,7 @@ Tests will cover:
 7. natural-width rendering and dynamic width lookup;
 8. largest-first column shrinking, whitespace wrapping, and hard wrapping;
 9. row-height normalization and ANSI style isolation at borders;
-10. terminals too narrow for the structural minimum;
+10. terminals too narrow for the structural minimum, including columns containing two-column characters;
 11. pipe characters inside fenced code blocks;
 12. pipe-containing prose and invalid table delimiters degrading without lost content;
 13. completion flushing lone candidates and confirmed tables;
