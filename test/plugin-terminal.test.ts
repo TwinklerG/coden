@@ -171,6 +171,119 @@ describe("plugins and terminal", () => {
     renderer.dispose();
   });
 
+  it("renders streamed tool arguments as a bounded TTY activity line", async () => {
+    vi.useFakeTimers();
+    const out = new Sink();
+    const err = new Sink();
+    Object.assign(err, { columns: 38 });
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.tool_call_start", {
+      index: 0,
+      callId: "w",
+      name: "write",
+    });
+    expect(err.value).toContain("preparing write…");
+
+    const beforeDelta = err.value.length;
+    await events.emit("provider.tool_call_delta", {
+      index: 0,
+      argumentsDelta: '{"path":"src/a.ts",\n"content":"a deliberately long payload"}',
+    });
+    const latestRender = err.value.slice(beforeDelta);
+    expect(latestRender).toContain("preparing write…");
+    expect(latestRender).toContain("…");
+    expect(latestRender).not.toContain('\n"content');
+    expect(out.value).toBe("");
+
+    renderer.dispose();
+  });
+
+  it("clears tool argument previews across terminal lifecycle boundaries", async () => {
+    vi.useFakeTimers();
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.tool_call_start", { index: 0, callId: "w", name: "write" });
+    await events.emit("provider.tool_call_delta", {
+      index: 0,
+      argumentsDelta: '{"content":"secret-end"}',
+    });
+    await events.emit("provider.tool_call_end", { index: 0 });
+    const afterEnd = err.value.length;
+    vi.advanceTimersByTime(100);
+    expect(err.value.slice(afterEnd)).not.toContain("secret-end");
+
+    await events.emit("provider.tool_call_start", { index: 1, callId: "e", name: "edit" });
+    await events.emit("provider.tool_call_delta", {
+      index: 1,
+      argumentsDelta: '{"newText":"secret-text"}',
+    });
+    await events.emit("provider.delta", { text: "answer" });
+    const afterText = err.value.length;
+    vi.advanceTimersByTime(100);
+    expect(err.value.slice(afterText)).not.toContain("secret-text");
+
+    await events.emit("provider.started");
+    await events.emit("provider.tool_call_start", { index: 2, callId: "b", name: "bash" });
+    await events.emit("provider.tool_call_delta", {
+      index: 2,
+      argumentsDelta: '{"command":"secret-retry"}',
+    });
+    await events.emit("provider.retry", { attempt: 1 });
+    const afterRetry = err.value.length;
+    vi.advanceTimersByTime(100);
+    expect(err.value.slice(afterRetry)).not.toContain("secret-retry");
+
+    await events.emit("provider.started");
+    await events.emit("provider.tool_call_start", { index: 3, callId: "r", name: "read" });
+    await events.emit("provider.tool_call_delta", {
+      index: 3,
+      argumentsDelta: '{"path":"secret-tool-start"}',
+    });
+    await events.emit("tool.started", { name: "read" });
+    const afterToolStart = err.value.length;
+    vi.advanceTimersByTime(100);
+    expect(err.value.slice(afterToolStart)).not.toContain("secret-tool-start");
+
+    await events.emit("provider.started");
+    await events.emit("provider.tool_call_start", { index: 4, callId: "r2", name: "read" });
+    await events.emit("provider.tool_call_delta", {
+      index: 4,
+      argumentsDelta: '{"path":"secret-dispose"}',
+    });
+    renderer.dispose();
+    const afterDispose = err.value.length;
+    vi.advanceTimersByTime(100);
+    expect(err.value.slice(afterDispose)).not.toContain("secret-dispose");
+  });
+
+  it("never renders streamed tool arguments in non-TTY mode", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: false });
+
+    await events.emit("provider.started");
+    await events.emit("provider.tool_call_start", { index: 0, callId: "w", name: "write" });
+    await events.emit("provider.tool_call_delta", {
+      index: 0,
+      argumentsDelta: '{"content":"must-not-leak"}',
+    });
+    await events.emit("provider.tool_call_end", { index: 0 });
+    await events.emit("provider.completed", {});
+
+    expect(out.value).toBe("");
+    expect(err.value).not.toContain("write");
+    expect(err.value).not.toContain("must-not-leak");
+    renderer.dispose();
+  });
+
   it("ignores reasoning after formal TTY content starts", async () => {
     const out = new Sink();
     const err = new Sink();

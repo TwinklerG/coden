@@ -19,6 +19,8 @@ export class TerminalRenderer {
   private frame = 0;
   private providerStartedAt: number | undefined;
   private reasoningText = "";
+  private readonly toolCallPreviews = new Map<number, { name: string; argumentsText: string }>();
+  private activeToolCallIndex: number | undefined;
   private contentStarted = false;
   // Non-TTY output is buffered until the provider attempt succeeds so that a
   // failed stream attempt followed by a retry cannot corrupt pipeline output.
@@ -39,8 +41,22 @@ export class TerminalRenderer {
       const text = String(event.data?.text ?? "");
       if (this.tty && this.providerStartedAt !== undefined && !this.contentStarted && text) {
         this.reasoningText += text;
-        this.renderThinkingLine();
+        this.renderActivityLine();
       }
+    }
+    if (event.type === "provider.tool_call_start" && this.tty) {
+      const index = Number(event.data?.index);
+      const name = String(event.data?.name ?? "tool");
+      if (Number.isInteger(index)) this.startToolCallPreview(index, name);
+    }
+    if (event.type === "provider.tool_call_delta" && this.tty) {
+      const index = Number(event.data?.index);
+      const text = String(event.data?.argumentsDelta ?? "");
+      if (Number.isInteger(index) && text) this.appendToolCallPreview(index, text);
+    }
+    if (event.type === "provider.tool_call_end" && this.tty) {
+      const index = Number(event.data?.index);
+      if (Number.isInteger(index)) this.endToolCallPreview(index);
     }
     if (event.type === "provider.delta") {
       const text = String(event.data?.text ?? "");
@@ -104,6 +120,7 @@ export class TerminalRenderer {
   }
   private endProviderAttempt(): void {
     this.stopSpinner();
+    this.clearToolCallPreviews();
     this.providerStartedAt = undefined;
     this.reasoningText = "";
     this.contentStarted = false;
@@ -111,6 +128,7 @@ export class TerminalRenderer {
   private finishThinking(): void {
     const startedAt = this.providerStartedAt;
     const hadReasoning = Boolean(this.normalizedReasoning());
+    this.clearToolCallPreviews();
     this.stopSpinner();
     this.contentStarted = true;
     if (this.tty && startedAt !== undefined && hadReasoning) {
@@ -121,22 +139,71 @@ export class TerminalRenderer {
   private normalizedReasoning(): string {
     return this.reasoningText.replace(/\s+/g, " ").trim();
   }
-  private renderThinkingLine(): void {
-    const normalized = this.normalizedReasoning();
-    if (!normalized) return;
+  private startToolCallPreview(index: number, name: string): void {
+    this.toolCallPreviews.set(index, { name, argumentsText: "" });
+    this.activeToolCallIndex = index;
+    this.startSpinner();
+    this.renderActivityLine();
+  }
+  private appendToolCallPreview(index: number, text: string): void {
+    const preview = this.toolCallPreviews.get(index);
+    if (!preview) return;
+    preview.argumentsText += text;
+    this.activeToolCallIndex = index;
+    this.renderActivityLine();
+  }
+  private endToolCallPreview(index: number): void {
+    if (!this.toolCallPreviews.delete(index)) return;
+    if (this.activeToolCallIndex === index) {
+      this.activeToolCallIndex = [...this.toolCallPreviews.keys()].at(-1);
+    }
+    if (this.activeToolCallIndex === undefined && this.contentStarted) {
+      this.stopSpinner();
+      return;
+    }
+    this.renderActivityLine();
+  }
+  private clearToolCallPreviews(): void {
+    this.toolCallPreviews.clear();
+    this.activeToolCallIndex = undefined;
+  }
+  private renderActivityLine(): void {
+    if (!this.tty || this.providerStartedAt === undefined) return;
     const columns = (this.stderr as NodeJS.WritableStream & { columns?: number }).columns ?? 80;
+    const maxColumns = Math.max(0, columns - 2);
     const frame = SPINNER_FRAMES[this.frame++ % SPINNER_FRAMES.length] ?? "";
-    const visible = this.truncateTail(normalized, Math.max(0, columns - 2));
+    const visible = this.currentActivityText(maxColumns);
     readline.clearLine(this.stderr, 0);
     readline.cursorTo(this.stderr, 0);
     this.stderr.write(pc.dim(`${frame} ${visible}`));
+  }
+  private currentActivityText(maxColumns: number): string {
+    const active =
+      this.activeToolCallIndex === undefined
+        ? undefined
+        : this.toolCallPreviews.get(this.activeToolCallIndex);
+    if (active) {
+      const label = `preparing ${active.name}…`;
+      const normalizedArguments = active.argumentsText.replace(/\s+/g, " ").trim();
+      if (!normalizedArguments) return this.truncateTail(label, maxColumns);
+      const argumentColumns = Math.max(0, maxColumns - this.displayWidth(label) - 1);
+      if (argumentColumns === 0) return this.truncateTail(label, maxColumns);
+      return `${label} ${this.truncateTail(normalizedArguments, argumentColumns)}`;
+    }
+    const reasoning = this.normalizedReasoning();
+    return reasoning ? this.truncateTail(reasoning, maxColumns) : "thinking";
+  }
+  private displayWidth(text: string): number {
+    return Array.from(text).reduce(
+      (sum, character) => sum + ((character.codePointAt(0) ?? 0) <= 0xff ? 1 : 2),
+      0,
+    );
   }
   private truncateTail(text: string, maxColumns: number): string {
     if (maxColumns <= 0) return "";
     const characters = Array.from(text);
     const width = (character: string) => ((character.codePointAt(0) ?? 0) <= 0xff ? 1 : 2);
-    const total = characters.reduce((sum, character) => sum + width(character), 0);
-    if (total <= maxColumns) return text;
+    if (this.displayWidth(text) <= maxColumns) return text;
     const kept: string[] = [];
     let used = 1;
     for (let index = characters.length - 1; index >= 0; index--) {
@@ -153,14 +220,7 @@ export class TerminalRenderer {
       return;
     }
     this.spinner = setInterval(() => {
-      if (this.normalizedReasoning()) {
-        this.renderThinkingLine();
-        return;
-      }
-      readline.clearLine(this.stderr, 0);
-      readline.cursorTo(this.stderr, 0);
-      const frame = SPINNER_FRAMES[this.frame++ % SPINNER_FRAMES.length] ?? "";
-      this.stderr.write(`${frame} thinking`);
+      this.renderActivityLine();
     }, 80);
   }
   private stopSpinner(): void {
