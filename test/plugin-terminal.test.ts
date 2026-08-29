@@ -14,12 +14,17 @@ import { ToolRegistry } from "../src/tools/registry.js";
 
 class Sink extends Writable {
   value = "";
+  constructor(private readonly onWrite?: (text: string) => void) {
+    super();
+  }
   _write(
     chunk: Buffer | string,
     _encoding: BufferEncoding,
     callback: (error?: Error | null) => void,
   ) {
-    this.value += chunk.toString();
+    const text = chunk.toString();
+    this.value += text;
+    this.onWrite?.(text);
     callback();
   }
 }
@@ -592,6 +597,23 @@ describe("plugins and terminal", () => {
     expect(out.value).toContain("keep this");
     expect(out.value).not.toContain("discard");
     renderer.dispose();
+  });
+
+  it("keeps the bottom border of a final table without a trailing newline", async () => {
+    const writes: Array<{ stream: "stdout" | "stderr"; text: string }> = [];
+    const out = new Sink((text) => writes.push({ stream: "stdout", text }));
+    const err = new Sink((text) => writes.push({ stream: "stderr", text }));
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("provider.started");
+    await events.emit("provider.delta", { text: "A | B\n--- | ---\n1 | 2" });
+    await events.emit("provider.completed", {});
+    renderer.dispose();
+
+    expect(visibleTerminal(out.value)).toContain("└───┴───┘");
+    expect(writes.at(-1)?.stream).toBe("stdout");
+    expect(visibleTerminal(writes.at(-1)?.text ?? "")).toContain("└───┴───┘");
   });
 
   it("renders Markdown tables at the latest stdout terminal width", async () => {

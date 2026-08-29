@@ -84,7 +84,7 @@ export class TerminalRenderer {
     }
     if (event.type === "provider.completed") {
       if (this.tty) {
-        this.clearActivityLine();
+        this.stopSpinner();
         this.markdown.complete();
       }
       if (!this.tty && this.pendingText) {
