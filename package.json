@@ -10,7 +10,7 @@
     "dist/plugin/index.d.ts"
   ],
   "bin": {
-    "coden": "./dist/index.js"
+    "coden": "dist/index.js"
   },
   "exports": {
     "./plugin": {
