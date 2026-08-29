@@ -35,9 +35,10 @@ export class SessionStore {
   readonly sessionPath: string;
   readonly tracePath: string;
   #queue = Promise.resolve();
+  #created = false;
   constructor(
     dataDir: string,
-    workspace: string,
+    private readonly workspace: string,
     readonly sessionId: string = randomUUID(),
   ) {
     if (!isValidSessionId(sessionId)) throw new Error("Invalid session ID");
@@ -45,8 +46,13 @@ export class SessionStore {
     this.sessionPath = path.join(directory, `${sessionId}.jsonl`);
     this.tracePath = path.join(directory, `${sessionId}.trace.jsonl`);
   }
-  async create(workspace: string): Promise<void> {
+  get isCreated(): boolean {
+    return this.#created;
+  }
+  async create(workspace = this.workspace): Promise<void> {
+    if (this.#created) return;
     await this.append("session.created", { workspace, sessionId: this.sessionId });
+    this.#created = true;
   }
   append(type: string, data: unknown): Promise<void> {
     const record: SessionRecord = {
@@ -153,6 +159,7 @@ export class SessionStore {
     let summary: string | undefined;
     let compactionRange: { start: number; end: number } | undefined;
     const text = await readFile(this.sessionPath, "utf8");
+    this.#created = true;
     const lines = text.split("\n");
     let lastRecordIndex = -1;
     for (let index = lines.length - 1; index >= 0; index--) {

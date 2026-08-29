@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -76,6 +76,22 @@ describe("CLI session list and resume", () => {
     expect(result.stdout).toContain("my-session");
     expect(result.stdout).toContain("hello world");
   });
+  it("does not persist a session that exits before its first request", async () => {
+    const workspace = await makeWorkspace();
+    const xdgHome = await mkdtemp(path.join(os.tmpdir(), "coden-xdg-"));
+    const result = spawnSync("bun", [cli], {
+      cwd: workspace,
+      encoding: "utf8",
+      input: "/new\n/quit\n",
+      env: { ...baseEnv, CODEN_OPENAI_API_KEY: "test-key", XDG_DATA_HOME: xdgHome },
+      timeout: 30_000,
+    });
+
+    expect(result.status).toBe(0);
+    const directory = path.join(xdgHome, "coden", "sessions", workspaceHash(workspace));
+    await expect(readdir(directory)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("shows a resume banner when resuming a session", async () => {
     const workspace = await makeWorkspace();
     const xdgHome = await mkdtemp(path.join(os.tmpdir(), "coden-xdg-"));

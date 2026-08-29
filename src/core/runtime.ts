@@ -66,7 +66,7 @@ export class AgentRuntime {
       role: "system" as const,
       content: "You are CodeN.",
     };
-    await this.sessions.append("session.reset", {});
+    if (this.sessions.isCreated) await this.sessions.append("session.reset", {});
     this.messages.splice(0, this.messages.length, system);
     this.context.clearSummary();
     this.systemPersisted = false;
@@ -87,6 +87,7 @@ export class AgentRuntime {
     const start = Date.now();
     let toolsExecuted = 0;
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
+    await this.sessions.create();
     await this.events.emit("turn.started", { input: userText }, turnId);
     try {
       if (!this.systemPersisted) {

@@ -134,6 +134,25 @@ describe("context and sessions", () => {
     expect((await stat(file)).mode & 0o777).toBe(0o600);
   });
 
+  it("defers trace persistence until its session is active", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-trace-"));
+    const file = path.join(root, "trace.jsonl");
+    const events = new EventBus();
+    let active = false;
+    const trace = new JSONLTraceWriter(file, events, () => active);
+
+    await events.emit("plugin.loaded", { name: "startup" });
+    await trace.flush();
+    await expect(readFile(file, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
+    active = true;
+    await events.emit("turn.started", { input: "hello" }, "turn-1");
+    await trace.flush();
+    const text = await readFile(file, "utf8");
+    expect(text).toContain('"type":"plugin.loaded"');
+    expect(text).toContain('"type":"turn.started"');
+  });
+
   it("repairs trailing tool calls interrupted by a crash", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "coden-session-"));
     const store = new SessionStore(root, root, "session-missing");

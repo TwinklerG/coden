@@ -100,8 +100,8 @@ export async function runAgentCommand(
     recoveredCompactionEnd = recovered.compactionRange?.end ?? 0;
     for (const warning of recovered.warnings) process.stderr.write(`coden: ${warning}\n`);
     if (!options.print) resumeBanner = renderResumeBanner(session.sessionId, recovered.messages);
-  } else await session.create(workspace);
-  const trace = new JSONLTraceWriter(session.tracePath, events);
+  }
+  const trace = new JSONLTraceWriter(session.tracePath, events, () => session.isCreated);
   const renderer = new TerminalRenderer(events, {
     verbose: options.verbose,
     printMode: options.print,

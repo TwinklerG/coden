@@ -62,7 +62,6 @@ async function harness(
   });
   const registry = new ToolRegistry(builtinTools());
   const session = new SessionStore(data, workspace, "test-session");
-  await session.create(workspace);
   const executor = new ToolExecutor(
     registry,
     new PermissionPolicy(auto, prompt),
@@ -424,6 +423,8 @@ describe("AgentRuntime integration", () => {
       code: "context.exhausted",
     });
     expect(h.observed.filter((type) => type === "context.compacted")).toHaveLength(1);
+    const recovered = await h.session.recover();
+    expect(recovered.messages).toContainEqual({ role: "user", content: "large task" });
   });
 
   it("fails deterministically at the model step limit", async () => {
@@ -434,6 +435,21 @@ describe("AgentRuntime integration", () => {
       code: "runtime.step_limit",
     });
     expect(h.observed.at(-1)).toBe("turn.failed");
+    const recovered = await h.session.recover();
+    expect(recovered.messages).toContainEqual({ role: "user", content: "loop forever" });
+  });
+
+  it("does not persist a new session until the first turn", async () => {
+    const h = await harness(new ScriptedProvider([scriptedText("answer")]));
+
+    await expect(readFile(h.session.sessionPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await h.runtime.reset();
+    await expect(readFile(h.session.sessionPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+
+    await h.runtime.run("first task");
+    const text = await readFile(h.session.sessionPath, "utf8");
+    expect(text).toContain('"type":"session.created"');
+    expect(text).toContain('"role":"user","content":"first task"');
   });
 
   it("starts a recoverable new logical conversation", async () => {
@@ -484,6 +500,8 @@ describe("AgentRuntime integration", () => {
       recovered.messages,
     );
     expect((await resumed.run("two")).answer).toBe("second");
+    const text = await readFile(h.session.sessionPath, "utf8");
+    expect(text.match(/"type":"session\.created"/g)).toHaveLength(1);
   });
 
   it("persists a session title only once from the first user message", async () => {
