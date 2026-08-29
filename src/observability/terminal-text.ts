@@ -11,6 +11,7 @@ export function sanitizeTerminalText(text: string): string {
 
 export function characterWidth(character: string): number {
   const point = character.codePointAt(0) ?? 0;
+  if (point >= 0x2500 && point <= 0x257f) return 1;
   return point <= 0xff ? 1 : 2;
 }
 
