@@ -76,6 +76,50 @@ describe("providers", () => {
     ]);
   });
 
+  it("maps OpenAI finish reasons onto done events", async () => {
+    const provider = new OpenAICompatibleProvider({ apiKey: "test" });
+    const client = (
+      provider as unknown as {
+        client: { chat: { completions: { create: () => Promise<AsyncIterable<unknown>> } } };
+      }
+    ).client;
+    client.chat.completions.create = async () =>
+      chunks([{ choices: [{ delta: {}, finish_reason: "length" }] }]);
+    const streamed: ModelEvent[] = [];
+    for await (const event of provider.stream({
+      model: "test",
+      messages: [],
+      tools: [],
+      maxOutputTokens: 128,
+    }))
+      streamed.push(event);
+    expect(streamed.at(-1)).toEqual({ type: "done", finishReason: "length" });
+  });
+
+  it("maps Anthropic stop reasons onto done events", async () => {
+    const provider = new AnthropicProvider({ apiKey: "test" });
+    const client = provider as unknown as {
+      client: { messages: { stream: () => AsyncIterable<unknown> } };
+    };
+    client.client.messages.stream = () =>
+      chunks([
+        {
+          type: "message_delta",
+          delta: { stop_reason: "max_tokens" },
+          usage: { output_tokens: 4 },
+        },
+      ]);
+    const streamed: ModelEvent[] = [];
+    for await (const event of provider.stream({
+      model: "test",
+      messages: [],
+      tools: [],
+      maxOutputTokens: 128,
+    }))
+      streamed.push(event);
+    expect(streamed.at(-1)).toEqual({ type: "done", finishReason: "max_tokens" });
+  });
+
   it("converts normalized OpenAI messages", () => {
     const converted = toOpenAIMessages(messages);
     expect(converted[2]).toMatchObject({

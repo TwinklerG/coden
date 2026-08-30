@@ -3,14 +3,20 @@ import os from "node:os";
 import path from "node:path";
 import { Writable } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { composeRuntimePackageRegistry, loadInstalledScope } from "../src/cli/agent-command.js";
+import {
+  composeRuntimePackageRegistry,
+  createWorkspaceTrustGate,
+  loadInstalledScope,
+  loadTrustedProjectScope,
+} from "../src/cli/agent-command.js";
 import { TrustStore } from "../src/config/trust.js";
 import { ContextManager } from "../src/context/manager.js";
 import { EventBus, type RuntimeEvent } from "../src/core/events.js";
 import { AgentRuntime } from "../src/core/runtime.js";
 import type { ModelEvent, ModelProvider, ModelRequest, ToolDefinition } from "../src/core/types.js";
 import { TerminalRenderer } from "../src/observability/terminal.js";
-import { PermissionPolicy } from "../src/permissions/policy.js";
+import { type PermissionMode, PermissionPolicy } from "../src/permissions/policy.js";
+import type { ApprovalReviewContext, ApprovalReviewer } from "../src/permissions/reviewer.js";
 import { InstalledPluginLoader } from "../src/plugins/installed-loader.js";
 import { serializePluginManifest } from "../src/plugins/manifest.js";
 import { resolvePluginPaths } from "../src/plugins/paths.js";
@@ -49,10 +55,11 @@ class StreamFailThenSucceed implements ModelProvider {
 
 async function harness(
   provider: ModelProvider,
-  auto = true,
+  mode: PermissionMode = "auto",
   prompt = async () => "deny" as const,
   maxSteps = 20,
   contextWindow = 10_000,
+  reviewer?: ApprovalReviewer,
 ) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-runtime-"));
   const data = await mkdtemp(path.join(os.tmpdir(), "coden-data-"));
@@ -65,7 +72,7 @@ async function harness(
   const session = new SessionStore(data, workspace, "test-session");
   const executor = new ToolExecutor(
     registry,
-    new PermissionPolicy(auto, prompt),
+    new PermissionPolicy(mode, prompt, reviewer),
     events,
     workspace,
   );
@@ -112,6 +119,64 @@ describe("AgentRuntime integration", () => {
     const store = new TrustStore(path.join(data, "trusted.json"));
     await store.trustWorkspace(workspace);
     expect(await store.isWorkspaceTrusted(workspace)).toBe(true);
+  });
+
+  it("uses one mode-independent workspace trust gate and remembers approval", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-trust-gate-"));
+    const data = await mkdtemp(path.join(os.tmpdir(), "coden-trust-data-"));
+    const store = new TrustStore(path.join(data, "trusted.json"));
+    let asks = 0;
+    const gate = createWorkspaceTrustGate(workspace, store, async () => {
+      asks++;
+      return "y";
+    });
+    await expect(gate()).resolves.toBe(true);
+    await expect(gate()).resolves.toBe(true);
+    expect(asks).toBe(1);
+    expect(await store.isWorkspaceTrusted(workspace)).toBe(true);
+
+    const deniedStore = new TrustStore(path.join(data, "denied.json"));
+    for (const answer of ["n", ""] as const) {
+      const denied = createWorkspaceTrustGate(workspace, deniedStore, async () => answer);
+      await expect(denied()).resolves.toBe(false);
+      expect(await deniedStore.isWorkspaceTrusted(workspace)).toBe(false);
+    }
+  });
+
+  it("does not ask trust for an empty project manifest and fails closed before package import", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-project-trust-"));
+    const paths = resolvePluginPaths(workspace, "project", path.join(workspace, "data"));
+    await mkdir(path.dirname(paths.manifestPath), { recursive: true });
+    await writeFile(paths.manifestPath, serializePluginManifest({ schemaVersion: 1, plugins: {} }));
+    let asks = 0;
+    const events = new EventBus();
+    await expect(
+      loadTrustedProjectScope(new InstalledPluginLoader(), paths, events, async () => {
+        asks++;
+        return false;
+      }),
+    ).resolves.toEqual({ loaded: [], failed: [] });
+    expect(asks).toBe(0);
+
+    await writeFile(
+      paths.manifestPath,
+      serializePluginManifest({
+        schemaVersion: 1,
+        plugins: { "@fixtures/private": { source: "npm", requested: "latest" } },
+      }),
+    );
+    const seen: RuntimeEvent[] = [];
+    events.on((event) => {
+      seen.push(event);
+    });
+    await expect(
+      loadTrustedProjectScope(new InstalledPluginLoader(), paths, events, async () => {
+        asks++;
+        return false;
+      }),
+    ).resolves.toMatchObject({ loaded: [], failed: [], unavailable: true });
+    expect(asks).toBe(1);
+    expect(seen.some((event) => event.type === "plugin.unavailable")).toBe(true);
   });
   it("passes global and trusted project npm tools to the provider", async () => {
     const provider = new ScriptedProvider([scriptedText("ready")]);
@@ -340,6 +405,40 @@ describe("AgentRuntime integration", () => {
     expect(JSON.stringify(started[0]?.data)).not.toContain("secretsecret");
   });
 
+  it("passes the current task into independent smart approval without changing task usage", async () => {
+    const provider = new ScriptedProvider([
+      scriptedTool("w", "write", { path: "greeting.txt", content: "hello" }),
+      scriptedText("done"),
+    ]);
+    const contexts: ApprovalReviewContext[] = [];
+    const reviewer: ApprovalReviewer = {
+      async review(context) {
+        contexts.push(context);
+        return {
+          decision: "allow",
+          reason: "bounded local write",
+          usage: { inputTokens: 50, outputTokens: 8 },
+        };
+      },
+    };
+    const h = await harness(provider, "smart", async () => "deny", 20, 10_000, reviewer);
+
+    const result = await h.runtime.run("write the greeting file");
+
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      task: "write the greeting file",
+      workspace: h.workspace,
+      pathScope: "inside",
+      call: { callId: "w", name: "write" },
+      tool: { name: "write" },
+    });
+    expect(contexts[0]).not.toHaveProperty("messages");
+    expect(await readFile(path.join(h.workspace, "greeting.txt"), "utf8")).toBe("hello");
+    expect(result.answer).toBe("done");
+    expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+  });
+
   it("feeds permission denial to the model", async () => {
     const provider = new ScriptedProvider([
       scriptedTool("e", "edit", { path: "a", oldText: "x", newText: "y" }),
@@ -348,7 +447,7 @@ describe("AgentRuntime integration", () => {
         return scriptedText("Permission denied; no change made.");
       },
     ]);
-    const h = await harness(provider, false);
+    const h = await harness(provider, "manual");
     const result = await h.runtime.run("edit");
     expect(result.answer).toContain("Permission denied");
   });
@@ -434,7 +533,7 @@ describe("AgentRuntime integration", () => {
       scriptedText("Goals and decisions preserved."),
       scriptedText("four"),
     ]);
-    const h = await harness(provider, true, async () => "deny", 20, 900);
+    const h = await harness(provider, "auto", async () => "deny", 20, 900);
     await h.runtime.run("first");
     await h.runtime.run("second");
     await h.runtime.run("third");
@@ -459,7 +558,7 @@ describe("AgentRuntime integration", () => {
 
   it("fails deterministically at the model step limit", async () => {
     const provider = new ScriptedProvider([scriptedTool("r", "read", { path: "file.txt" })]);
-    const h = await harness(provider, true, async () => "deny", 1);
+    const h = await harness(provider, "auto", async () => "deny", 1);
     await writeFile(path.join(h.workspace, "file.txt"), "body", "utf8");
     await expect(h.runtime.run("loop forever")).rejects.toMatchObject({
       code: "runtime.step_limit",
@@ -528,7 +627,12 @@ describe("AgentRuntime integration", () => {
       },
     ]);
     const events = new EventBus();
-    const executor = new ToolExecutor(h.registry, new PermissionPolicy(true), events, h.workspace);
+    const executor = new ToolExecutor(
+      h.registry,
+      new PermissionPolicy("auto"),
+      events,
+      h.workspace,
+    );
     const resumed = new AgentRuntime(
       provider,
       h.registry,

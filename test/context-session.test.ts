@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 import { ContextManager, TokenEstimator } from "../src/context/manager.js";
 import { truncateOutput } from "../src/context/truncate.js";
 import { EventBus } from "../src/core/events.js";
-import type { AgentMessage } from "../src/core/types.js";
+import type { AgentMessage, ToolDefinition } from "../src/core/types.js";
 import { JSONLTraceWriter } from "../src/observability/trace.js";
+import { LlmApprovalReviewer } from "../src/permissions/reviewer.js";
+import { ScriptedProvider, scriptedText } from "../src/providers/scripted.js";
 import { SessionStore } from "../src/sessions/store.js";
 import { builtinTools } from "../src/tools/builtin/index.js";
 
@@ -132,6 +134,52 @@ describe("context and sessions", () => {
       data: { name: "read" },
     });
     expect((await stat(file)).mode & 0o777).toBe(0o600);
+  });
+
+  it("traces smart approval metadata without duplicating sensitive tool input", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-review-trace-"));
+    const file = path.join(root, "trace.jsonl");
+    const events = new EventBus();
+    const trace = new JSONLTraceWriter(file, events);
+    const tool: ToolDefinition = {
+      name: "write",
+      description: "write",
+      risk: "modify",
+      inputSchema: { type: "object" },
+      async execute() {
+        return { content: "ok" };
+      },
+    };
+    const reviewer = new LlmApprovalReviewer(
+      new ScriptedProvider([
+        [
+          ...scriptedText('{"decision":"allow","reason":"bounded local change"}').slice(0, -1),
+          { type: "usage", usage: { inputTokens: 10, outputTokens: 4 } },
+          { type: "done" },
+        ],
+      ]),
+      "review-model",
+      "medium",
+      events,
+    );
+
+    await reviewer.review({
+      task: "write a secret",
+      tool,
+      call: {
+        callId: "w",
+        name: "write",
+        input: { path: "a.txt", content: "TOP_SECRET_PAYLOAD" },
+      },
+      risk: "modify",
+      workspace: root,
+      pathScope: "inside",
+    });
+    await trace.flush();
+    const text = await readFile(file, "utf8");
+    expect(text).toContain("permission.review_completed");
+    expect(text).toContain("inputTokens");
+    expect(text).not.toContain("TOP_SECRET_PAYLOAD");
   });
 
   it("defers trace persistence until its session is active", async () => {

@@ -203,14 +203,6 @@ export async function runAgentCommand(
       events,
       ensureWorkspaceTrusted,
     );
-    if (project.unavailable) {
-      await events.emit("plugin.unavailable", {
-        source: "npm",
-        scope: "project",
-        path: projectPaths.root,
-        reason: "workspace is not trusted; run coden plugin install or sync after trusting",
-      });
-    }
     const composed = await composeRuntimePackageRegistry(
       builtins,
       global.loaded,

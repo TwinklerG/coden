@@ -64,17 +64,17 @@ export class TerminalRenderer {
       const reason = sanitizeTerminalText(String(event.data?.reason ?? ""));
       const decision = event.data?.decision;
       if (decision === "allow")
-        this.status(
+        this.reviewStatus(
           this.options.verbose
             ? `AI approved ${name} [${String(event.data?.strictness ?? "medium")}] — ${reason}`
             : `AI approved ${name}`,
         );
-      else this.status(`AI requested human review — ${reason}`);
+      else this.reviewStatus(`AI requested human review — ${reason}`);
     }
     if (event.type === "permission.review_failed") {
       this.reviewingTool = undefined;
       this.stopSpinner();
-      this.status(
+      this.reviewStatus(
         `AI review unavailable — ${sanitizeTerminalText(String(event.data?.message ?? "failed"))}; human approval required`,
       );
     }
@@ -174,6 +174,10 @@ export class TerminalRenderer {
   }
   private status(message: string): void {
     this.stderr.write(this.tty ? `${pc.dim(message)}\n` : `[coden] ${message}\n`);
+  }
+  private reviewStatus(message: string): void {
+    const columns = (this.stderr as NodeJS.WritableStream & { columns?: number }).columns ?? 80;
+    this.status(truncateDisplay(sanitizeTerminalText(message), columns));
   }
   private toolStatus(message: string, failed = false): void {
     const columns = (this.stderr as NodeJS.WritableStream & { columns?: number }).columns ?? 80;

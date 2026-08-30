@@ -157,13 +157,135 @@ describe("plugins and terminal", () => {
     expect(result.loaded).toEqual([]);
   });
 
-  it("refuses untrusted project plugin directory", async () => {
+  it("refuses untrusted project plugins before import", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "coden-plugin-"));
-    await mkdir(path.join(root, "plugins"));
-    const loader = new PluginLoader(builtinTools(), new EventBus(), async () => false);
-    const result = await loader.load([{ path: path.join(root, "plugins"), project: true }]);
+    const directory = path.join(root, "plugins");
+    await mkdir(directory);
+    await writeFile(path.join(directory, "hello.ts"), "export default {};");
+    let prompts = 0;
+    let imports = 0;
+    const loader = new PluginLoader(
+      builtinTools(),
+      new EventBus(),
+      async () => {
+        prompts++;
+        return false;
+      },
+      async () => {
+        imports++;
+        return { default: undefined };
+      },
+    );
+    const result = await loader.load([{ path: directory, project: true }]);
     expect(result.registry.list()).toHaveLength(5);
+    expect(result.loaded).toEqual([]);
+    expect(prompts).toBe(1);
+    expect(imports).toBe(0);
   });
+
+  it("loads global plugins without consulting project trust", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-plugin-"));
+    const file = path.join(root, "global.ts");
+    await writeFile(file, "export default {};");
+    let prompts = 0;
+    const loader = new PluginLoader(
+      builtinTools(),
+      new EventBus(),
+      async () => {
+        prompts++;
+        return false;
+      },
+      async () => ({
+        default: {
+          name: "global_tool",
+          description: "global",
+          risk: "read",
+          inputSchema: { type: "object" },
+          async execute() {
+            return { content: "ok" };
+          },
+        },
+      }),
+    );
+    const result = await loader.load([{ path: file, project: false }]);
+    expect(result.loaded).toEqual(["global_tool"]);
+    expect(prompts).toBe(0);
+  });
+  it("renders smart review activity and bounded outcomes on stderr", async () => {
+    vi.useFakeTimers();
+    const out = new Sink();
+    const err = new Sink();
+    Object.assign(err, { columns: 80 });
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, { stdout: out, stderr: err, tty: true });
+
+    await events.emit("permission.review_started", {
+      name: "write",
+      callId: "w",
+      model: "review-model",
+      strictness: "medium",
+    });
+    expect(visibleTerminal(err.value)).toContain("reviewing write…");
+    await events.emit("permission.review_completed", {
+      name: "write",
+      callId: "w",
+      model: "review-model",
+      strictness: "medium",
+      decision: "allow",
+      reason: "bounded local change",
+      durationMs: 25,
+      usage: { inputTokens: 10, outputTokens: 4 },
+    });
+    expect(visibleTerminal(err.value)).toContain("AI approved write");
+    expect(visibleTerminal(err.value)).not.toContain("bounded local change");
+    expect(out.value).toBe("");
+
+    await events.emit("permission.review_completed", {
+      name: "bash",
+      decision: "human_review",
+      reason: "uncertain scope",
+      strictness: "hard",
+    });
+    await events.emit("permission.review_failed", {
+      name: "edit",
+      message: "provider unavailable",
+      fallback: "human_review",
+    });
+    expect(visibleTerminal(err.value)).toContain("AI requested human review — uncertain scope");
+    expect(visibleTerminal(err.value)).toContain(
+      "AI review unavailable — provider unavailable; human approval required",
+    );
+    renderer.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("shows verbose smart review reasons and keeps non-TTY stdout clean", async () => {
+    const out = new Sink();
+    const err = new Sink();
+    Object.assign(err, { columns: 80 });
+    const events = new EventBus();
+    const renderer = new TerminalRenderer(events, {
+      stdout: out,
+      stderr: err,
+      tty: false,
+      verbose: true,
+    });
+
+    await events.emit("permission.review_started", { name: "write" });
+    await events.emit("permission.review_completed", {
+      name: "write",
+      decision: "allow",
+      strictness: "medium",
+      reason: "bounded local change",
+    });
+
+    expect(err.value).toContain("[coden] reviewing write…");
+    expect(err.value).toContain("AI approved write [medium]");
+    expect(err.value).toContain("bounded local change");
+    expect(out.value).toBe("");
+    renderer.dispose();
+  });
+
   it("renders the first thinking frame immediately", async () => {
     vi.useFakeTimers();
     const out = new Sink();

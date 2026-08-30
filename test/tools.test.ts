@@ -3,7 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { EventBus } from "../src/core/events.js";
+import type { ToolDefinition } from "../src/core/types.js";
 import { classifyBashRisk, PermissionPolicy } from "../src/permissions/policy.js";
+import type { ApprovalReviewContext, ApprovalReviewer } from "../src/permissions/reviewer.js";
 import {
   readWorkspaceTextFile,
   resolveStructuredFilePath,
@@ -133,6 +135,83 @@ describe("builtin tools", () => {
     ).toBe("outside");
   });
 
+  it("passes validated task and path context into smart reviews", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-smart-tools-"));
+    const captured: ApprovalReviewContext[] = [];
+    const reviewer: ApprovalReviewer = {
+      async review(context) {
+        captured.push(context);
+        return {
+          decision: "allow",
+          reason: "bounded local operation",
+          usage: { inputTokens: 5, outputTokens: 3 },
+        };
+      },
+    };
+    const registry = new ToolRegistry(builtinTools());
+    const custom: ToolDefinition = {
+      name: "custom_modify",
+      description: "custom modification",
+      risk: "modify",
+      inputSchema: { type: "object", additionalProperties: false },
+      async execute() {
+        return { content: "custom ok" };
+      },
+    };
+    registry.register(custom, { kind: "local", path: "custom.ts" });
+    let prompts = 0;
+    const executor = new ToolExecutor(
+      registry,
+      new PermissionPolicy(
+        "smart",
+        async () => {
+          prompts++;
+          return "allow_once";
+        },
+        reviewer,
+      ),
+      new EventBus(),
+      workspace,
+    );
+
+    await executor.execute(
+      { callId: "write-1", name: "write", input: { path: "a.txt", content: "hello" } },
+      signal,
+      "turn-1",
+      "create a.txt",
+    );
+    expect(captured[0]).toMatchObject({
+      task: "create a.txt",
+      workspace,
+      pathScope: "inside",
+      turnId: "turn-1",
+      call: { callId: "write-1", name: "write" },
+      tool: { name: "write" },
+    });
+
+    await executor.execute(
+      { callId: "custom-1", name: "custom_modify", input: {} },
+      signal,
+      "turn-1",
+      "run custom operation",
+    );
+    expect(captured[1]).toMatchObject({
+      pathScope: "not_applicable",
+      task: "run custom operation",
+    });
+
+    const outside = await mkdtemp(path.join(os.tmpdir(), "coden-smart-outside-"));
+    await writeFile(path.join(outside, "outside.txt"), "outside");
+    await executor.execute(
+      { callId: "outside", name: "read", input: { path: path.join(outside, "outside.txt") } },
+      signal,
+      "turn-1",
+      "inspect outside",
+    );
+    expect(captured).toHaveLength(2);
+    expect(prompts).toBe(1);
+  });
+
   it("authorizes outside structured files per tool and rejects auto mode unless explicitly enabled", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-workspace-"));
     const outside = await mkdtemp(path.join(os.tmpdir(), "coden-outside-"));
@@ -143,7 +222,7 @@ describe("builtin tools", () => {
     const prompted: string[] = [];
     const interactive = new ToolExecutor(
       registry,
-      new PermissionPolicy(false, async (tool, _call, risk) => {
+      new PermissionPolicy("manual", async (tool, _call, risk) => {
         prompted.push(`${tool.name}:${risk}`);
         return "allow_session";
       }),
@@ -172,7 +251,7 @@ describe("builtin tools", () => {
       signal,
     );
     expect(prompted).toEqual(["read:modify", "write:modify", "edit:modify"]);
-    const denied = new ToolExecutor(registry, new PermissionPolicy(true), events, workspace);
+    const denied = new ToolExecutor(registry, new PermissionPolicy("auto"), events, workspace);
     const completed: string[] = [];
     events.on((event) => {
       if (event.type === "tool.completed" && event.data?.isError)
@@ -185,7 +264,7 @@ describe("builtin tools", () => {
     expect(completed).toContain("auto");
     const allowed = new ToolExecutor(
       registry,
-      new PermissionPolicy(true),
+      new PermissionPolicy("auto"),
       events,
       workspace,
       60_000,
@@ -223,7 +302,7 @@ describe("builtin tools", () => {
     let prompts = 0;
     const executor = new ToolExecutor(
       new ToolRegistry(builtinTools()),
-      new PermissionPolicy(false, async () => decisions[prompts++] ?? "deny"),
+      new PermissionPolicy("manual", async () => decisions[prompts++] ?? "deny"),
       new EventBus(),
       workspace,
     );
@@ -296,7 +375,7 @@ describe("builtin tools", () => {
   it("forwards turn cancellation to permission prompts", async () => {
     const controller = new AbortController();
     let received: AbortSignal | undefined;
-    const policy = new PermissionPolicy(false, async (_tool, _call, _risk, promptSignal) => {
+    const policy = new PermissionPolicy("manual", async (_tool, _call, _risk, promptSignal) => {
       received = promptSignal;
       return "deny";
     });
@@ -324,7 +403,7 @@ describe("builtin tools", () => {
     expect(classifyBashRisk("git log --oneline")).toBe("modify");
     expect(classifyBashRisk("ls -la")).toBe("modify");
     let prompted = 0;
-    const policy = new PermissionPolicy(true, async () => {
+    const policy = new PermissionPolicy("auto", async () => {
       prompted++;
       return "deny";
     });

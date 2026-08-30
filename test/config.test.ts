@@ -34,12 +34,20 @@ describe("configuration", () => {
     await mkdir(path.join(configHome, "coden"), { recursive: true });
     await writeFile(
       path.join(configHome, "coden", "config.json"),
-      JSON.stringify({ model: "user-model", maxSteps: 4, plugins: ["user.ts"] }),
+      JSON.stringify({
+        model: "user-model",
+        approvalModel: "user-reviewer",
+        approvalStrictness: "soft",
+        maxSteps: 4,
+        plugins: ["user.ts"],
+      }),
     );
     await writeFile(
       path.join(workspace, ".coden", "config.json"),
       JSON.stringify({
         model: "project-model",
+        approvalModel: "project-reviewer",
+        approvalStrictness: "hard",
         plugins: ["project.ts"],
         dataDir: path.join(workspace, "leak"),
       }),
@@ -50,6 +58,8 @@ describe("configuration", () => {
     const config = await loadConfig(workspace, { model: "cli-model", plugins: ["cli.ts"] });
     expect(config.model).toBe("cli-model");
     expect(config.maxSteps).toBe(4);
+    expect(config.approvalModel).toBe("project-reviewer");
+    expect(config.approvalStrictness).toBe("hard");
     expect(config.plugins).toEqual(["user.ts", "project.ts", "cli.ts"]);
     expect(config.dataDir).toBe(path.join(root, "data", "coden"));
   });
@@ -89,6 +99,28 @@ describe("configuration", () => {
     const { workspace } = await makeTmpConfigs({ CODEN_TEST_BOOL: true }, {});
     await expect(loadConfig(workspace)).rejects.toThrow("must be a string");
   });
+
+  it("defaults smart approval strictness and leaves the reviewer model unset", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));
+    vi.stubEnv("XDG_CONFIG_HOME", path.join(workspace, "missing"));
+    const config = await loadConfig(workspace);
+    expect(config.approvalModel).toBeUndefined();
+    expect(config.approvalStrictness).toBe("medium");
+  });
+
+  it.each([{ approvalModel: "" }, { approvalModel: 42 }, { approvalStrictness: "extreme" }])(
+    "rejects invalid approval config %#",
+    async (invalid) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));
+      const workspace = path.join(root, "workspace");
+      const configHome = path.join(root, "config");
+      await mkdir(workspace, { recursive: true });
+      await mkdir(path.join(configHome, "coden"), { recursive: true });
+      await writeFile(path.join(configHome, "coden", "config.json"), JSON.stringify(invalid));
+      vi.stubEnv("XDG_CONFIG_HOME", configHome);
+      await expect(loadConfig(workspace)).rejects.toThrow(/approval/);
+    },
+  );
 
   it("rejects impossible context budgets", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));

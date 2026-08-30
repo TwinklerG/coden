@@ -31,14 +31,11 @@ export function classifyBashRisk(command: string): ToolRisk {
 }
 export class PermissionPolicy {
   readonly #sessionAllowed = new Set<string>();
-  private readonly mode: PermissionMode;
   constructor(
-    mode: PermissionMode | boolean,
+    private readonly mode: PermissionMode,
     private readonly prompt?: PermissionPrompt,
     private readonly reviewer?: ApprovalReviewer,
-  ) {
-    this.mode = typeof mode === "boolean" ? (mode ? "auto" : "manual") : mode;
-  }
+  ) {}
   get isAuto(): boolean {
     return this.mode === "auto";
   }

@@ -67,6 +67,16 @@ describe("CLI exit codes", () => {
     expect(result.stderr).toContain("CODEN_OPENAI_API_KEY");
   });
 
+  it("rejects --smart-approve together with --auto", () => {
+    const result = spawnSync("bun", [cli, "--smart-approve", "--auto", "task"], {
+      encoding: "utf8",
+      env: baseEnv,
+      timeout: 30_000,
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("mutually exclusive");
+  });
+
   it("rejects --allow-outside-workspace without --auto", () => {
     const result = spawnSync("bun", [cli, "--allow-outside-workspace", "task"], {
       encoding: "utf8",
