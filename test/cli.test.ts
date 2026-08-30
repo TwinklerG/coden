@@ -21,6 +21,7 @@ const baseEnv = {
 describe("REPL input helpers", () => {
   it("classifies commands without trimming messages", () => {
     expect(classifyReplInput("  /help  ")).toEqual({ type: "command", command: "/help" });
+    expect(classifyReplInput("/skills")).toEqual({ type: "command", command: "/skills" });
     expect(classifyReplInput("/help\nmore")).toEqual({ type: "message", text: "/help\nmore" });
     expect(classifyReplInput("  code\n    indented\n")).toEqual({
       type: "message",
@@ -64,6 +65,16 @@ describe("CLI exit codes", () => {
     });
     expect(result.status).toBe(2);
     expect(result.stderr).toContain("CODEN_OPENAI_API_KEY");
+  });
+
+  it("rejects --allow-outside-workspace without --auto", () => {
+    const result = spawnSync("bun", [cli, "--allow-outside-workspace", "task"], {
+      encoding: "utf8",
+      env: baseEnv,
+      timeout: 30_000,
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("requires --auto");
   });
 
   it("preserves positional prompt parsing", () => {

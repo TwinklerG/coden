@@ -3,8 +3,10 @@ import type { EventBus } from "../core/events.js";
 import type { ToolCall, ToolResult } from "../core/types.js";
 import { formatToolInput } from "../observability/tool-input.js";
 import type { PermissionPolicy } from "../permissions/policy.js";
-import { resolveWorkspacePath } from "../permissions/workspace.js";
+import { type ResolvedFilePath, resolveStructuredFilePath } from "../permissions/workspace.js";
 import type { ToolRegistry } from "./registry.js";
+
+const STRUCTURED_FILE_TOOLS = new Set(["read", "write", "edit"]);
 
 export class ToolExecutor {
   constructor(
@@ -13,6 +15,7 @@ export class ToolExecutor {
     private readonly events: EventBus,
     private readonly workspace: string,
     private readonly timeoutMs = 60_000,
+    private readonly allowOutsideWorkspace = false,
   ) {}
   setRegistry(registry: ToolRegistry): void {
     this.registry = registry;
@@ -24,17 +27,43 @@ export class ToolExecutor {
     const validation = this.registry.validate(call.name, call.input);
     if (!validation.valid)
       return { content: `tool.invalid_input: ${validation.errors}`, isError: true };
-    if (["read", "write", "edit"].includes(call.name)) {
+    let filePath: ResolvedFilePath | undefined;
+    if (STRUCTURED_FILE_TOOLS.has(call.name)) {
       try {
-        await resolveWorkspacePath(this.workspace, (call.input as { path: string }).path);
+        filePath = await resolveStructuredFilePath(
+          this.workspace,
+          (call.input as { path: string }).path,
+        );
       } catch (error) {
         return {
           content: `permission.workspace_denied: ${error instanceof Error ? error.message : String(error)}`,
           isError: true,
         };
       }
+      if (filePath.scope === "outside" && !this.allowOutsideWorkspace && this.permissions.isAuto) {
+        await this.events.emit(
+          "permission.requested",
+          { name: call.name, callId: call.callId, risk: "modify", allowed: false },
+          turnId,
+        );
+        await this.events.emit(
+          "tool.completed",
+          { name: call.name, callId: call.callId, isError: true, durationMs: 0 },
+          turnId,
+        );
+        return {
+          content:
+            "permission.outside_workspace_denied: rerun with --auto --allow-outside-workspace",
+          isError: true,
+        };
+      }
     }
-    const permission = await this.permissions.authorize(tool, call, signal);
+    const permission = await this.permissions.authorize(
+      tool,
+      call,
+      signal,
+      filePath?.scope === "outside" ? "modify" : undefined,
+    );
     await this.events.emit(
       "permission.requested",
       { name: call.name, callId: call.callId, risk: permission.risk, allowed: permission.allowed },
@@ -72,7 +101,11 @@ export class ToolExecutor {
             });
           });
       result = await Promise.race([
-        tool.execute(call.input, { workspace: this.workspace, signal: controller.signal }),
+        tool.execute(call.input, {
+          workspace: this.workspace,
+          signal: controller.signal,
+          ...(filePath ? { structuredFilePath: filePath } : {}),
+        }),
         aborted,
       ]);
       result = { ...result, content: truncateOutput(result.content, 50_000) };

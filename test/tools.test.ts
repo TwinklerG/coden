@@ -2,10 +2,16 @@ import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { EventBus } from "../src/core/events.js";
 import { classifyBashRisk, PermissionPolicy } from "../src/permissions/policy.js";
-import { readWorkspaceTextFile, resolveWorkspacePath } from "../src/permissions/workspace.js";
+import {
+  readWorkspaceTextFile,
+  resolveStructuredFilePath,
+  resolveWorkspacePath,
+} from "../src/permissions/workspace.js";
 import { runProcess } from "../src/process/runner.js";
 import { builtinTools } from "../src/tools/builtin/index.js";
+import { ToolExecutor } from "../src/tools/executor.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 
 const signal = new AbortController().signal;
@@ -15,8 +21,14 @@ function requiredTool(name: string) {
   return tool;
 }
 describe("builtin tools", () => {
-  it("exposes exactly the minimal four tools", () => {
-    expect(builtinTools().map((tool) => tool.name)).toEqual(["read", "write", "edit", "bash"]);
+  it("exposes the structured files, shell, and skill activation built-ins", () => {
+    expect(builtinTools().map((tool) => tool.name)).toEqual([
+      "read",
+      "write",
+      "edit",
+      "bash",
+      "activate_skill",
+    ]);
   });
   it("validates JSON schema", () => {
     const registry = new ToolRegistry(builtinTools());
@@ -93,6 +105,144 @@ describe("builtin tools", () => {
       "inside-link",
     );
   });
+  it("classifies real paths for existing, new, and symlinked structured-file targets", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-workspace-"));
+    const outside = await mkdtemp(path.join(os.tmpdir(), "coden-outside-"));
+    await writeFile(path.join(workspace, "inside.txt"), "inside");
+    await symlink(outside, path.join(workspace, "escape"));
+    await symlink(path.join("missing", "target"), path.join(workspace, "dangling-inside"));
+    await symlink(path.join(outside, "missing"), path.join(workspace, "dangling-outside"));
+    expect((await resolveStructuredFilePath(workspace, "inside.txt")).scope).toBe("inside");
+    expect((await resolveStructuredFilePath(workspace, path.join("new", "file.txt"))).scope).toBe(
+      "inside",
+    );
+    expect(
+      (await resolveStructuredFilePath(workspace, path.join(outside, "existing.txt"))).scope,
+    ).toBe("outside");
+    expect(
+      (await resolveStructuredFilePath(workspace, path.join(outside, "new", "file.txt"))).scope,
+    ).toBe("outside");
+    expect(
+      (await resolveStructuredFilePath(workspace, path.join("escape", "file.txt"))).scope,
+    ).toBe("outside");
+    expect(
+      (await resolveStructuredFilePath(workspace, path.join("dangling-inside", "child"))).scope,
+    ).toBe("inside");
+    expect(
+      (await resolveStructuredFilePath(workspace, path.join("dangling-outside", "child"))).scope,
+    ).toBe("outside");
+  });
+
+  it("authorizes outside structured files per tool and rejects auto mode unless explicitly enabled", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-workspace-"));
+    const outside = await mkdtemp(path.join(os.tmpdir(), "coden-outside-"));
+    const external = path.join(outside, "external.txt");
+    await writeFile(external, "old");
+    const registry = new ToolRegistry(builtinTools());
+    const events = new EventBus();
+    const prompted: string[] = [];
+    const interactive = new ToolExecutor(
+      registry,
+      new PermissionPolicy(false, async (tool, _call, risk) => {
+        prompted.push(`${tool.name}:${risk}`);
+        return "allow_session";
+      }),
+      events,
+      workspace,
+    );
+    const first = await interactive.execute(
+      { callId: "read", name: "read", input: { path: external } },
+      signal,
+    );
+    expect(first.isError).toBeUndefined();
+    await interactive.execute(
+      { callId: "read-2", name: "read", input: { path: external } },
+      signal,
+    );
+    await interactive.execute(
+      { callId: "write-session", name: "write", input: { path: external, content: "changed" } },
+      signal,
+    );
+    await interactive.execute(
+      {
+        callId: "edit-session",
+        name: "edit",
+        input: { path: external, oldText: "changed", newText: "old" },
+      },
+      signal,
+    );
+    expect(prompted).toEqual(["read:modify", "write:modify", "edit:modify"]);
+    const denied = new ToolExecutor(registry, new PermissionPolicy(true), events, workspace);
+    const completed: string[] = [];
+    events.on((event) => {
+      if (event.type === "tool.completed" && event.data?.isError)
+        completed.push(String(event.data.callId));
+    });
+    expect(
+      (await denied.execute({ callId: "auto", name: "read", input: { path: external } }, signal))
+        .content,
+    ).toContain("permission.outside_workspace_denied");
+    expect(completed).toContain("auto");
+    const allowed = new ToolExecutor(
+      registry,
+      new PermissionPolicy(true),
+      events,
+      workspace,
+      60_000,
+      true,
+    );
+    await allowed.execute(
+      { callId: "write", name: "write", input: { path: external, content: "new" } },
+      signal,
+    );
+    await allowed.execute(
+      {
+        callId: "edit",
+        name: "edit",
+        input: { path: external, oldText: "new", newText: "edited" },
+      },
+      signal,
+    );
+    expect(await readFile(external, "utf8")).toBe("edited");
+    expect(
+      (
+        await denied.execute(
+          { callId: "bash", name: "bash", input: { command: "printf outside-policy-unchanged" } },
+          signal,
+        )
+      ).content,
+    ).toContain("outside-policy-unchanged");
+  });
+
+  it("supports allow-once and denial decisions for outside files", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-workspace-"));
+    const outside = await mkdtemp(path.join(os.tmpdir(), "coden-outside-"));
+    const external = path.join(outside, "external.txt");
+    await writeFile(external, "content");
+    const decisions = ["allow_once", "deny"] as const;
+    let prompts = 0;
+    const executor = new ToolExecutor(
+      new ToolRegistry(builtinTools()),
+      new PermissionPolicy(false, async () => decisions[prompts++] ?? "deny"),
+      new EventBus(),
+      workspace,
+    );
+
+    expect(
+      (await executor.execute({ callId: "once", name: "read", input: { path: external } }, signal))
+        .isError,
+    ).toBeUndefined();
+    expect(
+      (
+        await executor.execute(
+          { callId: "denied", name: "read", input: { path: external } },
+          signal,
+        )
+      ).isError,
+    ).toBe(true);
+    expect(prompts).toBe(2);
+  });
+
   it("streams and bounds a very large single-line read", async () => {
     const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-read-"));
     await writeFile(path.join(workspace, "large.txt"), "x".repeat(2_000_000), "utf8");

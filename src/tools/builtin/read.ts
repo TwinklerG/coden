@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import type { ToolDefinition } from "../../core/types.js";
-import { resolveWorkspacePath } from "../../permissions/workspace.js";
+import { resolveWorkspacePath, revalidateStructuredFilePath } from "../../permissions/workspace.js";
 
 class BoundedText {
   private text = "";
@@ -39,7 +39,9 @@ export const readTool: ToolDefinition = {
       offset = 1,
       limit = 500,
     } = input as { path: string; offset?: number; limit?: number };
-    const target = await resolveWorkspacePath(context.workspace, path);
+    const target = context.structuredFilePath
+      ? await revalidateStructuredFilePath(context.workspace, context.structuredFilePath, path)
+      : await resolveWorkspacePath(context.workspace, path);
     const output = new BoundedText(50_000);
     let lineNumber = 1;
     let selectedLines = 0;

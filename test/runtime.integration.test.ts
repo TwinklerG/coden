@@ -16,6 +16,7 @@ import { serializePluginManifest } from "../src/plugins/manifest.js";
 import { resolvePluginPaths } from "../src/plugins/paths.js";
 import { ScriptedProvider, scriptedText, scriptedTool } from "../src/providers/scripted.js";
 import { SessionStore } from "../src/sessions/store.js";
+import { SkillDiscovery } from "../src/skills/discovery.js";
 import { builtinTools } from "../src/tools/builtin/index.js";
 import { ToolExecutor } from "../src/tools/executor.js";
 import { PluginLoader } from "../src/tools/plugin-loader.js";
@@ -253,6 +254,36 @@ describe("AgentRuntime integration", () => {
       (await secondTool?.execute({}, { workspace: root, signal: new AbortController().signal }))
         ?.content,
     ).toBe("v2");
+  });
+
+  it("runs a discover -> activate skill -> follow instructions tool loop", async () => {
+    const provider = new ScriptedProvider([
+      scriptedTool("skill", "activate_skill", { name: "testing" }),
+      (request) => {
+        expect(request.messages.at(-1)).toMatchObject({
+          role: "tool",
+          name: "activate_skill",
+          isError: false,
+        });
+        expect(request.messages.at(-1)?.content).toContain("Run the focused tests.");
+        return scriptedText("Skill activated and followed.");
+      },
+    ]);
+    const h = await harness(provider);
+    const home = await mkdtemp(path.join(os.tmpdir(), "coden-skills-home-"));
+    const directory = path.join(h.workspace, ".agents", "skills", "testing");
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, "SKILL.md"),
+      "---\nname: testing\ndescription: Use for tests.\n---\n\nRun the focused tests.\n",
+    );
+    const skills = (await new SkillDiscovery({ workspace: h.workspace, home }).discover()).registry;
+    h.registry.replaceWith(new ToolRegistry(builtinTools(skills)));
+
+    const result = await h.runtime.run("follow the testing skill");
+
+    expect(result.answer).toBe("Skill activated and followed.");
+    expect(result.toolsExecuted).toBe(1);
   });
 
   it("runs read -> edit -> bash -> final answer", async () => {

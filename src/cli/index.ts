@@ -48,6 +48,11 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       "resume a previous session, or list sessions when no id is given",
     )
     .option("--auto", "skip permission and project-plugin confirmations", false)
+    .option(
+      "--allow-outside-workspace",
+      "with --auto, allow read/write/edit paths outside the workspace",
+      false,
+    )
     .option("--verbose", "show detailed runtime status", false)
     .option("--max-steps <number>", "maximum model steps", positiveInteger)
     .option("--plugin <path>", "additional local TypeScript plugin or directory", collect, [])

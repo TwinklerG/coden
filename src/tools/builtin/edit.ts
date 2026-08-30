@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import type { ToolDefinition } from "../../core/types.js";
-import { resolveWorkspacePath } from "../../permissions/workspace.js";
+import { resolveWorkspacePath, revalidateStructuredFilePath } from "../../permissions/workspace.js";
 
 export const editTool: ToolDefinition = {
   name: "edit",
@@ -23,7 +23,9 @@ export const editTool: ToolDefinition = {
       oldText,
       newText,
     } = input as { path: string; oldText: string; newText: string };
-    const target = await resolveWorkspacePath(context.workspace, requested);
+    const target = context.structuredFilePath
+      ? await revalidateStructuredFilePath(context.workspace, context.structuredFilePath, requested)
+      : await resolveWorkspacePath(context.workspace, requested);
     const handle = await open(target, constants.O_RDWR | constants.O_NOFOLLOW);
     try {
       const content = await handle.readFile("utf8");

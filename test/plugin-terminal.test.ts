@@ -143,7 +143,7 @@ describe("plugins and terminal", () => {
     );
     const loader = new PluginLoader(builtinTools(), new EventBus(), false);
     const result = await loader.load([{ path: directory, project: true }]);
-    expect(result.registry.list()).toHaveLength(4);
+    expect(result.registry.list()).toHaveLength(5);
     expect(result.loaded).toEqual([]);
   });
 
@@ -152,7 +152,7 @@ describe("plugins and terminal", () => {
     await mkdir(path.join(root, "plugins"));
     const loader = new PluginLoader(builtinTools(), new EventBus(), false, async () => false);
     const result = await loader.load([{ path: path.join(root, "plugins"), project: true }]);
-    expect(result.registry.list()).toHaveLength(4);
+    expect(result.registry.list()).toHaveLength(5);
   });
   it("renders the first thinking frame immediately", async () => {
     vi.useFakeTimers();

@@ -11,6 +11,8 @@ export interface ToolResult {
 export interface ToolContext {
   workspace: string;
   signal: AbortSignal;
+  /** Internal execution-time classification for structured file tools. */
+  structuredFilePath?: { requested: string; path: string; scope: "inside" | "outside" };
 }
 
 export interface ToolDefinition {

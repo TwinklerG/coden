@@ -32,13 +32,17 @@ export class PermissionPolicy {
     private readonly auto: boolean,
     private readonly prompt?: PermissionPrompt,
   ) {}
+  get isAuto(): boolean {
+    return this.auto;
+  }
 
   async authorize(
     tool: ToolDefinition,
     call: ToolCall,
     signal?: AbortSignal,
+    riskOverride?: ToolRisk,
   ): Promise<{ allowed: boolean; risk: ToolRisk }> {
-    let risk = tool.risk;
+    let risk = riskOverride ?? tool.risk;
     if (
       tool.name === "bash" &&
       typeof (call.input as { command?: unknown })?.command === "string"

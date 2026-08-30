@@ -2,11 +2,11 @@ import { constants } from "node:fs";
 import { mkdir, open } from "node:fs/promises";
 import path from "node:path";
 import type { ToolDefinition } from "../../core/types.js";
-import { resolveWorkspacePath } from "../../permissions/workspace.js";
+import { resolveWorkspacePath, revalidateStructuredFilePath } from "../../permissions/workspace.js";
 
 export const writeTool: ToolDefinition = {
   name: "write",
-  description: "Create or overwrite a UTF-8 file inside the workspace.",
+  description: "Create or overwrite a UTF-8 file.",
   risk: "modify",
   inputSchema: {
     type: "object",
@@ -16,9 +16,13 @@ export const writeTool: ToolDefinition = {
   },
   async execute(input, context) {
     const { path: requested, content } = input as { path: string; content: string };
-    let target = await resolveWorkspacePath(context.workspace, requested);
+    let target = context.structuredFilePath
+      ? await revalidateStructuredFilePath(context.workspace, context.structuredFilePath, requested)
+      : await resolveWorkspacePath(context.workspace, requested);
     await mkdir(path.dirname(target), { recursive: true });
-    target = await resolveWorkspacePath(context.workspace, requested);
+    target = context.structuredFilePath
+      ? await revalidateStructuredFilePath(context.workspace, context.structuredFilePath, requested)
+      : await resolveWorkspacePath(context.workspace, requested);
     const handle = await open(
       target,
       constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,

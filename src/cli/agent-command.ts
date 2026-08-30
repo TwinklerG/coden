@@ -34,6 +34,9 @@ import { PluginTransaction } from "../plugins/transaction.js";
 import { AnthropicProvider } from "../providers/anthropic.js";
 import { OpenAICompatibleProvider } from "../providers/openai.js";
 import { SessionStore, workspaceHash } from "../sessions/store.js";
+import { SkillDiscovery } from "../skills/discovery.js";
+import { formatSkillCatalog, formatSkillsList } from "../skills/prompt.js";
+import type { SkillRegistry } from "../skills/registry.js";
 import { builtinTools } from "../tools/builtin/index.js";
 import { ToolExecutor } from "../tools/executor.js";
 import { PluginLoader } from "../tools/plugin-loader.js";
@@ -48,6 +51,7 @@ export interface AgentCommandOptions {
   model?: string;
   resume?: string | boolean;
   auto: boolean;
+  allowOutsideWorkspace: boolean;
   verbose: boolean;
   maxSteps?: number;
   plugin: string[];
@@ -75,6 +79,8 @@ export async function runAgentCommand(
   options: AgentCommandOptions,
 ): Promise<void> {
   const workspace = process.cwd();
+  if (options.allowOutsideWorkspace && !options.auto)
+    throw new ConfigError("--allow-outside-workspace requires --auto");
   const config = await loadConfigOrFail(workspace, {
     ...(options.provider ? { provider: options.provider } : {}),
     ...(options.model ? { model: options.model } : {}),
@@ -132,11 +138,26 @@ export async function runAgentCommand(
       cause,
     });
   }
-  const builtins = builtinTools();
+  const skillDiscovery = await new SkillDiscovery({ workspace }).discover();
+  if (options.verbose) {
+    for (const failure of skillDiscovery.failures)
+      process.stderr.write(
+        `coden: ignored ${failure.scope} skill ${failure.path}: ${failure.reason}\n`,
+      );
+  }
+  const skills = skillDiscovery.registry;
+  const builtins = builtinTools(skills);
   const permissionPrompt = options.auto ? undefined : createPermissionPrompt(ask);
   const permissions = new PermissionPolicy(options.auto, permissionPrompt);
   const registry = new ToolRegistry(builtins);
-  const executor = new ToolExecutor(registry, permissions, events, workspace);
+  const executor = new ToolExecutor(
+    registry,
+    permissions,
+    events,
+    workspace,
+    60_000,
+    options.allowOutsideWorkspace,
+  );
   const trustStore = new TrustStore(path.join(userConfigDir(), "trusted-workspaces.json"));
   const loader = new PluginLoader(builtins, events, options.auto, async (directory) => {
     if (await trustStore.isTrusted(directory)) return true;
@@ -204,6 +225,12 @@ export async function runAgentCommand(
   };
   await reload();
   const projectInstructions = await readProjectInstructions(workspace);
+  const systemPrompt = buildSystemPrompt(projectInstructions, formatSkillCatalog(skills));
+  if (initialMessages?.length) {
+    if (initialMessages[0]?.role === "system")
+      initialMessages[0] = { role: "system", content: systemPrompt };
+    else initialMessages.unshift({ role: "system", content: systemPrompt });
+  }
   const contextManager = new ContextManager({
     contextWindow: config.contextWindow,
     reservedOutputTokens: config.reservedOutputTokens,
@@ -220,9 +247,7 @@ export async function runAgentCommand(
     {
       model: config.model,
       maxSteps: config.maxSteps,
-      systemPrompt:
-        "You are CodeN, a concise coding agent. Inspect before editing, use tools carefully, and verify changes." +
-        (projectInstructions ? `\n\nProject instructions:\n${projectInstructions}` : ""),
+      systemPrompt,
     },
     initialMessages,
   );
@@ -237,6 +262,7 @@ export async function runAgentCommand(
       session,
       reload,
       registry,
+      skills,
       rl,
       editor,
       workspaceHash(workspace),
@@ -357,6 +383,14 @@ async function readProjectInstructions(workspace: string): Promise<string> {
   }
 }
 
+function buildSystemPrompt(projectInstructions: string, skillCatalog: string): string {
+  return (
+    "You are CodeN, a concise coding agent. Inspect before editing, use tools carefully, and verify changes." +
+    (projectInstructions ? `\n\nProject instructions:\n${projectInstructions}` : "") +
+    (skillCatalog ? `\n\n${skillCatalog}` : "")
+  );
+}
+
 function createProvider(name: ProviderName): ModelProvider {
   if (name === "anthropic") {
     const apiKey = process.env.CODEN_ANTHROPIC_API_KEY;
@@ -376,6 +410,7 @@ async function repl(
   session: SessionStore,
   reload: () => Promise<{ loaded: string[]; failed: string[] }>,
   registry: ToolRegistry,
+  skills: SkillRegistry,
   rl: Interface | undefined,
   editor: MultilineEditor | undefined,
   workspaceId: string,
@@ -402,7 +437,11 @@ async function repl(
     if (classified.type === "empty") continue;
     if (classified.type === "command" && classified.command === "/quit") break;
     if (classified.type === "command" && classified.command === "/help") {
-      stdout.write("/help /session /sessions /compact /reload /new /quit\n");
+      stdout.write("/help /skills /session /sessions /compact /reload /new /quit\n");
+      continue;
+    }
+    if (classified.type === "command" && classified.command === "/skills") {
+      stdout.write(formatSkillsList(skills));
       continue;
     }
     if (classified.type === "command" && classified.command === "/sessions") {
@@ -491,6 +530,7 @@ async function yesNo(ask: Question, message: string): Promise<boolean> {
 
 const REPL_COMMANDS = new Set([
   "/help",
+  "/skills",
   "/session",
   "/sessions",
   "/compact",

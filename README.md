@@ -44,9 +44,9 @@ coden --resume                   # 列出当前工作区的会话
 
 无 prompt 时进入 REPL。交互式 REPL 支持完整多行编辑：Enter 提交；终端可区分该按键时，Shift+Enter 插入换行；所有终端均可在行尾输入单个 `\` 后按 Enter 继续下一行（`\\` 表示保留一个字面反斜杠）。支持多行粘贴、跨行方向键编辑和当前进程内输入历史。传统终端若无法区分 Shift+Enter，请使用行尾 `\`。
 
-支持 `/help`、`/session`、`/sessions`、`/compact`、`/reload`、`/new` 和 `/quit`。启动横幅会显示当前版本与 16 位 workspace hash。
+支持 `/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new` 和 `/quit`。启动横幅会显示当前版本与 16 位 workspace hash。
 
-核心选项：`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--auto`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。
+核心选项：`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--auto`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。
 
 ## 配置
 
@@ -73,11 +73,43 @@ coden --resume                   # 列出当前工作区的会话
 
 会话和 trace 位于 `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`（默认 `~/.local/share/coden`）。
 
+## Agent Skills
+
+CodeN 兼容 [Agent Skills](https://agentskills.io/specification) 的渐进式披露格式。启动时只扫描以下两个标准目录的直接子目录；每个候选项必须为 `<skill-name>/SKILL.md`：
+
+```text
+~/.agents/skills/<skill-name>/SKILL.md
+<workspace>/.agents/skills/<skill-name>/SKILL.md
+```
+
+项目级 Skill 覆盖同名用户级 Skill。`SKILL.md` 使用 YAML frontmatter，最小内容如下：
+
+```markdown
+---
+name: pdf-processing
+description: Use when reading or modifying PDF documents.
+---
+
+# PDF workflow
+
+Read the relevant files before changing them.
+```
+
+启动上下文只包含有效 Skill 的名称和描述，不会注入完整正文。任务匹配时，模型调用只接受名称的 `activate_skill` 加载完整说明和 Skill 绝对根目录；引用的 `references/`、`scripts/` 等资源仍按需使用普通工具读取。`/skills` 不调用模型，按名称列出当前生效的名称、描述和 `project`/`user` 来源。Skill 仅在启动时发现，文件变更需重启后生效。无效、超限或通过符号链接逃逸扫描根目录的条目会被跳过；`--verbose` 显示原因。
+
 ## 工具与权限
 
-默认且仅默认暴露四个工具：`read`、`write`、`edit` 和 `bash`。文件工具拒绝工作区外路径及符号链接逃逸。默认模式自动执行读取，修改需确认，递归删除、`sudo`、破坏性 Git 等高风险命令每次确认。`--auto` 跳过确认，但仍进行 Schema 校验和文件工作区检查。
+默认提供 `read`、`write`、`edit`、`bash` 和只读的 `activate_skill`；没有有效 Skill 时，激活工具会返回 `skill.not_found`。结构化文件工具按最终真实路径（新文件按最近存在的真实父目录）分类，避免符号链接绕过：
 
-**这不是通用安全沙箱。** `bash` 和 TypeScript 插件拥有当前用户进程权限；风险分类是防误操作的启发式护栏。Bash 超时会终止其进程组；主进程内的插件只能通过 `AbortSignal` 协作取消，忽略信号的可信插件可能在超时结果返回后继续运行。
+| 模式 | 工作区内 `read`/`write`/`edit` | 工作区外 `read`/`write`/`edit` |
+| --- | --- | --- |
+| 默认交互模式 | 保持原有风险确认 | 作为修改操作请求逐次或会话授权 |
+| `--auto` | 自动允许 | 返回 `permission.outside_workspace_denied` |
+| `--auto --allow-outside-workspace` | 自动允许 | 自动允许 |
+
+`--allow-outside-workspace` 只能与 `--auto` 一起使用，并且**只**控制 `read`、`write`、`edit`。它会允许修改当前工作区之外的任意文本文件，应仅在明确需要时使用。`activate_skill` 仅自动读取已发现且重新验证过的入口 `SKILL.md`；使用普通 `read` 访问用户级 Skill 的附属资源仍适用表中的外部路径规则。
+
+**这不是通用安全沙箱。** `bash` 不受结构化文件路径开关约束，仍以工作区作为当前目录但可以访问外部路径；`bash` 和 TypeScript 插件拥有当前用户进程权限。风险分类是防误操作的启发式护栏。Bash 超时会终止其进程组；主进程内的插件只能通过 `AbortSignal` 协作取消，忽略信号的可信插件可能在超时结果返回后继续运行。
 
 ## 本地 TypeScript 插件
 
