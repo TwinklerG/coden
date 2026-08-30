@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open, realpath, stat } from "node:fs/promises";
 import path from "node:path";
@@ -48,7 +49,10 @@ export class SkillRegistry {
         }
         if (entryStat.size > MAX_SKILL_BYTES)
           throw new Error(`SKILL.md exceeds ${MAX_SKILL_BYTES} bytes`);
-        return { skill, content: await handle.readFile("utf8") };
+        const content = await handle.readFile();
+        const digest = createHash("sha256").update(content).digest("hex");
+        if (digest !== skill.entryDigest) throw new Error("skill entry content was replaced");
+        return { skill, content: content.toString("utf8") };
       } finally {
         await handle.close();
       }

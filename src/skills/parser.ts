@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import path from "node:path";
@@ -23,13 +24,16 @@ export class SkillParser {
     let text: string;
     let entryDevice: number;
     let entryInode: number;
+    let entryDigest: string;
     try {
       const stat = await handle.stat();
       if (!stat.isFile()) throw new Error("SKILL.md must be a regular file");
       if (stat.size > MAX_SKILL_BYTES) throw new Error(`SKILL.md exceeds ${MAX_SKILL_BYTES} bytes`);
       entryDevice = stat.dev;
       entryInode = stat.ino;
-      text = await handle.readFile("utf8");
+      const content = await handle.readFile();
+      entryDigest = createHash("sha256").update(content).digest("hex");
+      text = content.toString("utf8");
     } finally {
       await handle.close();
     }
@@ -56,6 +60,7 @@ export class SkillParser {
       rootInode: candidate.rootInode,
       entryDevice,
       entryInode,
+      entryDigest,
     };
     if (typeof metadata.license === "string") skill.license = metadata.license;
     if (typeof metadata.compatibility === "string") skill.compatibility = metadata.compatibility;

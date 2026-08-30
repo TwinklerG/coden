@@ -12,6 +12,7 @@ export interface Skill {
   rootInode: number;
   entryDevice: number;
   entryInode: number;
+  entryDigest: string;
   license?: string;
   compatibility?: string;
   metadata?: Record<string, unknown>;

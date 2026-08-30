@@ -135,6 +135,19 @@ describe("Agent Skills", () => {
       ).content,
     ).toContain("skill.not_found");
 
+    await writeFile(
+      path.join(directory, "SKILL.md"),
+      "---\nname: testing\ndescription: Mutated skill.\n---\n# Mutated instructions\n",
+    );
+    expect(
+      (
+        await activate.execute(
+          { name: "testing" },
+          { workspace, signal: new AbortController().signal },
+        )
+      ).content,
+    ).toContain("skill.activation_failed");
+
     await rm(directory, { recursive: true });
     expect(
       (
