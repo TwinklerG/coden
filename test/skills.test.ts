@@ -1,6 +1,7 @@
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import pc from "picocolors";
 import { describe, expect, it } from "vitest";
 import { SkillDiscovery } from "../src/skills/discovery.js";
 import { formatSkillCatalog, formatSkillsList } from "../src/skills/prompt.js";
@@ -158,6 +159,11 @@ describe("Agent Skills", () => {
     const registry = (await new SkillDiscovery({ workspace, home }).discover()).registry;
     expect(formatSkillCatalog(registry)).toContain("- testing: Use for tests.");
     expect(formatSkillCatalog(registry)).not.toContain("# Full instructions");
-    expect(formatSkillsList(registry)).toBe("testing (user): Use for tests.\n");
+    expect(formatSkillsList(registry, pc.createColors(false))).toBe(
+      "testing (user): Use for tests.\n",
+    );
+    expect(formatSkillsList(registry, pc.createColors(true))).toBe(
+      "\u001B[1mtesting\u001B[22m (user): Use for tests.\n",
+    );
   });
 });
