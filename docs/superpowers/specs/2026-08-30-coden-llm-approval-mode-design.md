@@ -17,7 +17,7 @@ CodeN 当前提供两种工具授权模式：
 
 1. 新增 `manual`、`smart`、`auto` 三态授权模型；
 2. 新增 `--smart-approve` CLI 参数；
-3. 新增可选的 `approvalModel` 配置项；
+3. 新增可选的 `approvalModel` 和 `approvalStrictness` 配置项；
 4. 为工作区内普通 `modify` 工具调用增加独立 LLM 审批；
 5. 对确定性高风险、工作区外操作和项目插件信任保留人工审批；
 6. 增加审批状态、理由、事件和 token 用量记录；
@@ -142,10 +142,13 @@ Reviewer 不能直接返回 `deny`。任何不能明确自动放行的情况都�
 
 ## 6. 配置
 
-`CodeNConfig` 增加可选字段：
+`CodeNConfig` 增加审批配置字段：
 
 ```ts
+type ApprovalStrictness = "soft" | "medium" | "hard";
+
 approvalModel?: string;
+approvalStrictness: ApprovalStrictness;
 ```
 
 配置示例：
@@ -153,17 +156,31 @@ approvalModel?: string;
 ```json
 {
   "model": "gpt-5",
-  "approvalModel": "gpt-5-mini"
+  "approvalModel": "gpt-5-mini",
+  "approvalStrictness": "medium"
 }
 ```
 
-`approvalModel` 与普通 `model` 一样参与现有用户级和项目级 `config.json` 合并。不增加独立 provider、CLI 参数或环境变量。有效模型为：
+两个字段与普通 `model` 一样参与现有用户级和项目级 `config.json` 合并。不增加独立 provider、CLI 参数或环境变量。有效模型和默认严格度为：
 
 ```ts
 const effectiveApprovalModel = config.approvalModel ?? config.model;
+const approvalStrictness = config.approvalStrictness ?? "medium";
 ```
 
-审批请求始终沿用任务 provider、Base URL 和 API Key。`approvalModel` 必须是非空字符串；非字符串或空字符串配置导致配置错误。
+审批请求始终沿用任务 provider、Base URL 和 API Key。`approvalModel` 必须是非空字符串；`approvalStrictness` 只能是 `soft`、`medium` 或 `hard`。非法配置导致配置错误。
+
+### 6.1 严格度预设
+
+严格度只改变 Reviewer 系统 Prompt 中普通 `modify` 的自动放行标准，不改变确定性安全边界、输出协议、超时或请求次数：
+
+| 档位 | 自动放行标准 |
+| --- | --- |
+| `soft` | 操作符合任务、局限于工作区且未发现具体高风险迹象；常规、可恢复操作不要求穷尽证明全部影响 |
+| `medium` | 必须明确确认任务一致、影响范围有限且易于恢复 |
+| `hard` | 仅放行目标、影响和恢复方式都非常明确的局部常规操作；任何实质不确定性均转人工 |
+
+三个档位均只执行一次 Reviewer 请求，不使用风险分数或多模型投票。`dangerous`、工作区外操作、项目插件信任及 Reviewer 故障在所有档位下仍转人工。
 
 ## 7. 审批上下文与协议
 
@@ -176,11 +193,11 @@ Reviewer 只接收：
 - Schema 验证后的完整调用参数；
 - 当前工作区真实路径；
 - 目标路径是否位于工作区内；
-- 固定安全审查规则。
+- 固定安全审查规则和当前 `approvalStrictness` 预设。
 
 不发送完整会话历史。对于不直接包含路径的工具，路径范围记为 `not_applicable`。所有任务文本、工具描述、命令、文件内容和参数均标记为不可信数据，其中的文字不得被解释为审批指令。
 
-审批模型仅在操作明确符合当前任务、范围有限，且没有明显破坏、提权、凭据泄露、外部数据传输或不可逆副作用时返回 `allow`。存在不确定性时必须返回 `human_review`。
+审批模型必须先应用共同安全规则，再按 `soft`、`medium` 或 `hard` 的标准决定是否允许。只有达到当前档位的明确放行标准时才返回 `allow`，否则返回 `human_review`。
 
 ### 7.2 输出
 
@@ -244,10 +261,10 @@ reviewing write…
 AI approved write
 ```
 
-`--verbose` 模式追加净化且截断后的理由：
+`--verbose` 模式追加当前严格度及净化、截断后的理由：
 
 ```text
-AI approved write — limited change to a workspace source file
+AI approved write [medium] — limited change to a workspace source file
 ```
 
 转人工时始终显示理由：
@@ -270,8 +287,8 @@ AI review unavailable — timed out; human approval required
 
 新增事件：
 
-- `permission.review_started`：工具名、调用 ID、审批模型；
-- `permission.review_completed`：决策、净化并截断的理由、耗时、模型和 token usage；
+- `permission.review_started`：工具名、调用 ID、审批模型和严格度；
+- `permission.review_completed`：决策、净化并截断的理由、耗时、模型、严格度和 token usage；
 - `permission.review_failed`：错误摘要、耗时和 `fallback: "human_review"`。
 
 事件不重复记录完整工具参数，避免 trace 增加新的大块或敏感数据副本。原始调用参数继续由现有 assistant 工具调用消息持久化。
@@ -314,9 +331,9 @@ AI review unavailable — timed out; human approval required
 
 覆盖：
 
-- 用户级和项目级 `approvalModel` 合并优先级；
-- 缺省回退到 `model`；
-- 空字符串和非字符串配置失败；
+- 用户级和项目级 `approvalModel`、`approvalStrictness` 合并优先级；
+- 模型缺省回退到 `model`，严格度缺省为 `medium`；
+- 空模型 ID、非字符串模型 ID 和未知严格度配置失败；
 - 其他现有配置行为不变。
 
 ### 13.2 CLI 测试
@@ -336,6 +353,7 @@ AI review unavailable — timed out; human approval required
 - 请求不携带工具；
 - 当前任务、工具信息、完整参数和路径范围存在；
 - 不可信数据边界存在；
+- `soft`、`medium`、`hard` 三套明确的 Prompt 准则；
 - 两种合法决策；
 - 非法 JSON、额外字段、空理由、未知值、工具调用和空响应；
 - 超时、provider 错误和主信号取消。
@@ -346,7 +364,7 @@ AI review unavailable — timed out; human approval required
 
 - read 不调用 Reviewer；
 - 普通 modify 调用 Reviewer；
-- dangerous 和工作区外调用绕过 Reviewer；
+- dangerous 和工作区外调用在三个严格度下均绕过 Reviewer；
 - LLM allow 只作用一次；
 - human review 的 once、session 和 deny；
 - session 授权不能覆盖 dangerous；
@@ -380,11 +398,12 @@ just check
 
 1. 用户可通过 `--smart-approve` 显式启用智能审批；
 2. 普通工作区内修改仅在 Reviewer 明确允许时自动执行；
-3. 高风险、工作区外和不确定操作均由人决定；
+3. 高风险、工作区外和未达到当前严格度放行标准的操作均由人决定；
 4. Reviewer 的任何故障都不能导致自动放行；
 5. 可配置同 provider 下的轻量审批模型，缺省使用任务模型；
-6. Reviewer 只看到批准的有界上下文，不污染主会话；
-7. 自动批准、人工升级和故障均有清晰终端反馈与审计事件；
-8. 项目插件信任不再被 `--auto` 隐式跳过；
-9. 原默认模式、`--auto`、工作区边界和现有工具行为无非预期回归；
-10. README、测试、格式检查和构建全部通过。
+6. 可通过 `soft`、`medium`、`hard` 调整普通修改的放行标准，缺省为 `medium`，且不放宽确定性安全底线；
+7. Reviewer 只看到批准的有界上下文，不污染主会话；
+8. 自动批准、人工升级和故障均有清晰终端反馈与审计事件；
+9. 项目插件信任不再被 `--auto` 隐式跳过；
+10. 原默认模式、`--auto`、工作区边界和现有工具行为无非预期回归；
+11. README、测试、格式检查和构建全部通过。
