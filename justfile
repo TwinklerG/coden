@@ -27,6 +27,10 @@ check:
 publish-dry-run:
   npm publish --dry-run
 
+# Verify a git tag vX.Y.Z matches package.json version
+check-tag-version tag:
+  bun run src/release/check-tag-version-cli.ts {{tag}}
+
 # Lint, typecheck, test, then publish to npm (scoped package → --access public)
 publish:
   bun run lint
