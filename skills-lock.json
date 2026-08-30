@@ -7,6 +7,12 @@
       "skillPath": "skills/brainstorming/SKILL.md",
       "computedHash": "b58d55b64742ecd37923985ec7bdfbe678ffbcb9895562abd28c0a32dcacd7fb"
     },
+    "coden-tool-plugin-development": {
+      "source": "TwinklerG/CodeN",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/coden-tool-plugin-development/SKILL.md",
+      "computedHash": "34c6c02e22e820391f8180328351cc27c3ca780475ff497842a264c8c7b23ca7"
+    },
     "design-taste-frontend": {
       "source": "leonxlnx/taste-skill",
       "sourceType": "github",
@@ -18,6 +24,12 @@
       "sourceType": "github",
       "skillPath": "skills/just/SKILL.md",
       "computedHash": "da9eb61caf8468d813997618f923370cfe77ff4ebd6bb19b47bd4e91c19437d2"
+    },
+    "skill-creator": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/skill-creator/SKILL.md",
+      "computedHash": "5ea13a6d9f0d4bb694405d79acd00cadec0d21bb138c4dd10fcf3c500cb835c2"
     }
   }
 }
