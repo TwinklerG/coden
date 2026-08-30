@@ -1,0 +1,22 @@
+{
+  "name": "@scope/coden-plugin-example",
+  "version": "1.0.0",
+  "type": "module",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "bun run typecheck && bun run test"
+  },
+  "coden": {
+    "apiVersion": 1,
+    "plugin": "./dist/index.js"
+  },
+  "devDependencies": {
+    "@twinklerg/coden": "^0.1.5",
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
