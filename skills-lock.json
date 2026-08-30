@@ -18,12 +18,6 @@
       "sourceType": "github",
       "skillPath": "skills/just/SKILL.md",
       "computedHash": "da9eb61caf8468d813997618f923370cfe77ff4ebd6bb19b47bd4e91c19437d2"
-    },
-    "subagent-driven-development": {
-      "source": "obra/superpowers",
-      "sourceType": "github",
-      "skillPath": "skills/subagent-driven-development/SKILL.md",
-      "computedHash": "367cc1d3216d6672b947c8c6583dbd6440ea407beb6da75a97d3a8ee1a23640a"
     }
   }
 }
