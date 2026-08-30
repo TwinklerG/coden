@@ -21,6 +21,7 @@ export class TerminalRenderer {
   private spinner: NodeJS.Timeout | undefined;
   private frame = 0;
   private providerStartedAt: number | undefined;
+  private reviewingTool: string | undefined;
   private reasoningText = "";
   private readonly toolCallPreviews = new Map<number, { name: string; argumentsText: string }>();
   private activeToolCallIndex: number | undefined;
@@ -48,6 +49,35 @@ export class TerminalRenderer {
     events.on((event) => this.render(event));
   }
   private render(event: RuntimeEvent): void {
+    if (event.type === "permission.review_started") {
+      this.endProviderAttempt();
+      this.reviewingTool = sanitizeTerminalText(String(event.data?.name ?? "tool"));
+      if (this.tty) {
+        this.startSpinner();
+        this.renderActivityLine();
+      } else this.status(`reviewing ${this.reviewingTool}…`);
+    }
+    if (event.type === "permission.review_completed") {
+      this.reviewingTool = undefined;
+      this.stopSpinner();
+      const name = sanitizeTerminalText(String(event.data?.name ?? "tool"));
+      const reason = sanitizeTerminalText(String(event.data?.reason ?? ""));
+      const decision = event.data?.decision;
+      if (decision === "allow")
+        this.status(
+          this.options.verbose
+            ? `AI approved ${name} [${String(event.data?.strictness ?? "medium")}] — ${reason}`
+            : `AI approved ${name}`,
+        );
+      else this.status(`AI requested human review — ${reason}`);
+    }
+    if (event.type === "permission.review_failed") {
+      this.reviewingTool = undefined;
+      this.stopSpinner();
+      this.status(
+        `AI review unavailable — ${sanitizeTerminalText(String(event.data?.message ?? "failed"))}; human approval required`,
+      );
+    }
     if (event.type === "provider.started") this.startProviderAttempt();
     if (event.type === "provider.reasoning_delta") {
       const text = String(event.data?.text ?? "");
@@ -207,7 +237,7 @@ export class TerminalRenderer {
     this.activeToolCallIndex = undefined;
   }
   private renderActivityLine(): void {
-    if (!this.tty || this.providerStartedAt === undefined) return;
+    if (!this.tty || (this.providerStartedAt === undefined && !this.reviewingTool)) return;
     const columns = (this.stderr as NodeJS.WritableStream & { columns?: number }).columns ?? 80;
     const maxColumns = Math.max(0, columns - 2);
     const frame = SPINNER_FRAMES[this.frame++ % SPINNER_FRAMES.length] ?? "";
@@ -217,6 +247,8 @@ export class TerminalRenderer {
     this.stderr.write(pc.dim(`${frame} ${visible}`));
   }
   private currentActivityText(maxColumns: number): string {
+    if (this.reviewingTool)
+      return this.truncateTail(`reviewing ${this.reviewingTool}…`, maxColumns);
     const active =
       this.activeToolCallIndex === undefined
         ? undefined
@@ -260,6 +292,7 @@ export class TerminalRenderer {
     this.clearActivityLine();
   }
   dispose(): void {
+    this.reviewingTool = undefined;
     this.endProviderAttempt();
   }
 }

@@ -58,7 +58,7 @@ export type ModelEvent =
   | { type: "tool_call_delta"; index: number; argumentsDelta: string }
   | { type: "tool_call_end"; index: number }
   | { type: "usage"; usage: Usage }
-  | { type: "done" };
+  | { type: "done"; finishReason?: string };
 
 export interface ModelProvider {
   stream(request: ModelRequest): AsyncIterable<ModelEvent>;

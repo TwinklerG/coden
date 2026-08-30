@@ -34,6 +34,7 @@ export class AnthropicProvider implements ModelProvider {
       request.signal ? { signal: request.signal } : undefined,
     );
     const inputByIndex = new Map<number, string>();
+    let finishReason: string | undefined;
     for await (const event of stream) {
       if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
         inputByIndex.set(event.index, "");
@@ -66,10 +67,11 @@ export class AnthropicProvider implements ModelProvider {
           },
         };
       } else if (event.type === "message_delta") {
+        finishReason = event.delta.stop_reason ?? undefined;
         yield { type: "usage", usage: { inputTokens: 0, outputTokens: event.usage.output_tokens } };
       }
     }
-    yield { type: "done" };
+    yield { type: "done", ...(finishReason ? { finishReason } : {}) };
   }
 }
 

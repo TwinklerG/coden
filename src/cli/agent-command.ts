@@ -22,13 +22,19 @@ import type {
 } from "../core/types.js";
 import { TerminalRenderer } from "../observability/terminal.js";
 import { JSONLTraceWriter } from "../observability/trace.js";
-import { type PermissionDecision, PermissionPolicy } from "../permissions/policy.js";
+import {
+  type PermissionDecision,
+  type PermissionMode,
+  PermissionPolicy,
+} from "../permissions/policy.js";
+import { LlmApprovalReviewer } from "../permissions/reviewer.js";
 import { readWorkspaceTextFile } from "../permissions/workspace.js";
 import {
   InstalledPluginLoader,
   type LoadedPackagePlugin,
   type PackagePluginFailure,
 } from "../plugins/installed-loader.js";
+import { readPluginManifest } from "../plugins/manifest.js";
 import { resolvePluginPaths } from "../plugins/paths.js";
 import { PluginTransaction } from "../plugins/transaction.js";
 import { AnthropicProvider } from "../providers/anthropic.js";
@@ -51,6 +57,7 @@ export interface AgentCommandOptions {
   model?: string;
   resume?: string | boolean;
   auto: boolean;
+  smartApprove: boolean;
   allowOutsideWorkspace: boolean;
   verbose: boolean;
   maxSteps?: number;
@@ -79,6 +86,8 @@ export async function runAgentCommand(
   options: AgentCommandOptions,
 ): Promise<void> {
   const workspace = process.cwd();
+  if (options.auto && options.smartApprove)
+    throw new ConfigError("--smart-approve and --auto are mutually exclusive");
   if (options.allowOutsideWorkspace && !options.auto)
     throw new ConfigError("--allow-outside-workspace requires --auto");
   const config = await loadConfigOrFail(workspace, {
@@ -147,8 +156,22 @@ export async function runAgentCommand(
   }
   const skills = skillDiscovery.registry;
   const builtins = builtinTools(skills);
-  const permissionPrompt = options.auto ? undefined : createPermissionPrompt(ask);
-  const permissions = new PermissionPolicy(options.auto, permissionPrompt);
+  const permissionMode: PermissionMode = options.auto
+    ? "auto"
+    : options.smartApprove
+      ? "smart"
+      : "manual";
+  const permissionPrompt = permissionMode === "auto" ? undefined : createPermissionPrompt(ask);
+  const reviewer =
+    permissionMode === "smart"
+      ? new LlmApprovalReviewer(
+          provider,
+          config.approvalModel ?? config.model,
+          config.approvalStrictness,
+          events,
+        )
+      : undefined;
+  const permissions = new PermissionPolicy(permissionMode, permissionPrompt, reviewer);
   const registry = new ToolRegistry(builtins);
   const executor = new ToolExecutor(
     registry,
@@ -159,15 +182,8 @@ export async function runAgentCommand(
     options.allowOutsideWorkspace,
   );
   const trustStore = new TrustStore(path.join(userConfigDir(), "trusted-workspaces.json"));
-  const loader = new PluginLoader(builtins, events, options.auto, async (directory) => {
-    if (await trustStore.isTrusted(directory)) return true;
-    const allowed = await yesNo(
-      ask,
-      `Project plugins at ${directory} run with full process permissions. Trust? [y/N] `,
-    );
-    if (allowed) await trustStore.trust(directory);
-    return allowed;
-  });
+  const ensureWorkspaceTrusted = createWorkspaceTrustGate(workspace, trustStore, ask);
+  const loader = new PluginLoader(builtins, events, async () => ensureWorkspaceTrusted());
   const installedLoader = new InstalledPluginLoader();
   const globalPaths = resolvePluginPaths(workspace, "global", config.dataDir);
   const projectPaths = resolvePluginPaths(workspace, "project", config.dataDir);
@@ -181,10 +197,12 @@ export async function runAgentCommand(
     await new PluginTransaction(globalPaths).recover();
     await new PluginTransaction(projectPaths).recover();
     const global = await loadInstalledScope(installedLoader, globalPaths, events, "global");
-    const projectTrusted = options.auto || (await trustStore.isWorkspaceTrusted(workspace));
-    const project = projectTrusted
-      ? await loadInstalledScope(installedLoader, projectPaths, events, "project")
-      : { loaded: [], failed: [], unavailable: true };
+    const project = await loadTrustedProjectScope(
+      installedLoader,
+      projectPaths,
+      events,
+      ensureWorkspaceTrusted,
+    );
     if (project.unavailable) {
       await events.emit("plugin.unavailable", {
         source: "npm",
@@ -276,7 +294,7 @@ export async function runAgentCommand(
   }
 }
 
-interface InstalledScopeResult {
+export interface InstalledScopeResult {
   loaded: LoadedPackagePlugin[];
   failed: PackagePluginFailure[];
   unavailable?: boolean;
@@ -325,6 +343,48 @@ export async function composeRuntimePackageRegistry(
     }
   }
   return { registry, effective };
+}
+
+export function createWorkspaceTrustGate(
+  workspace: string,
+  store: TrustStore,
+  ask: Question,
+): () => Promise<boolean> {
+  return async () => {
+    if (await store.isWorkspaceTrusted(workspace)) return true;
+    let realWorkspace: string;
+    try {
+      realWorkspace = await import("node:fs/promises").then(({ realpath }) => realpath(workspace));
+    } catch {
+      return false;
+    }
+    const allowed = await yesNo(
+      ask,
+      `Project plugins in ${realWorkspace} run in-process with full user permissions. Trust this workspace? [y/N] `,
+    );
+    if (allowed) await store.trustWorkspace(workspace);
+    return allowed;
+  };
+}
+
+export async function loadTrustedProjectScope(
+  loader: InstalledPluginLoader,
+  paths: ReturnType<typeof resolvePluginPaths>,
+  events: EventBus,
+  ensureTrusted: () => Promise<boolean>,
+): Promise<InstalledScopeResult> {
+  const manifest = await readPluginManifest(paths.manifestPath);
+  if (Object.keys(manifest.plugins).length === 0) return { loaded: [], failed: [] };
+  if (!(await ensureTrusted())) {
+    await events.emit("plugin.unavailable", {
+      source: "npm",
+      scope: "project",
+      path: paths.root,
+      reason: "workspace is not trusted",
+    });
+    return { loaded: [], failed: [], unavailable: true };
+  }
+  return loadInstalledScope(loader, paths, events, "project");
 }
 
 export async function loadInstalledScope(

@@ -20,7 +20,12 @@ export class ToolExecutor {
   setRegistry(registry: ToolRegistry): void {
     this.registry = registry;
   }
-  async execute(call: ToolCall, signal: AbortSignal, turnId?: string): Promise<ToolResult> {
+  async execute(
+    call: ToolCall,
+    signal: AbortSignal,
+    turnId?: string,
+    userTask = "",
+  ): Promise<ToolResult> {
     await this.events.emit("tool.requested", { name: call.name, callId: call.callId }, turnId);
     const tool = this.registry.get(call.name);
     if (!tool) return { content: `tool.not_found: ${call.name}`, isError: true };
@@ -63,6 +68,12 @@ export class ToolExecutor {
       call,
       signal,
       filePath?.scope === "outside" ? "modify" : undefined,
+      {
+        task: userTask,
+        workspace: this.workspace,
+        pathScope: filePath?.scope ?? "not_applicable",
+        ...(turnId ? { turnId } : {}),
+      },
     );
     await this.events.emit(
       "permission.requested",

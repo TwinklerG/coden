@@ -47,7 +47,8 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       "--resume [session-id]",
       "resume a previous session, or list sessions when no id is given",
     )
-    .option("--auto", "skip permission and project-plugin confirmations", false)
+    .option("--auto", "skip tool permission confirmations", false)
+    .option("--smart-approve", "use LLM review for ordinary modification permissions", false)
     .option(
       "--allow-outside-workspace",
       "with --auto, allow read/write/edit paths outside the workspace",

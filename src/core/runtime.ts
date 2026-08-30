@@ -178,7 +178,7 @@ export class AgentRuntime {
           return { answer: assistant.content, messages: this.messages, toolsExecuted, usage };
         }
         for (const call of assistant.toolCalls) {
-          const result = await this.executor.execute(call, signal, turnId);
+          const result = await this.executor.execute(call, signal, turnId, userText);
           toolsExecuted++;
           const message: AgentMessage = {
             role: "tool",

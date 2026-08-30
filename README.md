@@ -34,6 +34,7 @@ just check
 export CODEN_OPENAI_API_KEY=...
 coden "修复当前项目的测试失败"
 coden -p --auto "实现功能并运行测试"
+coden --smart-approve "实现功能并运行测试"
 
 export CODEN_ANTHROPIC_API_KEY=...
 coden --provider anthropic --model claude-sonnet-4-20250514
@@ -46,7 +47,7 @@ coden --resume                   # 列出当前工作区的会话
 
 支持 `/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new` 和 `/quit`。启动横幅会显示当前版本与 16 位 workspace hash。
 
-核心选项：`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--auto`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。
+核心选项：`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--smart-approve`、`--auto`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。
 
 ## 配置
 
@@ -56,6 +57,8 @@ coden --resume                   # 列出当前工作区的会话
 {
   "provider": "openai",
   "model": "gpt-5-mini",
+  "approvalModel": "gpt-5-mini",
+  "approvalStrictness": "medium",
   "maxSteps": 20,
   "contextWindow": 128000,
   "reservedOutputTokens": 8192,
@@ -70,6 +73,8 @@ coden --resume                   # 列出当前工作区的会话
 支持 `CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`CODEN_OPENAI_API_KEY`、`CODEN_OPENAI_BASE_URL`、`CODEN_ANTHROPIC_API_KEY`、`XDG_CONFIG_HOME` 和 `XDG_DATA_HOME`。
 
 `env` 字段（用户级与项目级均可）声明环境变量（含敏感密钥），加载配置时注入进程环境，无需手动 `export`。两级 `env` 合并时**项目级逐键覆盖用户级**；注入**不覆盖** `shell` 中已导出的同名变量（CLI > 环境变量 > 配置 env）。密钥请放 `~/.config/coden/` 或 `.coden/`（已被 `gitignore` 忽略、默认不入库），不要放进会被提交、共享或分发的目录。
+
+`approvalModel` 使用与任务相同的 provider 和凭据，未设置时回退到 `model`。`approvalStrictness` 只能是 `soft`、`medium` 或 `hard`，默认 `medium`。
 
 会话和 trace 位于 `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`（默认 `~/.local/share/coden`）。
 
@@ -112,7 +117,8 @@ npx skills add TwinklerG/CodeN --skill coden-tool-plugin-development
 
 | 模式 | 工作区内 `read`/`write`/`edit` | 工作区外 `read`/`write`/`edit` |
 | --- | --- | --- |
-| 默认交互模式 | 保持原有风险确认 | 作为修改操作请求逐次或会话授权 |
+| 默认交互模式 | 人工确认 | 作为修改操作请求逐次或会话授权 |
+| `--smart-approve` | 普通修改逐次由独立 LLM 审查；不确定时人工确认 | 直接人工确认 |
 | `--auto` | 自动允许 | 返回 `permission.outside_workspace_denied` |
 | `--auto --allow-outside-workspace` | 自动允许 | 自动允许 |
 
@@ -128,7 +134,7 @@ CodeN 扫描：
 - `<workspace>/.coden/plugins/*.ts`
 - `--plugin` 或配置中的附加目录
 
-项目插件首次加载需信任确认（`--auto` 跳过）。插件应避免模块顶层副作用；`/reload` 基于内容哈希重建模块并原子替换 Registry（内容未变的插件复用已加载模块）。
+项目插件首次加载始终需人工信任确认；`--auto` 只跳过工具调用确认，不会跳过工作区插件信任。智能审批对每次普通工作区内修改独立审查；危险、工作区外、无效输出、超时或模型故障都转人工，且没有输入时失败关闭。LLM 审批不是沙箱。插件应避免模块顶层副作用；`/reload` 基于内容哈希重建模块并原子替换 Registry（内容未变的插件复用已加载模块）。
 
 **插件必须是自包含单文件**：Bun 的模块缓存按真实路径去重且忽略查询参数，因此 CodeN 通过 `data:text/typescript` URL 加载插件源码以保证重载生效——相对路径导入（`./helper.ts`）无法解析，npm 包导入（`import pc from "picocolors"`）正常工作。
 

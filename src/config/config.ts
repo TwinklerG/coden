@@ -3,9 +3,12 @@ import os from "node:os";
 import path from "node:path";
 
 export type ProviderName = "openai" | "anthropic";
+export type ApprovalStrictness = "soft" | "medium" | "hard";
 export interface CodeNConfig {
   provider: ProviderName;
   model: string;
+  approvalModel?: string;
+  approvalStrictness: ApprovalStrictness;
   maxSteps: number;
   contextWindow: number;
   reservedOutputTokens: number;
@@ -45,6 +48,16 @@ function pickOverrides(raw: Record<string, unknown>): ConfigOverrides {
   const overrides: ConfigOverrides = {};
   if (raw.provider === "openai" || raw.provider === "anthropic") overrides.provider = raw.provider;
   if (typeof raw.model === "string") overrides.model = raw.model;
+  if (raw.approvalModel !== undefined) {
+    if (typeof raw.approvalModel !== "string" || !raw.approvalModel.trim())
+      throw new Error("approvalModel must be a non-empty string");
+    overrides.approvalModel = raw.approvalModel;
+  }
+  if (raw.approvalStrictness !== undefined) {
+    if (!["soft", "medium", "hard"].includes(String(raw.approvalStrictness)))
+      throw new Error("approvalStrictness must be soft, medium, or hard");
+    overrides.approvalStrictness = raw.approvalStrictness as ApprovalStrictness;
+  }
   if (typeof raw.maxSteps === "number") overrides.maxSteps = raw.maxSteps;
   if (typeof raw.contextWindow === "number") overrides.contextWindow = raw.contextWindow;
   if (typeof raw.reservedOutputTokens === "number")
@@ -77,6 +90,7 @@ export async function loadConfig(
   const defaults: CodeNConfig = {
     provider: "openai",
     model: "gpt-5-mini",
+    approvalStrictness: "medium",
     maxSteps: 20,
     contextWindow: 128000,
     reservedOutputTokens: 8192,

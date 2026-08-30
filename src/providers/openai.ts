@@ -39,7 +39,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
       request.signal ? { signal: request.signal } : undefined,
     );
     const started = new Set<number>();
+    let finishReason: string | undefined;
     for await (const chunk of response) {
+      if (chunk.choices[0]?.finish_reason) finishReason = chunk.choices[0].finish_reason;
       const delta = chunk.choices[0]?.delta;
       const reasoning = (delta as (typeof delta & ReasoningDelta) | undefined)?.reasoning_content;
       if (reasoning) yield { type: "reasoning_delta", text: reasoning };
@@ -68,7 +70,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
         };
     }
     for (const index of started) yield { type: "tool_call_end", index };
-    yield { type: "done" };
+    yield { type: "done", ...(finishReason ? { finishReason } : {}) };
   }
 }
 

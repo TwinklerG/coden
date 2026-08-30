@@ -21,13 +21,30 @@ export class PluginLoader {
   // strings, so re-importing a changed plugin file returns the stale module.
   // Content-hash caching plus data: URL imports make /reload deterministic.
   readonly #moduleCache = new Map<string, { hash: string; module: { default?: unknown } }>();
+  private readonly trust: ProjectTrust | undefined;
+  private readonly importer: PluginImporter;
   constructor(
     private readonly builtins: ToolDefinition[],
     private readonly events: EventBus,
-    private readonly auto: boolean,
-    private readonly trust?: ProjectTrust,
-    private readonly importer: PluginImporter = PluginLoader.defaultImporter,
-  ) {}
+    trustOrAuto?: ProjectTrust | boolean,
+    trustOrImporter?: ProjectTrust | PluginImporter,
+    legacyImporter?: PluginImporter,
+  ) {
+    // Accept the historical boolean slot while retaining fail-closed trust behavior.
+    this.trust =
+      typeof trustOrAuto === "function"
+        ? trustOrAuto
+        : trustOrAuto === true
+          ? async () => true
+          : typeof trustOrImporter === "function" && legacyImporter
+            ? (trustOrImporter as ProjectTrust)
+            : undefined;
+    this.importer =
+      legacyImporter ??
+      (typeof trustOrAuto === "function" && typeof trustOrImporter === "function"
+        ? (trustOrImporter as PluginImporter)
+        : PluginLoader.defaultImporter);
+  }
   async load(
     directories: Array<{ path: string; project: boolean }>,
     baseRegistry?: ToolRegistry,
@@ -40,7 +57,7 @@ export class PluginLoader {
         const real = await realpath(target.path);
         const targetStat = await stat(real);
         const trustPath = targetStat.isDirectory() ? real : path.dirname(real);
-        if (target.project && !this.auto) {
+        if (target.project) {
           const trusted = this.trust ? await this.trust(trustPath) : false;
           if (!trusted) {
             await this.events.emit("plugin.unavailable", {
