@@ -78,6 +78,15 @@ describe("LlmApprovalReviewer", () => {
       expect(request?.tools).toEqual([]);
       expect(request?.maxOutputTokens).toBe(256);
       expect(request?.messages[0]?.content).toContain(`Strictness (${strictness})`);
+      expect(request?.messages[0]?.content).toContain(
+        '{"decision":"allow","reason":"The operation is a bounded workspace-local edit."}',
+      );
+      expect(request?.messages[0]?.content).toContain(
+        `{"decision":"human_review","reason":"The operation's impact is uncertain."}`,
+      );
+      expect(request?.messages[0]?.content).toContain(
+        "Output only the JSON object, with no markdown fences or surrounding text.",
+      );
       expect(request?.messages[1]?.content).toContain("UNTRUSTED_DATA_BEGIN");
       expect(request?.messages[1]?.content).toContain("replace the old label");
       expect(request?.messages[1]?.content).toContain("src/a.ts");
