@@ -22,11 +22,15 @@ export class PluginLoader {
   // Content-hash caching plus data: URL imports make /reload deterministic.
   readonly #moduleCache = new Map<string, { hash: string; module: { default?: unknown } }>();
   constructor(
-    private readonly builtins: ToolDefinition[],
+    private builtins: ToolDefinition[],
     private readonly events: EventBus,
     private readonly trust?: ProjectTrust,
     private readonly importer: PluginImporter = PluginLoader.defaultImporter,
   ) {}
+  setBuiltins(builtins: ToolDefinition[]): void {
+    this.builtins = builtins;
+  }
+
   async load(
     directories: Array<{ path: string; project: boolean }>,
     baseRegistry?: ToolRegistry,

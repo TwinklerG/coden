@@ -64,6 +64,44 @@ describe("configuration", () => {
     expect(config.dataDir).toBe(path.join(root, "data", "coden"));
   });
 
+  it("uses only the user language and lets CLI override it", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));
+    const workspace = path.join(root, "workspace");
+    const configHome = path.join(root, "config");
+    await mkdir(path.join(workspace, ".coden"), { recursive: true });
+    await mkdir(path.join(configHome, "coden"), { recursive: true });
+    await writeFile(
+      path.join(configHome, "coden", "config.json"),
+      JSON.stringify({ language: "en" }),
+    );
+    await writeFile(
+      path.join(workspace, ".coden", "config.json"),
+      JSON.stringify({ language: "invalid-project-value" }),
+    );
+    vi.stubEnv("XDG_CONFIG_HOME", configHome);
+    await expect(loadConfig(workspace)).resolves.toMatchObject({ language: "en" });
+    await expect(loadConfig(workspace, { language: "zh" })).resolves.toMatchObject({
+      language: "zh",
+    });
+  });
+
+  it("rejects an invalid user language unless a valid CLI override wins", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));
+    const workspace = path.join(root, "workspace");
+    const configHome = path.join(root, "config");
+    await mkdir(workspace, { recursive: true });
+    await mkdir(path.join(configHome, "coden"), { recursive: true });
+    await writeFile(
+      path.join(configHome, "coden", "config.json"),
+      JSON.stringify({ language: "en-US" }),
+    );
+    vi.stubEnv("XDG_CONFIG_HOME", configHome);
+    await expect(loadConfig(workspace)).rejects.toThrow("language must be zh or en");
+    await expect(loadConfig(workspace, { language: "en" })).resolves.toMatchObject({
+      language: "en",
+    });
+  });
+
   it("merges project env over user env", async () => {
     const { workspace } = await makeTmpConfigs(
       { CODEN_TEST_USER: "u", CODEN_TEST_PROJECT: "user-key" },

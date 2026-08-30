@@ -6,6 +6,7 @@ import type {
   ToolRisk,
   UserMessage,
 } from "../core/types.js";
+import { I18n } from "../i18n/i18n.js";
 import { MarkdownStreamRenderer } from "../observability/markdown.js";
 import { formatToolInput } from "../observability/tool-input.js";
 import type { SessionMeta } from "../sessions/store.js";
@@ -24,15 +25,22 @@ export function formatDateTime(iso: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function formatSessionList(sessions: SessionMeta[], currentId?: string): string {
-  if (sessions.length === 0) return "No sessions found.\n";
+export function formatSessionList(
+  sessions: SessionMeta[],
+  currentId?: string,
+  i18n: I18n = new I18n("en"),
+): string {
+  if (sessions.length === 0) return i18n.messages.format.noSessions;
   const lines = sessions.map((item) => {
-    const title = item.title ? singleLine(item.title, 40) : "(no title)";
-    const meta = item.messageCount === 0 ? "new session" : `${item.messageCount} messages`;
+    const title = item.title ? singleLine(item.title, 40) : i18n.messages.format.noTitle;
+    const meta =
+      item.messageCount === 0
+        ? i18n.messages.format.newSession
+        : i18n.messages.format.messages(item.messageCount);
     const active = item.id === currentId ? "  *" : "";
     return `${item.id}${active}  ${title}  (${meta}, ${formatDateTime(item.lastActivity)})`;
   });
-  const header = currentId ? `Current session: ${currentId}\n` : "";
+  const header = currentId ? i18n.messages.format.currentSession(currentId) : "";
   return `${lines.join("\n")}\n${header}`;
 }
 
@@ -41,6 +49,7 @@ export function formatPermissionQuestion(
   call: ToolCall,
   risk: ToolRisk,
   columns: number = 80,
+  i18n: I18n = new I18n("en"),
 ): string {
   const display = formatToolInput(
     {
@@ -55,25 +64,29 @@ export function formatPermissionQuestion(
   const values = display.lines.map((line) => `  ${line}`).join("\n");
   const choices = risk === "dangerous" ? "[y]es / [N]o" : "[y]es / [s]ession / [N]o";
   const rule = horizontalRule(columns);
-  return `${rule}\n${header}\n\n${values}\n${rule}\nAllow? ${choices}: `;
+  return `${rule}\n${header}\n\n${values}\n${rule}\n${i18n.messages.format.allow} ${choices}: `;
 }
 
 function horizontalRule(width: number): string {
   return "─".repeat(Math.max(1, width));
 }
 
-export function renderResumeTranscript(sessionId: string, messages: AgentMessage[]): string {
+export function renderResumeTranscript(
+  sessionId: string,
+  messages: AgentMessage[],
+  i18n: I18n = new I18n("en"),
+): string {
   const isVisible = (message: AgentMessage): message is UserMessage | AssistantMessage =>
     message.role === "user" || message.role === "assistant";
-  const blocks: string[] = [`Resumed session ${sessionId} (${messages.length} messages).`];
+  const blocks: string[] = [i18n.messages.format.resumed(sessionId, messages.length)];
   for (const message of messages.filter(isVisible)) {
     blocks.push(
       message.role === "user"
         ? renderUserMessage(message.content)
-        : renderAssistantMessage(message.content),
+        : renderAssistantMessage(message.content, i18n),
     );
   }
-  const summary = summarizeTools(messages);
+  const summary = summarizeTools(messages, i18n);
   if (summary) blocks.push(summary);
   return blocks.join("\n\n");
 }
@@ -85,7 +98,7 @@ function renderUserMessage(content: string): string {
     .join("\n");
 }
 
-function renderAssistantMessage(content: string): string {
+function renderAssistantMessage(content: string, i18n: I18n): string {
   const { text, omitted } = truncateAssistant(content);
   let out = "";
   const renderer = new MarkdownStreamRenderer((chunk) => {
@@ -95,7 +108,7 @@ function renderAssistantMessage(content: string): string {
   renderer.complete();
   if (!omitted) return out;
   const separated = out.endsWith("\n") ? out : `${out}\n`;
-  return `${separated}…（已省略 ${omitted} 个字符）`;
+  return `${separated}${i18n.messages.format.assistantOmitted(omitted)}`;
 }
 
 function truncateAssistant(content: string): { text: string; omitted: number } {
@@ -108,7 +121,7 @@ function truncateAssistant(content: string): { text: string; omitted: number } {
       };
 }
 
-function summarizeTools(messages: AgentMessage[]): string | undefined {
+function summarizeTools(messages: AgentMessage[], i18n: I18n): string | undefined {
   const counts = new Map<string, number>();
   for (const message of messages) {
     if (message.role === "assistant") {
@@ -127,6 +140,5 @@ function summarizeTools(messages: AgentMessage[]): string | undefined {
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([name, count]) => `${name} ×${count}`)
     .join(", ");
-  const base = `Tools: ${total} calls — ${perTool}`;
-  return failures > 0 ? `${base}; ${failures} failed` : base;
+  return i18n.messages.format.tools(total, perTool, failures);
 }

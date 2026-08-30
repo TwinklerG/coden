@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCliProgram } from "../../src/cli/index.js";
 import type { PluginCommandService } from "../../src/cli/plugin-command.js";
+import { I18n } from "../../src/i18n/i18n.js";
 import { InstalledPluginLoader } from "../../src/plugins/installed-loader.js";
 import {
   type InstalledPluginSummary,
@@ -101,7 +102,11 @@ describe("plugin CLI subcommands", () => {
 
   it("dispatches project install by default", async () => {
     const service = fakePluginService();
-    const program = createCliProgram({ pluginService: service, confirm: async () => true });
+    const program = createCliProgram({
+      i18n: new I18n("en"),
+      pluginService: service,
+      confirm: async () => true,
+    });
 
     await program.parseAsync(["node", "coden", "plugin", "install", "npm:@acme/hello@^1"]);
 
@@ -113,7 +118,11 @@ describe("plugin CLI subcommands", () => {
 
   it("dispatches global install and explicit script permission", async () => {
     const service = fakePluginService();
-    const program = createCliProgram({ pluginService: service, confirm: async () => true });
+    const program = createCliProgram({
+      i18n: new I18n("en"),
+      pluginService: service,
+      confirm: async () => true,
+    });
 
     await program.parseAsync([
       "node",
@@ -133,7 +142,11 @@ describe("plugin CLI subcommands", () => {
 
   it("dispatches remove, sync, and list commands", async () => {
     const service = fakePluginService();
-    const program = createCliProgram({ pluginService: service, confirm: async () => true });
+    const program = createCliProgram({
+      i18n: new I18n("en"),
+      pluginService: service,
+      confirm: async () => true,
+    });
 
     await program.parseAsync([
       "node",
@@ -159,7 +172,11 @@ describe("plugin CLI subcommands", () => {
 
   it("rejects plugin list with project and global filters together", async () => {
     const service = fakePluginService();
-    const program = createCliProgram({ pluginService: service, confirm: async () => true });
+    const program = createCliProgram({
+      i18n: new I18n("en"),
+      pluginService: service,
+      confirm: async () => true,
+    });
 
     await program.parseAsync(["node", "coden", "plugin", "list", "--project", "--global"]);
 
@@ -171,7 +188,7 @@ describe("plugin CLI subcommands", () => {
   it("ordinary install asks once and refusal does not call the service", async () => {
     const service = fakePluginService();
     const confirm = vi.fn(async (_message: string) => false);
-    const program = createCliProgram({ pluginService: service, confirm });
+    const program = createCliProgram({ i18n: new I18n("en"), pluginService: service, confirm });
 
     await program.parseAsync(["node", "coden", "plugin", "install", "npm:@acme/hello"]);
 
@@ -185,7 +202,7 @@ describe("plugin CLI subcommands", () => {
   it("--yes skips the ordinary prompt without enabling scripts", async () => {
     const service = fakePluginService();
     const confirm = vi.fn(async (_message: string) => true);
-    const program = createCliProgram({ pluginService: service, confirm });
+    const program = createCliProgram({ i18n: new I18n("en"), pluginService: service, confirm });
 
     await program.parseAsync(["node", "coden", "plugin", "install", "npm:@acme/hello", "--yes"]);
 
@@ -199,7 +216,7 @@ describe("plugin CLI subcommands", () => {
   it("--allow-scripts prints a second warning and asks for script confirmation", async () => {
     const service = fakePluginService();
     const confirm = vi.fn(async (_message: string) => true);
-    const program = createCliProgram({ pluginService: service, confirm });
+    const program = createCliProgram({ i18n: new I18n("en"), pluginService: service, confirm });
 
     await program.parseAsync([
       "node",
@@ -222,7 +239,7 @@ describe("plugin CLI subcommands", () => {
   it("--yes --allow-scripts prints the warning but skips script confirmation", async () => {
     const service = fakePluginService();
     const confirm = vi.fn(async (_message: string) => true);
-    const program = createCliProgram({ pluginService: service, confirm });
+    const program = createCliProgram({ i18n: new I18n("en"), pluginService: service, confirm });
 
     await program.parseAsync([
       "node",
@@ -244,7 +261,11 @@ describe("plugin CLI subcommands", () => {
 
   it("successful install output includes package, version, scope, tools, scripts, and restart", async () => {
     const service = fakePluginService();
-    const program = createCliProgram({ pluginService: service, confirm: async () => true });
+    const program = createCliProgram({
+      i18n: new I18n("en"),
+      pluginService: service,
+      confirm: async () => true,
+    });
 
     await program.parseAsync(["node", "coden", "plugin", "install", "npm:@acme/hello@^1"]);
 
@@ -301,7 +322,11 @@ describe("plugin CLI subcommands", () => {
     process.env.CODEN_FAKE_SECRET = "super-secret-token";
     const service = fakePluginService();
     service.install.mockRejectedValueOnce(new Error("failed with super-secret-token"));
-    const program = createCliProgram({ pluginService: service, confirm: async () => true });
+    const program = createCliProgram({
+      i18n: new I18n("en"),
+      pluginService: service,
+      confirm: async () => true,
+    });
 
     try {
       await program.parseAsync(["node", "coden", "plugin", "install", "npm:@acme/hello"]);
@@ -331,7 +356,11 @@ async function cliHarnessWithFixturePackage(): Promise<{
     new InstalledPluginLoader(),
     builtinTools(),
   );
-  const program = createCliProgram({ pluginService: installer, confirm: async () => true });
+  const program = createCliProgram({
+    i18n: new I18n("en"),
+    pluginService: installer,
+    confirm: async () => true,
+  });
   return {
     workspace,
     dataDir,

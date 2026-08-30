@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { userConfigDir, userDataDir } from "../config/config.js";
 import { TrustStore } from "../config/trust.js";
+import { resolveStartupLanguage } from "../i18n/config.js";
+import { I18n } from "../i18n/i18n.js";
+import { isLanguage, type Language } from "../i18n/language.js";
 import { BunPackageManager } from "../plugins/bun-package-manager.js";
 import { InstalledPluginLoader } from "../plugins/installed-loader.js";
 import {
@@ -30,35 +33,47 @@ import { type PluginCommandService, registerPluginCommand } from "./plugin-comma
 export interface CliDependencies {
   pluginService?: PluginCommandService;
   confirm?: (message: string) => Promise<boolean>;
+  i18n?: I18n;
 }
 
 export function createCliProgram(dependencies: CliDependencies = {}): Command {
+  const i18n = dependencies.i18n ?? new I18n();
+  const m = i18n.messages.cli;
   const confirm = dependencies.confirm ?? createDefaultConfirm;
-  const pluginService = dependencies.pluginService ?? createDefaultPluginService(confirm);
+  const pluginService = dependencies.pluginService ?? createDefaultPluginService(confirm, i18n);
   const program = new Command()
+    .configureHelp({
+      styleTitle: (title) =>
+        i18n.currentLanguage === "zh"
+          ? ({
+              "Usage:": "用法：",
+              "Arguments:": "参数：",
+              "Options:": "选项：",
+              "Commands:": "命令：",
+              "Global Options:": "全局选项：",
+            }[title] ?? title)
+          : title,
+    })
     .name("coden")
-    .description("CodeN — a minimal coding agent")
+    .description(m.description)
     .version(CODEN_VERSION)
-    .argument("[prompt]", "task to execute")
-    .option("-p, --print", "non-interactive print mode", false)
-    .option("--provider <provider>", "openai or anthropic", parseProvider)
-    .option("--model <model-id>", "model identifier")
-    .option(
-      "--resume [session-id]",
-      "resume a previous session, or list sessions when no id is given",
-    )
-    .option("--auto", "skip tool permission confirmations", false)
-    .option("--smart-approve", "use LLM review for ordinary modification permissions", false)
-    .option(
-      "--allow-outside-workspace",
-      "with --auto, allow read/write/edit paths outside the workspace",
-      false,
-    )
-    .option("--verbose", "show detailed runtime status", false)
-    .option("--max-steps <number>", "maximum model steps", positiveInteger)
-    .option("--plugin <path>", "additional local TypeScript plugin or directory", collect, [])
+    .argument("[prompt]", m.promptArgument)
+    .option("-p, --print", m.print, false)
+    .option("--provider <provider>", m.provider, parseProvider)
+    .option("--model <model-id>", m.model)
+    .option("--resume [session-id]", m.resume)
+    .option("--auto", m.auto, false)
+    .option("--smart-approve", m.smartApprove, false)
+    .option("--allow-outside-workspace", m.outside, false)
+    .option("--verbose", m.verbose, false)
+    .option("--max-steps <number>", m.maxSteps, positiveInteger)
+    .option("--plugin <path>", m.plugin, collect, [])
+    .option("--lang <zh|en>", m.lang, (value: string): Language => {
+      if (!isLanguage(value)) throw new Error(i18n.messages.language.invalid(value));
+      return value;
+    })
     .action((prompt: string | undefined, options: AgentCommandOptions) =>
-      runAgentCommand(prompt, options),
+      runAgentCommand(prompt, options, i18n),
     );
 
   registerPluginCommand(program, {
@@ -66,6 +81,7 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
     confirm,
     stdout: process.stdout,
     stderr: process.stderr,
+    i18n,
   });
 
   return program;
@@ -73,6 +89,7 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
 
 function createDefaultPluginService(
   confirm: (message: string) => Promise<boolean>,
+  i18n: I18n,
 ): PluginCommandService {
   const workspace = process.cwd();
   const installer = new PluginInstaller(
@@ -80,10 +97,10 @@ function createDefaultPluginService(
     userDataDir(),
     new BunPackageManager(),
     new InstalledPluginLoader(),
-    builtinTools(),
+    builtinTools(undefined, i18n),
   );
   const trustStore = new TrustStore(path.join(userConfigDir(), "trusted-workspaces.json"));
-  return new TrustingPluginService(installer, workspace, trustStore, confirm);
+  return new TrustingPluginService(installer, workspace, trustStore, confirm, i18n);
 }
 
 class TrustingPluginService implements PluginCommandService {
@@ -92,6 +109,7 @@ class TrustingPluginService implements PluginCommandService {
     private readonly workspace: string,
     private readonly trustStore: TrustStore,
     private readonly confirm: (message: string) => Promise<boolean>,
+    private readonly i18n: I18n,
   ) {}
 
   async install(raw: string, options: PluginOperationOptions): Promise<InstalledPluginSummary> {
@@ -115,10 +133,8 @@ class TrustingPluginService implements PluginCommandService {
   private async ensureProjectTrust(): Promise<void> {
     const realWorkspace = await realpath(this.workspace);
     if (await this.trustStore.isWorkspaceTrusted(realWorkspace)) return;
-    const allowed = await this.confirm(
-      `Project npm plugins in ${realWorkspace} run in-process with full user permissions. Trust this workspace?`,
-    );
-    if (!allowed) throw new Error("workspace is not trusted for project npm plugins");
+    const allowed = await this.confirm(this.i18n.messages.trust.npm(realWorkspace));
+    if (!allowed) throw new Error(this.i18n.messages.trust.denied);
     await this.trustStore.trustWorkspace(realWorkspace);
   }
 }
@@ -145,12 +161,24 @@ function isExecutableEntry(): boolean {
   }
 }
 
+export async function bootstrapCli(argv: readonly string[] = process.argv): Promise<void> {
+  const startup = await resolveStartupLanguage(argv);
+  const i18n = new I18n(startup.language);
+  if (startup.error) {
+    process.stderr.write(`${i18n.messages.cli.error(startup.error)}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  await createCliProgram({ i18n }).parseAsync([...argv]);
+}
+
 if (isExecutableEntry()) {
-  createCliProgram()
-    .parseAsync()
-    .catch((error) => {
-      process.stderr.write(`coden: ${error instanceof Error ? error.message : String(error)}\n`);
-      // 2 = configuration/setup failure, 1 = execution failure (see design §11.4).
-      process.exitCode = error instanceof ConfigError ? 2 : 1;
-    });
+  bootstrapCli().catch((error) => {
+    const i18n = new I18n();
+    process.stderr.write(
+      `${i18n.messages.cli.error(error instanceof Error ? error.message : String(error))}\n`,
+    );
+    // 2 = configuration/setup failure, 1 = execution failure (see design §11.4).
+    process.exitCode = error instanceof ConfigError ? 2 : 1;
+  });
 }

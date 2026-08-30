@@ -1,1 +1,1 @@
-export const CODEN_VERSION = "0.1.6";
+export const CODEN_VERSION = "0.1.7";

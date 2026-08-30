@@ -1,12 +1,14 @@
 import * as readline from "node:readline";
 import pc from "picocolors";
 import type { EventBus, RuntimeEvent } from "../core/events.js";
+import { I18n } from "../i18n/i18n.js";
 import { MarkdownStreamRenderer } from "./markdown.js";
 import { displayWidth, sanitizeTerminalText, truncateDisplay } from "./terminal-text.js";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
 
 export interface TerminalOptions {
+  i18n?: I18n;
   stdout?: NodeJS.WritableStream;
   stderr?: NodeJS.WritableStream;
   tty?: boolean;
@@ -17,6 +19,7 @@ export class TerminalRenderer {
   private readonly stdout: NodeJS.WritableStream;
   private readonly stderr: NodeJS.WritableStream;
   private readonly tty: boolean;
+  private readonly i18n: I18n;
   private readonly markdown: MarkdownStreamRenderer;
   private spinner: NodeJS.Timeout | undefined;
   private frame = 0;
@@ -33,6 +36,7 @@ export class TerminalRenderer {
     events: EventBus,
     private readonly options: TerminalOptions = {},
   ) {
+    this.i18n = options.i18n ?? new I18n("en");
     this.stdout = options.stdout ?? process.stdout;
     this.stderr = options.stderr ?? process.stderr;
     this.tty =
@@ -55,7 +59,7 @@ export class TerminalRenderer {
       if (this.tty) {
         this.startSpinner();
         this.renderActivityLine();
-      } else this.status(`reviewing ${this.reviewingTool}…`);
+      } else this.status(this.i18n.messages.terminal.reviewing(this.reviewingTool));
     }
     if (event.type === "permission.review_completed") {
       this.reviewingTool = undefined;
@@ -66,16 +70,18 @@ export class TerminalRenderer {
       if (decision === "allow")
         this.reviewStatus(
           this.options.verbose
-            ? `AI approved ${name} [${String(event.data?.strictness ?? "medium")}] — ${reason}`
-            : `AI approved ${name}`,
+            ? `${this.i18n.messages.terminal.approved(name)} [${String(event.data?.strictness ?? "medium")}] — ${reason}`
+            : this.i18n.messages.terminal.approved(name),
         );
-      else this.reviewStatus(`AI requested human review — ${reason}`);
+      else this.reviewStatus(this.i18n.messages.terminal.humanReview(reason));
     }
     if (event.type === "permission.review_failed") {
       this.reviewingTool = undefined;
       this.stopSpinner();
       this.reviewStatus(
-        `AI review unavailable — ${sanitizeTerminalText(String(event.data?.message ?? "failed"))}; human approval required`,
+        this.i18n.messages.terminal.reviewUnavailable(
+          sanitizeTerminalText(String(event.data?.message ?? "failed")),
+        ),
       );
     }
     if (event.type === "provider.started") this.startProviderAttempt();
@@ -133,7 +139,7 @@ export class TerminalRenderer {
       if (this.tty) {
         const summary = sanitizeTerminalText(String(event.data?.summary ?? ""));
         this.toolStatus(`◇ ${name}${summary ? `  ${summary}` : ""}`);
-      } else this.status(`tool ${name} started`);
+      } else this.status(this.i18n.messages.terminal.toolStarted(name));
     }
     if (event.type === "tool.completed") {
       const name = sanitizeTerminalText(String(event.data?.name ?? "tool"));
@@ -142,33 +148,50 @@ export class TerminalRenderer {
         const failed = Boolean(event.data?.isError);
         this.toolStatus(`${failed ? "✗" : "✓"} ${name}  ${duration}ms`, failed);
       } else {
-        this.status(`tool ${name} ${event.data?.isError ? "failed" : "completed"} (${duration}ms)`);
+        this.status(
+          this.i18n.messages.terminal.toolDone(name, Boolean(event.data?.isError), duration),
+        );
       }
     }
     if (event.type === "provider.retry" && this.options.verbose)
-      this.status(`provider retry ${String(event.data?.attempt)}`);
+      this.status(this.i18n.messages.terminal.retry(String(event.data?.attempt)));
     if (event.type === "turn.completed") {
       this.endProviderAttempt();
       this.stdout.write("\n");
       this.status(
-        `done: ${String(event.data?.tools)} tools, ${String(event.data?.durationMs)}ms, ${String(event.data?.inputTokens)}/${String(event.data?.outputTokens)} tokens`,
+        this.i18n.messages.terminal.done(
+          String(event.data?.tools),
+          String(event.data?.durationMs),
+          String(event.data?.inputTokens),
+          String(event.data?.outputTokens),
+        ),
       );
     }
     if (event.type === "turn.failed") {
-      this.status(pc.red(`failed: ${String(event.data?.message)}`));
+      this.status(pc.red(this.i18n.messages.terminal.failed(String(event.data?.message))));
     }
     if (event.type === "plugin.loaded" && this.options.verbose) {
-      this.status(`plugin loaded: ${pluginLabel(event)}`);
+      this.status(this.i18n.messages.terminal.pluginLoaded(pluginLabel(event)));
     }
     if (event.type === "plugin.failed") {
-      this.status(pc.red(`plugin failed: ${pluginLabel(event)}${eventMessage(event)}`));
+      this.status(
+        pc.red(
+          `${this.i18n.messages.terminal.pluginFailed(pluginLabel(event))}${eventMessage(event)}`,
+        ),
+      );
     }
     if (event.type === "plugin.unavailable") {
-      this.status(pc.yellow(`plugin unavailable: ${pluginLabel(event)}${eventMessage(event)}`));
+      this.status(
+        pc.yellow(
+          `${this.i18n.messages.terminal.pluginUnavailable(pluginLabel(event))}${eventMessage(event)}`,
+        ),
+      );
     }
     if (event.type === "plugin.restart_required") {
       this.status(
-        pc.yellow(`plugin restart required: ${pluginLabel(event)}${eventMessage(event)}`),
+        pc.yellow(
+          `${this.i18n.messages.terminal.pluginRestart(pluginLabel(event))}${eventMessage(event)}`,
+        ),
       );
     }
   }
@@ -206,7 +229,7 @@ export class TerminalRenderer {
     this.contentStarted = true;
     if (this.tty && startedAt !== undefined && hadReasoning) {
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-      this.stderr.write(`${pc.dim(`thought for ${seconds}s`)}\n`);
+      this.stderr.write(`${pc.dim(this.i18n.messages.terminal.thought(seconds))}\n`);
     }
   }
   private normalizedReasoning(): string {
@@ -252,13 +275,16 @@ export class TerminalRenderer {
   }
   private currentActivityText(maxColumns: number): string {
     if (this.reviewingTool)
-      return this.truncateTail(`reviewing ${this.reviewingTool}…`, maxColumns);
+      return this.truncateTail(
+        this.i18n.messages.terminal.reviewing(this.reviewingTool),
+        maxColumns,
+      );
     const active =
       this.activeToolCallIndex === undefined
         ? undefined
         : this.toolCallPreviews.get(this.activeToolCallIndex);
     if (active) {
-      const label = `preparing ${active.name}…`;
+      const label = this.i18n.messages.terminal.preparing(active.name);
       const normalizedArguments = active.argumentsText.replace(/\s+/g, " ").trim();
       if (!normalizedArguments) return this.truncateTail(label, maxColumns);
       const argumentColumns = Math.max(0, maxColumns - displayWidth(label) - 1);
@@ -267,17 +293,21 @@ export class TerminalRenderer {
     }
     if (this.contentStarted) {
       const preview = this.markdown.preview();
-      return preview === undefined ? "rendering…" : this.truncateTail(preview, maxColumns);
+      return preview === undefined
+        ? this.i18n.messages.terminal.rendering
+        : this.truncateTail(preview, maxColumns);
     }
     const reasoning = this.normalizedReasoning();
-    return reasoning ? this.truncateTail(reasoning, maxColumns) : "thinking";
+    return reasoning
+      ? this.truncateTail(reasoning, maxColumns)
+      : this.i18n.messages.terminal.thinking;
   }
   private truncateTail(text: string, maxColumns: number): string {
     return truncateDisplay(text, maxColumns, "tail");
   }
   private startSpinner(): void {
     if (!this.tty || this.spinner) {
-      if (!this.tty && this.options.verbose) this.status("requesting model");
+      if (!this.tty && this.options.verbose) this.status(this.i18n.messages.terminal.requesting);
       return;
     }
     this.spinner = setInterval(() => {

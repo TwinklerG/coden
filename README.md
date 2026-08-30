@@ -1,5 +1,7 @@
 # CodeN
 
+[中文](README.md) | [English](README.en.md)
+
 <!-- markdownlint-disable MD013 -->
 
 CodeN（Code NJU）是一个用 TypeScript 独立实现的极简编程智能体。它直接使用模型原生 Tool Calling，在本地读取、修改文件和执行命令；不依赖 Agent 框架或服务端代码执行。
@@ -10,7 +12,7 @@ CodeN（Code NJU）是一个用 TypeScript 独立实现的极简编程智能体�
 
 ```bash
 bun add -g @twinklerg/coden     # 或 npm install -g @twinklerg/coden
-coden --version                 # 0.1.6
+coden --version                 # 0.1.7
 coden --help
 ```
 
@@ -35,6 +37,7 @@ export CODEN_OPENAI_API_KEY=...
 coden "修复当前项目的测试失败"
 coden -p --auto "实现功能并运行测试"
 coden --smart-approve "实现功能并运行测试"
+coden --lang en --help          # 仅为当前进程切换为英文
 
 export CODEN_ANTHROPIC_API_KEY=...
 coden --provider anthropic --model claude-sonnet-4-20250514
@@ -45,9 +48,11 @@ coden --resume                   # 列出当前工作区的会话
 
 无 prompt 时进入 REPL。交互式 REPL 支持完整多行编辑：Enter 提交；终端可区分该按键时，Shift+Enter 插入换行；所有终端均可在行尾输入单个 `\` 后按 Enter 继续下一行（`\\` 表示保留一个字面反斜杠）。支持多行粘贴、跨行方向键编辑和当前进程内输入历史。传统终端若无法区分 Shift+Enter，请使用行尾 `\`。
 
-支持 `/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new` 和 `/quit`。启动横幅会显示当前版本与 16 位 workspace hash。
+支持 `/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new`、`/lang` 和 `/quit`。`/lang` 列出 `zh`、`en` 及当前语言；`/lang en` 或 `/lang zh` 会原子写入用户配置并立即切换界面、系统提示词和内建工具描述。启动横幅会显示当前版本与 16 位 workspace hash。
 
-核心选项：`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--smart-approve`、`--auto`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。
+CodeN 固定默认中文，不读取系统区域设置。`--lang zh|en` 仅覆盖当前进程且不写配置。系统提示词、内建工具和界面共享同一语言；用户在单次任务中明确要求其他回复语言时，Agent 可以遵从，但不会更改界面或持久化偏好。第三方插件的名称、描述、输出和错误始终保留插件作者原文。
+
+核心选项：`--lang`、`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--smart-approve`、`--auto`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。
 
 ## 配置
 
@@ -55,6 +60,7 @@ coden --resume                   # 列出当前工作区的会话
 
 ```json
 {
+  "language": "zh",
   "provider": "openai",
   "model": "gpt-5-mini",
   "approvalModel": "gpt-5-mini",
@@ -69,6 +75,8 @@ coden --resume                   # 列出当前工作区的会话
   }
 }
 ```
+
+`language` 是用户专属偏好，只从 `~/.config/coden/config.json` 读取；项目 `.coden/config.json` 中的同名字段会被忽略，不能覆盖个人界面或 Agent 语言。只接受规范值 `zh`、`en`。启动参数 `--lang` 的优先级最高，但仅影响本次进程；REPL `/lang <zh|en>` 会保留配置中的其他字段，以 `0600` 权限原子更新用户文件。
 
 支持 `CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`CODEN_OPENAI_API_KEY`、`CODEN_OPENAI_BASE_URL`、`CODEN_ANTHROPIC_API_KEY`、`XDG_CONFIG_HOME` 和 `XDG_DATA_HOME`。
 

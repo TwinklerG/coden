@@ -16,6 +16,7 @@ const baseEnv = {
   CODEN_PROVIDER: "",
   CODEN_MODEL: "",
   CODEN_MAX_STEPS: "",
+  XDG_CONFIG_HOME: path.join(os.tmpdir(), `coden-cli-config-${process.pid}`),
 };
 
 describe("REPL input helpers", () => {
@@ -74,7 +75,7 @@ describe("CLI exit codes", () => {
       timeout: 30_000,
     });
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain("mutually exclusive");
+    expect(result.stderr).toContain("不能同时使用");
   });
 
   it("rejects --allow-outside-workspace without --auto", () => {
@@ -84,7 +85,7 @@ describe("CLI exit codes", () => {
       timeout: 30_000,
     });
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain("requires --auto");
+    expect(result.stderr).toContain("必须与 --auto 一起使用");
   });
 
   it("preserves positional prompt parsing", () => {
@@ -177,9 +178,9 @@ describe("CLI session list and resume", () => {
       timeout: 30_000,
     });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain(`Version: ${CODEN_VERSION}`);
-    expect(result.stdout).toContain(`Workspace hash: ${workspaceHash(workspace)}`);
-    expect(result.stdout).toContain("Resumed session my-session");
+    expect(result.stdout).toContain(`版本：${CODEN_VERSION}`);
+    expect(result.stdout).toContain(`工作区哈希：${workspaceHash(workspace)}`);
+    expect(result.stdout).toContain("已恢复会话 my-session");
     expect(result.stdout).toContain("> hello world");
   });
 });

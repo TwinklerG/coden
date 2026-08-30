@@ -1,4 +1,5 @@
 import type { AgentMessage, ModelRequest, ToolDefinition } from "../core/types.js";
+import { I18n } from "../i18n/i18n.js";
 
 export interface ContextBudget {
   contextWindow: number;
@@ -44,6 +45,7 @@ export class ContextManager {
   constructor(
     readonly budget: ContextBudget,
     private readonly threshold = 0.8,
+    private readonly i18n: I18n = new I18n("en"),
   ) {}
   inputBudget(): number {
     return this.budget.contextWindow - this.budget.reservedOutputTokens - this.budget.safetyMargin;
@@ -73,7 +75,7 @@ export class ContextManager {
       this.compactedThrough = this.compactionRange.end;
       this.summary = {
         role: "system",
-        content: `Compacted conversation summary:\n${summarizeDeterministically(oldMessages)}`,
+        content: `${this.i18n.messages.context.compactTitle}\n${summarizeDeterministically(oldMessages, this.i18n)}`,
       };
       projected = this.project(system, retained);
       estimated = this.estimator.estimateMessages(projected) + toolTokens;
@@ -107,7 +109,7 @@ export class ContextManager {
     }
     this.summary = {
       role: "system",
-      content: `Emergency compacted summary:\n${summarizeDeterministically(oldMessages)}`,
+      content: `${this.i18n.messages.context.emergencyTitle}\n${summarizeDeterministically(oldMessages, this.i18n)}`,
     };
     const projected = this.project(system, retained);
     const estimated =
@@ -159,10 +161,14 @@ function buildMessageUnits(messages: AgentMessage[]): MessageUnit[] {
   return units;
 }
 
-function summarizeDeterministically(messages: AgentMessage[]): string {
+function summarizeDeterministically(messages: AgentMessage[], i18n: I18n): string {
   const lines = messages.map((message) => {
     if (message.role === "tool")
-      return `Tool ${message.name} (${message.isError ? "error" : "ok"}): ${message.content.slice(0, 300)}`;
+      return i18n.messages.context.toolLine(
+        message.name,
+        message.isError,
+        message.content.slice(0, 300),
+      );
     return `${message.role}: ${message.content.slice(0, 500)}`;
   });
   return lines.join("\n").slice(0, 6000);

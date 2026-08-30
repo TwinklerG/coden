@@ -200,7 +200,7 @@ describe("cli format helpers", () => {
     const over = renderResumeTranscript("s", [
       { role: "assistant", content: "x".repeat(ASSISTANT_TRUNCATE_LIMIT + 40), toolCalls: [] },
     ]);
-    expect(over).toContain("…（已省略 40 个字符）");
+    expect(over).toContain("… (40 characters omitted)");
     expect(stripVTControlCharacters(over)).toContain("x".repeat(ASSISTANT_TRUNCATE_LIMIT));
     expect(stripVTControlCharacters(over)).not.toContain("x".repeat(ASSISTANT_TRUNCATE_LIMIT + 1));
 
@@ -215,7 +215,7 @@ describe("cli format helpers", () => {
     const transcript = renderResumeTranscript("s", [
       { role: "assistant", content: emoji, toolCalls: [] },
     ]);
-    expect(transcript).toContain("…（已省略 1 个字符）");
+    expect(transcript).toContain("… (1 characters omitted)");
   });
 
   it("summarizes tool usage and failures", () => {

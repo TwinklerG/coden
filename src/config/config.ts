@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DEFAULT_LANGUAGE, isLanguage, type Language } from "../i18n/language.js";
 
 export type ProviderName = "openai" | "anthropic";
 export type ApprovalStrictness = "soft" | "medium" | "hard";
@@ -16,6 +17,7 @@ export interface CodeNConfig {
   plugins: string[];
   dataDir: string;
   env: Record<string, string>;
+  language: Language;
 }
 export type ConfigOverrides = Partial<Omit<CodeNConfig, "plugins" | "dataDir" | "env">> & {
   plugins?: string[];
@@ -32,10 +34,12 @@ export function userDataDir(): string {
     ? path.join(process.env.XDG_DATA_HOME, "coden")
     : path.join(os.homedir(), ".local", "share", "coden");
 }
-async function readJson(file: string): Promise<ConfigOverrides> {
+async function readJson(file: string, includeLanguage = false): Promise<ConfigOverrides> {
   try {
-    const raw = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
-    return pickOverrides(raw);
+    const value: unknown = JSON.parse(await readFile(file, "utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("config root must be a JSON object");
+    return pickOverrides(value as Record<string, unknown>, includeLanguage);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw new Error(
@@ -44,8 +48,12 @@ async function readJson(file: string): Promise<ConfigOverrides> {
   }
 }
 
-function pickOverrides(raw: Record<string, unknown>): ConfigOverrides {
+function pickOverrides(raw: Record<string, unknown>, includeLanguage = false): ConfigOverrides {
   const overrides: ConfigOverrides = {};
+  if (includeLanguage && raw.language !== undefined) {
+    if (!isLanguage(raw.language)) throw new Error("language must be zh or en");
+    overrides.language = raw.language;
+  }
   if (raw.provider === "openai" || raw.provider === "anthropic") overrides.provider = raw.provider;
   if (typeof raw.model === "string") overrides.model = raw.model;
   if (raw.approvalModel !== undefined) {
@@ -98,8 +106,12 @@ export async function loadConfig(
     plugins: [],
     dataDir: userDataDir(),
     env: {},
+    language: DEFAULT_LANGUAGE,
   };
-  const user = await readJson(path.join(userConfigDir(), "config.json"));
+  const user = await readJson(
+    path.join(userConfigDir(), "config.json"),
+    cli.language === undefined,
+  );
   const project = await readJson(path.join(workspace, ".coden", "config.json"));
   const env: ConfigOverrides = {};
   if (process.env.CODEN_PROVIDER === "openai" || process.env.CODEN_PROVIDER === "anthropic")

@@ -1,10 +1,14 @@
 import type { ToolDefinition } from "../../core/types.js";
+import { I18n } from "../../i18n/i18n.js";
 import { SkillActivationError, type SkillRegistry } from "../../skills/registry.js";
 
-export function createActivateSkillTool(skills: SkillRegistry): ToolDefinition {
+export function createActivateSkillTool(
+  skills: SkillRegistry,
+  i18n: I18n = new I18n("en"),
+): ToolDefinition {
   return {
     name: "activate_skill",
-    description: "Load full instructions for one available Agent Skill by name.",
+    description: i18n.messages.tools.activateSkill,
     risk: "read",
     inputSchema: {
       type: "object",
@@ -16,7 +20,9 @@ export function createActivateSkillTool(skills: SkillRegistry): ToolDefinition {
       const { name } = input as { name: string };
       try {
         const activated = await skills.activate(name);
-        return { content: `Skill root: ${activated.skill.rootRealPath}\n\n${activated.content}` };
+        return {
+          content: `${i18n.messages.skills.root(activated.skill.rootRealPath)}\n\n${activated.content}`,
+        };
       } catch (error) {
         if (error instanceof SkillActivationError)
           return { content: `${error.code}: ${error.message}`, isError: true };

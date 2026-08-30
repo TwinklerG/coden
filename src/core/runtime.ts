@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ContextManager } from "../context/manager.js";
 import { toModelRequest } from "../context/manager.js";
+import type { I18n } from "../i18n/i18n.js";
 import type { SessionStore } from "../sessions/store.js";
 import type { ToolExecutor } from "../tools/executor.js";
 import type { ToolRegistry } from "../tools/registry.js";
@@ -21,6 +22,7 @@ export interface RuntimeOptions {
   retries?: number;
   retryBaseMs?: number;
   systemPrompt?: string;
+  i18n?: I18n;
 }
 export interface TurnResult {
   answer: string;
@@ -59,6 +61,14 @@ export class AgentRuntime {
               "You are CodeN, a concise coding agent. Inspect before editing, use tools carefully, and verify changes.",
           },
         ];
+  }
+
+  updateSystemPrompt(content: string): void {
+    const index = this.messages.findIndex((message) => message.role === "system");
+    const system = { role: "system" as const, content };
+    if (index >= 0) this.messages[index] = system;
+    else this.messages.unshift(system);
+    this.options.systemPrompt = content;
   }
 
   async reset(): Promise<void> {
@@ -223,6 +233,7 @@ export class AgentRuntime {
             {
               role: "system",
               content:
+                this.options.i18n?.messages.runtime.compactPrompt ??
                 "Rewrite the supplied coding-session summary concisely. Preserve goals, constraints, decisions, changed files, tool/test results, unresolved errors, and next steps. Return only the summary.",
             },
             { role: "user", content: deterministicSummary },
@@ -233,7 +244,7 @@ export class AgentRuntime {
         }),
       );
       if (result.toolCalls.length > 0 || !result.text.trim()) return undefined;
-      return `Compacted conversation summary:\n${result.text.trim()}`;
+      return `${this.options.i18n?.messages.runtime.compactTitle ?? "Compacted conversation summary:"}\n${result.text.trim()}`;
     } catch (error) {
       await this.events.emit(
         "context.compaction_failed",

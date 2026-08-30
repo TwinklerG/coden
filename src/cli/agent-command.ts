@@ -20,6 +20,10 @@ import type {
   ToolDefinition,
   ToolRisk,
 } from "../core/types.js";
+import { saveUserLanguage } from "../i18n/config.js";
+import { I18n } from "../i18n/i18n.js";
+import type { Language } from "../i18n/language.js";
+import { buildSystemPrompt } from "../i18n/prompts.js";
 import { TerminalRenderer } from "../observability/terminal.js";
 import { JSONLTraceWriter } from "../observability/trace.js";
 import {
@@ -63,6 +67,7 @@ export interface AgentCommandOptions {
   maxSteps?: number;
   plugin: string[];
   print: boolean;
+  lang?: Language;
 }
 
 export class ConfigError extends Error {}
@@ -84,16 +89,18 @@ async function loadConfigOrFail(
 export async function runAgentCommand(
   initialPrompt: string | undefined,
   options: AgentCommandOptions,
+  i18n: I18n = new I18n(options.lang),
 ): Promise<void> {
   const workspace = process.cwd();
   if (options.auto && options.smartApprove)
-    throw new ConfigError("--smart-approve and --auto are mutually exclusive");
+    throw new ConfigError(i18n.messages.cli.conflictingApproval);
   if (options.allowOutsideWorkspace && !options.auto)
-    throw new ConfigError("--allow-outside-workspace requires --auto");
+    throw new ConfigError(i18n.messages.cli.outsideRequiresAuto);
   const config = await loadConfigOrFail(workspace, {
     ...(options.provider ? { provider: options.provider } : {}),
     ...(options.model ? { model: options.model } : {}),
     ...(options.maxSteps ? { maxSteps: options.maxSteps } : {}),
+    language: i18n.currentLanguage,
     plugins: options.plugin,
   });
   const events = new EventBus();
@@ -118,7 +125,7 @@ export async function runAgentCommand(
   const session = new SessionStore(config.dataDir, workspace, resumedId);
   if (options.resume === true) {
     rl?.close();
-    stdout.write(formatSessionList(await session.list()));
+    stdout.write(formatSessionList(await session.list(), undefined, i18n));
     return;
   }
   let initialMessages: AgentMessage[] | undefined;
@@ -132,10 +139,11 @@ export async function runAgentCommand(
     recoveredCompactionEnd = recovered.compactionRange?.end ?? 0;
     for (const warning of recovered.warnings) process.stderr.write(`coden: ${warning}\n`);
     if (!options.print)
-      resumeTranscript = renderResumeTranscript(session.sessionId, recovered.messages);
+      resumeTranscript = renderResumeTranscript(session.sessionId, recovered.messages, i18n);
   }
   const trace = new JSONLTraceWriter(session.tracePath, events, () => session.isCreated);
   const renderer = new TerminalRenderer(events, {
+    i18n,
     verbose: options.verbose,
     printMode: options.print,
   });
@@ -155,13 +163,14 @@ export async function runAgentCommand(
       );
   }
   const skills = skillDiscovery.registry;
-  const builtins = builtinTools(skills);
+  let builtins = builtinTools(skills, i18n);
   const permissionMode: PermissionMode = options.auto
     ? "auto"
     : options.smartApprove
       ? "smart"
       : "manual";
-  const permissionPrompt = permissionMode === "auto" ? undefined : createPermissionPrompt(ask);
+  const permissionPrompt =
+    permissionMode === "auto" ? undefined : createPermissionPrompt(ask, i18n);
   const reviewer =
     permissionMode === "smart"
       ? new LlmApprovalReviewer(
@@ -169,6 +178,8 @@ export async function runAgentCommand(
           config.approvalModel ?? config.model,
           config.approvalStrictness,
           events,
+          30_000,
+          i18n,
         )
       : undefined;
   const permissions = new PermissionPolicy(permissionMode, permissionPrompt, reviewer);
@@ -182,7 +193,7 @@ export async function runAgentCommand(
     options.allowOutsideWorkspace,
   );
   const trustStore = new TrustStore(path.join(userConfigDir(), "trusted-workspaces.json"));
-  const ensureWorkspaceTrusted = createWorkspaceTrustGate(workspace, trustStore, ask);
+  const ensureWorkspaceTrusted = createWorkspaceTrustGate(workspace, trustStore, ask, i18n);
   const loader = new PluginLoader(builtins, events, async () => ensureWorkspaceTrusted());
   const installedLoader = new InstalledPluginLoader();
   const globalPaths = resolvePluginPaths(workspace, "global", config.dataDir);
@@ -228,6 +239,7 @@ export async function runAgentCommand(
     return { composed, global, project };
   };
   const reload = async () => {
+    loader.setBuiltins(builtins);
     const installed = await loadInstalled();
     const loaded = await loader.load(pluginDirs, installed.composed.registry);
     registry.replaceWith(loaded.registry);
@@ -235,17 +247,25 @@ export async function runAgentCommand(
   };
   await reload();
   const projectInstructions = await readProjectInstructions(workspace);
-  const systemPrompt = buildSystemPrompt(projectInstructions, formatSkillCatalog(skills));
+  const systemPrompt = buildSystemPrompt(
+    i18n,
+    projectInstructions,
+    formatSkillCatalog(skills, i18n),
+  );
   if (initialMessages?.length) {
     if (initialMessages[0]?.role === "system")
       initialMessages[0] = { role: "system", content: systemPrompt };
     else initialMessages.unshift({ role: "system", content: systemPrompt });
   }
-  const contextManager = new ContextManager({
-    contextWindow: config.contextWindow,
-    reservedOutputTokens: config.reservedOutputTokens,
-    safetyMargin: config.safetyMargin,
-  });
+  const contextManager = new ContextManager(
+    {
+      contextWindow: config.contextWindow,
+      reservedOutputTokens: config.reservedOutputTokens,
+      safetyMargin: config.safetyMargin,
+    },
+    0.8,
+    i18n,
+  );
   if (recoveredSummary) contextManager.setSummary(recoveredSummary, recoveredCompactionEnd);
   const runtime = new AgentRuntime(
     provider,
@@ -258,6 +278,7 @@ export async function runAgentCommand(
       model: config.model,
       maxSteps: config.maxSteps,
       systemPrompt,
+      i18n,
     },
     initialMessages,
   );
@@ -266,7 +287,7 @@ export async function runAgentCommand(
       await runTurn(runtime, initialPrompt, rl);
       return;
     }
-    if (options.print) throw new Error("print mode requires a prompt");
+    if (options.print) throw new Error(i18n.messages.cli.printRequiresPrompt);
     await repl(
       runtime,
       session,
@@ -277,6 +298,24 @@ export async function runAgentCommand(
       editor,
       workspaceHash(workspace),
       resumeTranscript,
+      i18n,
+      async (language) => {
+        await saveUserLanguage(language);
+        const previous = i18n.currentLanguage;
+        try {
+          i18n.setLanguage(language);
+          builtins = builtinTools(skills, i18n);
+          await reload();
+          runtime.updateSystemPrompt(
+            buildSystemPrompt(i18n, projectInstructions, formatSkillCatalog(skills, i18n)),
+          );
+        } catch (error) {
+          i18n.setLanguage(previous);
+          builtins = builtinTools(skills, i18n);
+          await reload();
+          throw error;
+        }
+      },
     );
   } finally {
     editor?.dispose();
@@ -341,6 +380,7 @@ export function createWorkspaceTrustGate(
   workspace: string,
   store: TrustStore,
   ask: Question,
+  i18n: I18n = new I18n("en"),
 ): () => Promise<boolean> {
   return async () => {
     if (await store.isWorkspaceTrusted(workspace)) return true;
@@ -350,10 +390,7 @@ export function createWorkspaceTrustGate(
     } catch {
       return false;
     }
-    const allowed = await yesNo(
-      ask,
-      `Project plugins in ${realWorkspace} run in-process with full user permissions. Trust this workspace? [y/N] `,
-    );
+    const allowed = await yesNo(ask, i18n.messages.trust.local(realWorkspace));
     if (allowed) await store.trustWorkspace(workspace);
     return allowed;
   };
@@ -435,14 +472,6 @@ async function readProjectInstructions(workspace: string): Promise<string> {
   }
 }
 
-function buildSystemPrompt(projectInstructions: string, skillCatalog: string): string {
-  return (
-    "You are CodeN, a concise coding agent. Inspect before editing, use tools carefully, and verify changes." +
-    (projectInstructions ? `\n\nProject instructions:\n${projectInstructions}` : "") +
-    (skillCatalog ? `\n\n${skillCatalog}` : "")
-  );
-}
-
 function createProvider(name: ProviderName): ModelProvider {
   if (name === "anthropic") {
     const apiKey = process.env.CODEN_ANTHROPIC_API_KEY;
@@ -466,21 +495,25 @@ async function repl(
   rl: Interface | undefined,
   editor: MultilineEditor | undefined,
   workspaceId: string,
-  resumeTranscript?: string,
+  resumeTranscript: string | undefined,
+  i18n: I18n,
+  switchLanguage: (language: Language) => Promise<void>,
 ): Promise<void> {
   stdout.write(CODEN_BANNER);
-  stdout.write(`Version: ${CODEN_VERSION}\n`);
-  stdout.write(`Workspace hash: ${workspaceId}\n`);
+  stdout.write(`${i18n.messages.repl.version(CODEN_VERSION)}\n`);
+  stdout.write(`${i18n.messages.repl.workspace(workspaceId)}\n`);
   stdout.write(
     resumeTranscript
-      ? `${resumeTranscript}\n\nType /help for commands.\n`
-      : `CodeN session ${session.sessionId}. Type /help for commands.\n`,
+      ? `${resumeTranscript}\n\n${i18n.messages.repl.resumedHelp}\n`
+      : `${i18n.messages.repl.session(session.sessionId)}\n`,
   );
   while (true) {
     const result = editor
       ? await editor.read()
       : await collectFallbackInput(async (prompt) => {
-          const line = await question(requireInterface(rl), prompt);
+          const localizedPrompt =
+            prompt === "> " ? (i18n.currentLanguage === "zh" ? "任务 > " : "Task > ") : prompt;
+          const line = await question(requireInterface(rl), localizedPrompt);
           return line === EOF ? undefined : line;
         });
     if (result.type === "eof") break;
@@ -489,15 +522,15 @@ async function repl(
     if (classified.type === "empty") continue;
     if (classified.type === "command" && classified.command === "/quit") break;
     if (classified.type === "command" && classified.command === "/help") {
-      stdout.write("/help /skills /session /sessions /compact /reload /new /quit\n");
+      stdout.write(i18n.messages.repl.help);
       continue;
     }
     if (classified.type === "command" && classified.command === "/skills") {
-      stdout.write(formatSkillsList(skills));
+      stdout.write(formatSkillsList(skills, undefined, i18n));
       continue;
     }
     if (classified.type === "command" && classified.command === "/sessions") {
-      stdout.write(formatSessionList(await session.list(), session.sessionId));
+      stdout.write(formatSessionList(await session.list(), session.sessionId, i18n));
       continue;
     }
     if (classified.type === "command" && classified.command === "/session") {
@@ -506,22 +539,46 @@ async function repl(
     }
     if (classified.type === "command" && classified.command === "/compact") {
       await runtime.compact();
-      stdout.write("Context compacted.\n");
+      stdout.write(i18n.messages.repl.compacted);
       continue;
     }
     if (classified.type === "command" && classified.command === "/new") {
       await runtime.reset();
-      stdout.write("Started a new conversation in this session.\n");
+      stdout.write(i18n.messages.repl.newConversation);
       continue;
     }
     if (classified.type === "command" && classified.command === "/reload") {
       const result = await reload();
       stdout.write(
-        `Loaded: ${result.loaded.join(", ") || "none"}; failed: ${result.failed.length}; tools: ${registry
-          .list()
-          .map((tool) => tool.name)
-          .join(", ")}\n`,
+        i18n.messages.repl.loaded(
+          result.loaded.join(", "),
+          result.failed.length,
+          registry
+            .list()
+            .map((tool) => tool.name)
+            .join(", "),
+        ),
       );
+      continue;
+    }
+    if (classified.type === "language") {
+      if (!classified.language) {
+        stdout.write(formatLanguageList(i18n));
+        continue;
+      }
+      if (classified.language !== "zh" && classified.language !== "en") {
+        stdout.write(`${i18n.messages.language.invalid(classified.language)}\n`);
+        stdout.write(formatLanguageList(i18n));
+        continue;
+      }
+      try {
+        await switchLanguage(classified.language);
+        stdout.write(`${i18n.messages.language.changed(i18n.displayName(classified.language))}\n`);
+      } catch (error) {
+        stdout.write(
+          `${i18n.messages.language.saveFailed(error instanceof Error ? error.message : String(error))}\n`,
+        );
+      }
       continue;
     }
     if (classified.type === "message") await runTurn(runtime, classified.text, rl);
@@ -530,7 +587,7 @@ async function repl(
 
 type Question = (message: string, signal?: AbortSignal) => Promise<string>;
 
-function createPermissionPrompt(ask: Question) {
+function createPermissionPrompt(ask: Question, i18n: I18n = new I18n("en")) {
   return async (
     tool: ToolDefinition,
     call: ToolCall,
@@ -538,7 +595,7 @@ function createPermissionPrompt(ask: Question) {
     signal?: AbortSignal,
   ): Promise<PermissionDecision> => {
     const columns = (stdout as NodeJS.WritableStream & { columns?: number }).columns ?? 80;
-    const answer = await ask(formatPermissionQuestion(tool, call, risk, columns), signal);
+    const answer = await ask(formatPermissionQuestion(tool, call, risk, columns, i18n), signal);
     return answer.toLowerCase() === "y"
       ? "allow_once"
       : answer.toLowerCase() === "s" && risk !== "dangerous"
@@ -593,9 +650,17 @@ const REPL_COMMANDS = new Set([
 
 export function classifyReplInput(
   text: string,
-): { type: "empty" } | { type: "command"; command: string } | { type: "message"; text: string } {
+):
+  | { type: "empty" }
+  | { type: "command"; command: string }
+  | { type: "language"; language?: string }
+  | { type: "message"; text: string } {
   if (!text.trim()) return { type: "empty" };
   const trimmed = text.trim();
+  if (!text.includes("\n") && (trimmed === "/lang" || trimmed.startsWith("/lang "))) {
+    const language = trimmed.slice("/lang".length).trim();
+    return language ? { type: "language", language } : { type: "language" };
+  }
   if (!text.includes("\n") && REPL_COMMANDS.has(trimmed)) {
     return { type: "command", command: trimmed };
   }
@@ -616,6 +681,16 @@ export async function collectFallbackInput(
     draft = resolved.text;
     firstLine = false;
   }
+}
+
+function formatLanguageList(i18n: I18n): string {
+  const lines = i18n.supportedLanguages.map((language) => {
+    const marker = language === i18n.currentLanguage ? "*" : " ";
+    const current =
+      language === i18n.currentLanguage ? `（${i18n.messages.language.current}）` : "";
+    return `${marker} ${language} - ${i18n.displayName(language)}${current}`;
+  });
+  return `${i18n.messages.language.supported}\n${lines.join("\n")}\n${i18n.messages.language.usage}\n`;
 }
 
 function requireInterface(rl: Interface | undefined): Interface {
