@@ -5,5 +5,8 @@ export default defineConfig({
     include: ["test/**/*.test.ts"],
     testTimeout: 10_000,
     coverage: { reporter: ["text"] },
+    env: {
+      NO_COLOR: "1",
+    },
   },
 });
