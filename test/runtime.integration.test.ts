@@ -221,8 +221,7 @@ describe("AgentRuntime integration", () => {
     const loader = new PluginLoader(
       builtinTools(),
       new EventBus(),
-      true,
-      undefined,
+      async () => true,
       async (specifier) => {
         const source = await readFile(new URL(specifier), "utf8");
         return {

@@ -16,7 +16,7 @@ await mkdir(pluginDir);
 const pluginFile = path.join(pluginDir, "hello.ts");
 await writeFile(pluginFile, v1);
 
-const loader = new PluginLoader(builtinTools(), new EventBus(), true);
+const loader = new PluginLoader(builtinTools(), new EventBus());
 const first = await loader.load([{ path: pluginDir, project: false }]);
 const firstResult = await first.registry
   .get("hello")

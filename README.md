@@ -117,8 +117,8 @@ npx skills add TwinklerG/CodeN --skill coden-tool-plugin-development
 
 | 模式 | 工作区内 `read`/`write`/`edit` | 工作区外 `read`/`write`/`edit` |
 | --- | --- | --- |
-| 默认交互模式 | 人工确认 | 作为修改操作请求逐次或会话授权 |
-| `--smart-approve` | 普通修改逐次由独立 LLM 审查；不确定时人工确认 | 直接人工确认 |
+| 默认交互模式 | `read` 自动允许；`write`/`edit` 人工确认 | 作为修改操作请求逐次或会话授权 |
+| `--smart-approve` | `read` 自动允许；普通 `write`/`edit` 逐次由独立 LLM 审查，不确定时人工确认 | 直接人工确认 |
 | `--auto` | 自动允许 | 返回 `permission.outside_workspace_denied` |
 | `--auto --allow-outside-workspace` | 自动允许 | 自动允许 |
 

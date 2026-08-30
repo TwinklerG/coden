@@ -53,21 +53,26 @@ describe("plugins and terminal", () => {
     events.on((event) => {
       seen.push(`${event.type}:${JSON.stringify(event.data ?? {})}`);
     });
-    const loader = new PluginLoader(builtinTools(), events, true, undefined, async (specifier) => {
-      if (specifier.includes("bad.ts")) return { default: 42 };
-      const source = await readFile(new URL(specifier), "utf8");
-      return {
-        default: {
-          name: "hello",
-          description: "hello",
-          risk: "read",
-          inputSchema: { type: "object" },
-          async execute() {
-            return { content: source.includes("v2") ? "v2" : "v1" };
+    const loader = new PluginLoader(
+      builtinTools(),
+      events,
+      async () => true,
+      async (specifier) => {
+        if (specifier.includes("bad.ts")) return { default: 42 };
+        const source = await readFile(new URL(specifier), "utf8");
+        return {
+          default: {
+            name: "hello",
+            description: "hello",
+            risk: "read",
+            inputSchema: { type: "object" },
+            async execute() {
+              return { content: source.includes("v2") ? "v2" : "v1" };
+            },
           },
-        },
-      };
-    });
+        };
+      },
+    );
     const active = new ToolRegistry(builtinTools());
     const first = await loader.load([{ path: directory, project: true }]);
     active.replaceWith(first.registry);
@@ -114,17 +119,22 @@ describe("plugins and terminal", () => {
       pluginName: "@acme/installed",
       pluginVersion: "1.0.0",
     });
-    const loaded = await new PluginLoader(builtinTools(), events, true, undefined, async () => ({
-      default: {
-        name: "local_extension",
-        description: "local",
-        risk: "read",
-        inputSchema: { type: "object" },
-        async execute() {
-          return { content: "ok" };
+    const loaded = await new PluginLoader(
+      builtinTools(),
+      events,
+      async () => true,
+      async () => ({
+        default: {
+          name: "local_extension",
+          description: "local",
+          risk: "read",
+          inputSchema: { type: "object" },
+          async execute() {
+            return { content: "ok" };
+          },
         },
-      },
-    })).load([{ path: directory, project: true }], base);
+      }),
+    ).load([{ path: directory, project: true }], base);
     expect(loaded.registry.get("installed_extension")).toBe(installed);
     const localSource = loaded.registry.source("local_extension");
     expect(localSource).toMatchObject({ kind: "local" });
@@ -141,7 +151,7 @@ describe("plugins and terminal", () => {
       path.join(directory, "hello.ts"),
       `export default { name: "hello", description: "hello", risk: "read", inputSchema: { type: "object" }, async execute() { return { content: "ok" }; } };\n`,
     );
-    const loader = new PluginLoader(builtinTools(), new EventBus(), false);
+    const loader = new PluginLoader(builtinTools(), new EventBus());
     const result = await loader.load([{ path: directory, project: true }]);
     expect(result.registry.list()).toHaveLength(5);
     expect(result.loaded).toEqual([]);
@@ -150,7 +160,7 @@ describe("plugins and terminal", () => {
   it("refuses untrusted project plugin directory", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "coden-plugin-"));
     await mkdir(path.join(root, "plugins"));
-    const loader = new PluginLoader(builtinTools(), new EventBus(), false, async () => false);
+    const loader = new PluginLoader(builtinTools(), new EventBus(), async () => false);
     const result = await loader.load([{ path: path.join(root, "plugins"), project: true }]);
     expect(result.registry.list()).toHaveLength(5);
   });
