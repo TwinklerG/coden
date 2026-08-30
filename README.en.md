@@ -12,7 +12,7 @@ CodeN (Code NJU) is a minimal coding agent implemented independently in TypeScri
 
 ```bash
 bun add -g @twinklerg/coden     # or npm install -g @twinklerg/coden
-coden --version                 # 0.1.7
+coden --version                 # 0.1.8
 coden --help
 ```
 
