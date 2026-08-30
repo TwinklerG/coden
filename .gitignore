@@ -10,6 +10,4 @@ coverage/
 !.coden/plugin-runtime/.gitignore
 !.coden/plugin-runtime/bun.lock
 .agents/skills/*
-!.agents/skills/coden-tool-plugin-development/
-!.agents/skills/coden-tool-plugin-development/**
 .superpowers/

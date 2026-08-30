@@ -20,8 +20,9 @@ async function skill(
   name: string,
   description: string,
   body = "# Full instructions\n\nUse this skill.\n",
+  container = path.join(".agents", "skills"),
 ): Promise<string> {
-  const directory = path.join(base, ".agents", "skills", name);
+  const directory = path.join(base, container, name);
   await mkdir(directory, { recursive: true });
   await writeFile(
     path.join(directory, "SKILL.md"),
@@ -50,6 +51,8 @@ describe("Agent Skills", () => {
     const home = await root("coden-skills-home-");
     await skill(home, "zeta", "User zeta.");
     await skill(home, "shared", "User shared.");
+    await skill(workspace, "bundled", "Bundled project skill.", undefined, "skills");
+    await skill(workspace, "shared", "Bundled shared.", undefined, "skills");
     await skill(workspace, "alpha", "Project alpha.");
     await skill(workspace, "shared", "Project shared.");
     await mkdir(path.join(home, ".agents", "skills", "nested", "child"), { recursive: true });
@@ -61,6 +64,7 @@ describe("Agent Skills", () => {
     const result = await new SkillDiscovery({ workspace, home }).discover();
     expect(result.registry.list().map(({ name, scope }) => [name, scope])).toEqual([
       ["alpha", "project"],
+      ["bundled", "project"],
       ["shared", "project"],
       ["zeta", "user"],
     ]);

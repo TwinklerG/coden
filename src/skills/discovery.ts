@@ -28,12 +28,17 @@ export class SkillDiscovery {
       path.join(this.options.home ?? os.homedir(), ".agents", "skills"),
       failures,
     );
+    const bundled = await this.scan(
+      "project",
+      path.join(this.options.workspace, "skills"),
+      failures,
+    );
     const project = await this.scan(
       "project",
       path.join(this.options.workspace, ".agents", "skills"),
       failures,
     );
-    return { registry: new SkillRegistry([...user, ...project]), failures };
+    return { registry: new SkillRegistry([...user, ...bundled, ...project]), failures };
   }
 
   private async scan(

@@ -75,12 +75,15 @@ coden --resume                   # 列出当前工作区的会话
 
 ## Agent Skills
 
-CodeN 兼容 [Agent Skills](https://agentskills.io/specification) 的渐进式披露格式。启动时只扫描以下两个标准目录的直接子目录；每个候选项必须为 `<skill-name>/SKILL.md`：
+CodeN 兼容 [Agent Skills](https://agentskills.io/specification) 的渐进式披露格式。启动时扫描以下目录的直接子目录；每个候选项必须为 `<skill-name>/SKILL.md`：
 
 ```text
 ~/.agents/skills/<skill-name>/SKILL.md
+<workspace>/skills/<skill-name>/SKILL.md
 <workspace>/.agents/skills/<skill-name>/SKILL.md
 ```
+
+其中 `skills/` 用于仓库随附、可公开分发的 Skill，`.agents/skills/` 用于本地安装的项目级 Skill。同名条目按上述顺序覆盖，因此本地安装的项目级 Skill 优先级最高。
 
 项目级 Skill 覆盖同名用户级 Skill。`SKILL.md` 使用 YAML frontmatter，最小内容如下：
 
@@ -97,7 +100,7 @@ Read the relevant files before changing them.
 
 启动上下文只包含有效 Skill 的名称和描述，不会注入完整正文。任务匹配时，模型调用只接受名称的 `activate_skill` 加载完整说明和 Skill 绝对根目录；引用的 `references/`、`scripts/` 等资源仍按需使用普通工具读取。`/skills` 不调用模型，按名称列出当前生效的名称、描述和 `project`/`user` 来源。Skill 仅在启动时发现，文件变更需重启后生效。无效、超限或通过符号链接逃逸扫描根目录的条目会被跳过；`--verbose` 显示原因。
 
-仓库提供 [`coden-tool-plugin-development`](.agents/skills/coden-tool-plugin-development/SKILL.md) Skill，用于指导兼容 Agent Skills 的编程智能体创建、修改和测试本地 TypeScript 或 npm 分发的 CodeN 工具插件，并完成发布前验证。可从本仓库安装指定 Skill：
+仓库提供 [`coden-tool-plugin-development`](skills/coden-tool-plugin-development/SKILL.md) Skill，用于指导兼容 Agent Skills 的编程智能体创建、修改和测试本地 TypeScript 或 npm 分发的 CodeN 工具插件，并完成发布前验证。可从本仓库安装指定 Skill：
 
 ```bash
 npx skills add TwinklerG/CodeN --skill coden-tool-plugin-development

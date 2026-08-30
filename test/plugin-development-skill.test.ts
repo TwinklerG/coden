@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { SkillDiscovery } from "../src/skills/discovery.js";
 
 const workspace = fileURLToPath(new URL("..", import.meta.url));
-const skillRoot = path.join(workspace, ".agents", "skills", "coden-tool-plugin-development");
+const skillRoot = path.join(workspace, "skills", "coden-tool-plugin-development");
 const temporaryDirectories: string[] = [];
 
 async function resource(relativePath: string): Promise<string> {
@@ -82,8 +82,8 @@ describe("CodeN tool plugin development skill", () => {
     expect(template).not.toMatch(/from\s+["']\.\.?\//);
     expect(syntaxErrors(template)).toEqual([]);
     expect(gitignore).toContain(".agents/skills/*");
-    expect(gitignore).toContain("!.agents/skills/coden-tool-plugin-development/");
-    expect(gitignore).toContain("!.agents/skills/coden-tool-plugin-development/**");
+    expect(gitignore).not.toContain("!.agents/skills/coden-tool-plugin-development/");
+    expect(gitignore).not.toContain("!.agents/skills/coden-tool-plugin-development/**");
   });
 
   it("documents and templates valid npm single-tool and multi-tool packages", async () => {
