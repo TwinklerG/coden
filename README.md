@@ -97,6 +97,12 @@ Read the relevant files before changing them.
 
 启动上下文只包含有效 Skill 的名称和描述，不会注入完整正文。任务匹配时，模型调用只接受名称的 `activate_skill` 加载完整说明和 Skill 绝对根目录；引用的 `references/`、`scripts/` 等资源仍按需使用普通工具读取。`/skills` 不调用模型，按名称列出当前生效的名称、描述和 `project`/`user` 来源。Skill 仅在启动时发现，文件变更需重启后生效。无效、超限或通过符号链接逃逸扫描根目录的条目会被跳过；`--verbose` 显示原因。
 
+仓库提供 [`coden-tool-plugin-development`](.agents/skills/coden-tool-plugin-development/SKILL.md) Skill，用于指导兼容 Agent Skills 的编程智能体创建、修改和测试本地 TypeScript 或 npm 分发的 CodeN 工具插件，并完成发布前验证。可从本仓库安装指定 Skill：
+
+```bash
+npx skills add TwinklerG/CodeN --skill coden-tool-plugin-development
+```
+
 ## 工具与权限
 
 默认提供 `read`、`write`、`edit`、`bash` 和只读的 `activate_skill`；没有有效 Skill 时，激活工具会返回 `skill.not_found`。结构化文件工具按最终真实路径（新文件按最近存在的真实父目录）分类，避免符号链接绕过：
