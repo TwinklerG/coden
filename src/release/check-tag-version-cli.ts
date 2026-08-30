@@ -6,9 +6,9 @@ if (!tag) {
   console.error("usage: check-tag-version <vX.Y.Z>");
   process.exit(2);
 }
-const pkg = JSON.parse(
-  readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
-) as { version: string };
+const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as {
+  version: string;
+};
 const error = versionMismatch(tag, pkg.version);
 if (error) {
   console.error(error);
