@@ -141,7 +141,7 @@ export class EditorState {
     if (index <= 0) return;
     const previous = boundaries[index - 1] ?? 0;
     this._text = `${this._text.slice(0, previous)}${this._text.slice(cursor)}`;
-    this._cursor = normalizeCursor(this._text, cursor);
+    this._cursor = normalizeCursor(this._text, previous);
     this.resetPreferredColumn();
   }
 

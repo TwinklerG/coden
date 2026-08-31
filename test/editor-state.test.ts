@@ -8,9 +8,23 @@ describe("editor state", () => {
     state.moveHorizontal(-1);
     state.backspace();
     expect(state.text).toBe("a👨‍👩‍👧‍👦中");
-    state.moveHorizontal(-1);
+    // Backspace moves the cursor left to where the deleted grapheme began:
+    // here, to just before 中 (right after the family emoji).
+    expect(state.cursor).toBe(12);
     state.backspace();
     expect(state.text).toBe("a中");
+    expect(state.cursor).toBe(1);
+  });
+
+  it("moves the cursor left when backspacing in the middle of a line", () => {
+    const state = new EditorState();
+    state.insert("abcd");
+    state.moveHorizontal(-1);
+    state.moveHorizontal(-1);
+    expect(state.cursor).toBe(2);
+    state.backspace();
+    expect(state.text).toBe("acd");
+    expect(state.cursor).toBe(1);
   });
 
   it("moves and deletes combining marks as one grapheme", () => {
