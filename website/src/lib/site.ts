@@ -1,5 +1,7 @@
 export const SITE_ORIGIN = "https://twinklerg.github.io";
-export const BASE_PATH = "/CodeN";
+export const BASE_PATH = "/coden";
+export const REPOSITORY_URL = "https://github.com/TwinklerG/coden";
+export const REPOSITORY_EDIT_URL = `${REPOSITORY_URL}/edit/main/website/`;
 export const SUPPORTED_LANGUAGES = ["zh", "en"] as const;
 
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];

@@ -1,3 +1,0 @@
-User-agent: *
-Allow: /CodeN/
-Sitemap: https://twinklerg.github.io/CodeN/sitemap-index.xml

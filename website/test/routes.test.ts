@@ -3,14 +3,14 @@ import { alternateLanguagePath, preferredLanguage, routeFor } from "../src/lib/r
 
 describe("localized routes", () => {
   it("builds base-aware product routes", () => {
-    expect(routeFor("zh", "home")).toBe("/CodeN/zh/");
-    expect(routeFor("en", "docs")).toBe("/CodeN/en/docs/");
-    expect(routeFor("en", "plugins")).toBe("/CodeN/en/plugins/");
+    expect(routeFor("zh", "home")).toBe("/coden/zh/");
+    expect(routeFor("en", "docs")).toBe("/coden/en/docs/");
+    expect(routeFor("en", "plugins")).toBe("/coden/en/plugins/");
   });
 
   it("preserves the page when switching languages", () => {
-    expect(alternateLanguagePath("/CodeN/zh/docs/hooks/events/", "en")).toBe(
-      "/CodeN/en/docs/hooks/events/",
+    expect(alternateLanguagePath("/coden/zh/docs/hooks/events/", "en")).toBe(
+      "/coden/en/docs/hooks/events/",
     );
   });
 

@@ -1,7 +1,7 @@
 ---
 import { alternateLanguagePath, routeFor, type ProductSection } from "../lib/routes";
 import { messages } from "../i18n/messages";
-import { withBase, type Language } from "../lib/site";
+import { REPOSITORY_URL, withBase, type Language } from "../lib/site";
 
 interface Props {
   language: Language;
@@ -35,7 +35,7 @@ const links = [
         {link.label}
       </a>
     ))}
-    <a href="https://github.com/TwinklerG/CodeN" rel="noreferrer noopener" target="_blank">
+    <a href={REPOSITORY_URL} rel="noreferrer noopener" target="_blank">
       {currentMessages.nav.github}
     </a>
   </nav>
@@ -48,7 +48,7 @@ const links = [
           {link.label}
         </a>
       ))}
-      <a href="https://github.com/TwinklerG/CodeN" rel="noreferrer noopener" target="_blank">
+      <a href={REPOSITORY_URL} rel="noreferrer noopener" target="_blank">
         {currentMessages.nav.github}
       </a>
     </nav>

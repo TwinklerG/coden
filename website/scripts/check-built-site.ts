@@ -1,9 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-
-const SITE_ORIGIN = "https://twinklerg.github.io";
-const BASE_PATH = "/CodeN";
+import { BASE_PATH, SITE_ORIGIN } from "../src/lib/site";
 
 export function extractInternalReferences(html: string): string[] {
   const references = new Set<string>();
@@ -72,6 +70,7 @@ export async function validateBuiltSite(distRoot: string): Promise<void> {
     "zh/plugins/index.html",
     "en/plugins/index.html",
     "404.html",
+    "robots.txt",
   ]) {
     if (!fileSet.has(path.join(distRoot, required))) {
       errors.push(`missing built file: ${required}`);

@@ -1,7 +1,7 @@
 ---
 import { messages } from "../i18n/messages";
 import { routeFor } from "../lib/routes";
-import type { Language } from "../lib/site";
+import { REPOSITORY_URL, type Language } from "../lib/site";
 
 interface Props {
   language: Language;
@@ -13,7 +13,7 @@ const currentMessages = messages[language];
 
 <footer class="site-footer">
   <div class="site-footer-links">
-    <a href="https://github.com/TwinklerG/CodeN" rel="noreferrer noopener" target="_blank">
+    <a href={REPOSITORY_URL} rel="noreferrer noopener" target="_blank">
       {currentMessages.footer.github}
     </a>
     <a href="https://www.npmjs.com/package/@twinklerg/coden" rel="noreferrer noopener" target="_blank">

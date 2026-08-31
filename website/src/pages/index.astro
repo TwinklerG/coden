@@ -3,6 +3,9 @@ import "../styles/global.css";
 import { routeFor } from "../lib/routes";
 import { SITE_ORIGIN, withBase } from "../lib/site";
 import { messages } from "../i18n/messages";
+
+const zhTarget = routeFor("zh", "home");
+const enTarget = routeFor("en", "home");
 ---
 
 <!doctype html>
@@ -14,7 +17,7 @@ import { messages } from "../i18n/messages";
     <meta name="description" content={messages.en.shell.rootDescription} />
     <link rel="canonical" href={new URL(withBase("/"), SITE_ORIGIN).toString()} />
   </head>
-  <body class="root-language-page">
+  <body class="root-language-page" data-zh-target={zhTarget} data-en-target={enTarget}>
     <main class="root-language-card">
       <h1>CodeN</h1>
       <p>{messages.en.shell.rootDescription}</p>
@@ -26,13 +29,15 @@ import { messages } from "../i18n/messages";
         <p>{messages.en.shell.rootDescription}</p>
       </noscript>
     </main>
-    <script is:inline>
+    <script>
+      const zhTarget = document.body.dataset.zhTarget;
+      const enTarget = document.body.dataset.enTarget;
       const languages = navigator.languages?.length > 0 ? navigator.languages : [navigator.language];
       const zhIndex = languages.findIndex((language) => String(language).toLowerCase().startsWith("zh"));
       const enIndex = languages.findIndex((language) => String(language).toLowerCase().startsWith("en"));
-      const target = zhIndex !== -1 && (enIndex === -1 || zhIndex < enIndex) ? "/CodeN/zh/" : "/CodeN/en/";
+      const target = zhIndex !== -1 && (enIndex === -1 || zhIndex < enIndex) ? zhTarget : enTarget;
 
-      if (location.pathname !== target) {
+      if (target && location.pathname !== target) {
         location.replace(target);
       }
     </script>

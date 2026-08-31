@@ -3,10 +3,11 @@ import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
+import { BASE_PATH, REPOSITORY_EDIT_URL, SITE_ORIGIN } from "./src/lib/site";
 
 export default defineConfig({
-  site: "https://twinklerg.github.io",
-  base: "/CodeN",
+  site: SITE_ORIGIN,
+  base: BASE_PATH,
   output: "static",
   trailingSlash: "always",
   integrations: [
@@ -21,7 +22,7 @@ export default defineConfig({
         en: { label: "English", lang: "en" },
       },
       editLink: {
-        baseUrl: "https://github.com/TwinklerG/CodeN/edit/main/website/",
+        baseUrl: REPOSITORY_EDIT_URL,
       },
       customCss: ["./src/styles/global.css", "./src/styles/docs.css"],
       sidebar: [{ autogenerate: { directory: "docs" } }],
