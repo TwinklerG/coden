@@ -10,7 +10,7 @@ This is a presentation-only change; runtime behavior, requests, and permissions 
 
 - On interactive CLI startup, show the resolved **model**, **approval mode**, and **thinking level**.
 - Do **not** show the provider (explicitly excluded).
-- Remove the leading `CodeN` prefix from the final session line.
+- The final session line is `Session ID: <id>` (zh `会话ID：<id>`) — no `CodeN` prefix and no inline help hint.
 - Keep the existing `版本`/`Version` and `工作区哈希`/`Workspace hash` lines.
 - Localize new labels in both `zh` and `en`.
 - The thinking level uses `metadata.thinkingDisplay` so OpenAI's `off→minimal` mapping shows correctly; the approval mode shows the raw `auto` / `smart` / `manual` value.
@@ -18,7 +18,7 @@ This is a presentation-only change; runtime behavior, requests, and permissions 
 
 ## Approach
 
-Extend the startup block printed in `repl()` to include two additional labeled lines between the workspace hash and the session line: model and approval mode, then the thinking level. Drop the provider line and the `CodeN` prefix on the session line.
+Extend the startup block printed in `repl()` to include two additional labeled lines between the workspace hash and the session line: model and approval mode, then the thinking level. Drop the provider line, and render the final session line as `Session ID: <id>` (zh `会话ID：<id>`).
 
 Output shape:
 
@@ -34,7 +34,7 @@ Output shape:
 模型：claude-xxxx
 审批模式：manual
 思考等级：high
-会话 <id>。输入 /help 查看命令。
+会话ID：<id>
 ```
 
 ## Components
@@ -47,7 +47,9 @@ Add to the `repl` namespace:
 - `approvalMode: (mode: string) => string` — `审批模式：${mode}` / `Approval: ${mode}`
 - `thinking: (level: string) => string` — `思考等级：${level}` / `Thinking: ${level}`
 
-Edit `session` to drop the `CodeN` prefix: `会话 ${id}。输入 /help 查看命令。` / `Session ${id}. Type /help for commands.`
+Edit `session` to `会话ID：${id}` / `Session ID: ${id}`.
+
+The `resumedHelp` message (`输入 /help 查看命令。` / `Type /help for commands.`) is unchanged; the resume path still prints it separately.
 
 ### `repl()` (`src/cli/agent-command.ts`)
 
@@ -74,6 +76,7 @@ Extend `test/cli.test.ts` assertions. Under `baseEnv` (which clears `CODEN_*`), 
 - `模型：gpt-5-mini`;
 - `审批模式：manual`;
 - `思考等级：default`;
-- a session line that no longer starts with `CodeN`.
+- a session line of the form `会话ID：<id>` (assert `会话ID：` is present and `CodeN 会话` is absent);
+- the session line no longer contains the inline help hint.
 
-The existing resume-banner test should be updated: keep `版本：`/`工作区哈希：` assertions, add the `模型：`/`审批模式：`/`思考等级：` assertions, and assert the resumed session line has no `CodeN` prefix.
+The existing resume-banner test should be updated: keep `版本：`/`工作区哈希：` assertions, add the `模型：`/`审批模式：`/`思考等级：` assertions, and assert the session line uses `会话ID：` with no `CodeN` prefix.
