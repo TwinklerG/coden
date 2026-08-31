@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DOC_GROUPS } from "../src/data/docs";
 import { allDocEntries, renderScaffold } from "../src/lib/docs-scaffold";
 
-describe("documentation scaffold", () => {
+describe("documentation metadata and scaffolds", () => {
   it("has unique slugs and complete translations", () => {
     const entries = allDocEntries();
     expect(new Set(entries.map((entry) => entry.slug)).size).toBe(entries.length);
