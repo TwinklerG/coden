@@ -305,6 +305,49 @@ export default plugin;
 
 插件契约以 `src/plugin/index.ts` 为唯一来源；构建时自动生成 `dist/plugin/index.d.ts` 和仅包含公开常量的最小 JavaScript 入口，不发布 `src`。CodeN 的 npm 包只暴露 `/plugin` 这一条子路径，主入口 `"."` 未公开，`import "@twinklerg/coden"` 会被拒绝——它定位为 CLI，不作为程序化导入库。
 
+## 生命周期 Hooks
+
+CodeN 支持九个命令 Hook：`SessionStart`、`UserPromptSubmit`、`PreToolUse`、`PermissionRequest`、`PostToolUse`、`PostToolUseFailure`、`Notification`、`Stop` 和 `SessionEnd`。工具类事件按工具名匹配，`Notification` 按通知类型匹配，`SessionStart` 按 `startup|resume` 匹配；其他事件只接受省略 matcher 或 `"*"`。
+
+Hook 配置位于用户级 `~/.config/coden/config.json`（或 `$XDG_CONFIG_HOME/coden/config.json`）以及项目级 `<workspace>/.coden/config.json`。用户 Hook 总在项目 Hook 之前；配置改变后需重启。示例：
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [{
+      "matcher": "bash|edit|write",
+      "hooks": [{
+        "type": "command",
+        "command": "osascript -e 'display notification \"CodeN 正在等待授权\" with title \"CodeN\"'; afplay /System/Library/Sounds/Glass.aiff",
+        "timeout": 5
+      }]
+    }]
+  }
+}
+```
+
+命令在工作区通过系统 shell 运行，从 stdin 接收一个 JSON 对象。公共字段为 `schemaVersion`、`hookEventName`、`sessionId`、可选 `turnId`、`cwd` 和 `permissionMode`，并附加事件数据。环境额外提供 `CODEN_PROJECT_DIR`、`CODEN_SESSION_ID` 和 `CODEN_HOOK_EVENT`。命令不应把事件字段插入 shell 字符串。
+
+退出码 `0` 可在 stdout 返回单个 JSON 对象；退出码 `2` 在可控制事件中明确阻止；其他失败、超时或非法/超限输出均警告并 fail-open。`PreToolUse` 可返回 `permissionDecision: allow|ask|deny`、一个 `updatedInput` 和 `additionalContext`；更新后仍会重新执行 schema、路径、风险和权限检查。并行结果按 `deny > ask > allow` 合并；多个输入更新发生冲突并全部作废。`PermissionRequest` 可返回 `decision.behavior`，`Stop` 可返回顶层 `decision: "block"` 和 `reason`。
+
+以下 Node 脚本可作为 `PreToolUse` 命令，读取 stdin 并批准调用：
+
+```js
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (input += chunk));
+process.stdin.on("end", () => {
+  JSON.parse(input);
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" }
+  }));
+});
+```
+
+Stop 检查脚本可输出 `{"decision":"block","reason":"测试尚未运行"}` 要求模型继续；继续仍受 `maxSteps` 限制。
+
+**安全警告：Hook 不是沙箱。** 它继承 CodeN 环境（包括 API Key），可访问文件、网络、完整提示词、工具参数和结果。项目 Hook 与项目插件共用按工作区真实路径保存的显式信任；`manual`、`smart`、`auto` 均不会隐式信任项目代码。`--auto` 只跳过普通工具确认，仍执行 `PreToolUse`，且 `deny` 生效、`ask` 会安全拒绝。使用 `--verbose` 查看成功 Hook；失败、阻止和输入冲突始终显示。Hook stderr/消息会清除终端控制字符，trace 不记录敏感输入输出。
+
 ## 开发与测试
 
 ```bash
