@@ -4,18 +4,18 @@
 
 <!-- markdownlint-disable MD013 -->
 
-**A hackable coding agent built around pluggable tool plugins.**
+**A coding agent built around pluggable tool plugins.**
 
 CodeN uses provider-native tool calling to read and modify files and run commands locally. Its agent core stays small and inspectable, so you can complete real coding work while understanding and shaping how model requests, tools, permissions, context, and sessions fit together.
 
-## Why CodeN is interesting
+## Features
 
 - **Pluggable tools:** extend the model's action space with local TypeScript or npm plugins.
 - **Inspectable mechanics:** the agent loop, context compaction, approvals, and session recovery have explicit boundaries.
 - **Composable extension:** Plugins add actions, Skills supply method knowledge, and Hooks add deterministic lifecycle control.
 - **Local first:** code and tools run on your machine, without server-side code execution.
 
-## Start in 30 seconds
+## Quick start
 
 ```bash
 bun add -g @twinklerg/coden     # or npm install -g @twinklerg/coden

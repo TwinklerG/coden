@@ -112,7 +112,7 @@ describe("documentation content", () => {
     const zhIndex = await page("zh", "index");
     const enIndex = await page("en", "index");
     expect(zhIndex).toContain("以可插拔工具插件为特色的 Coding Agent");
-    expect(enIndex).toContain("hackable coding agent built around pluggable tool plugins");
+    expect(enIndex).toContain("coding agent built around pluggable tool plugins");
 
     const zhCli = await page("zh", "reference/cli");
     const enCli = await page("en", "reference/cli");

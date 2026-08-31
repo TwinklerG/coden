@@ -1,7 +1,7 @@
 {
   "name": "@twinklerg/coden",
   "version": "0.1.9",
-  "description": "A hackable coding agent built around pluggable tool plugins",
+  "description": "A coding agent built around pluggable tool plugins",
   "license": "MIT",
   "type": "module",
   "files": [

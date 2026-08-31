@@ -118,7 +118,7 @@ export const messages = {
     },
     home: {
       eyebrow: "CodeN",
-      title: "一个有意思的 Coding Agent",
+      title: "一个以可插拔工具插件为特色的 Coding Agent",
       description: "以可插拔工具插件为特色，在本地工作区中理解、运行并塑造 Agent。",
       installCommand: "bun add -g @twinklerg/coden",
       primaryAction: "快速开始",
@@ -206,7 +206,7 @@ export const messages = {
     },
     home: {
       eyebrow: "CodeN",
-      title: "A hackable coding agent",
+      title: "A coding agent built around pluggable tool plugins",
       description:
         "Built around pluggable tool plugins for understanding, running, and shaping agents in your local workspace.",
       installCommand: "bun add -g @twinklerg/coden",

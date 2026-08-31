@@ -5,9 +5,9 @@ import { HOME_CONTENT } from "../src/data/home";
 import { messages } from "../src/i18n/messages";
 
 describe("product positioning", () => {
-  it("leads with the hackable agent and pluggable tool plugin identity", async () => {
-    expect(messages.zh.home.title).toBe("一个有意思的 Coding Agent");
-    expect(messages.en.home.title).toBe("A hackable coding agent");
+  it("leads with the pluggable tool plugin identity", async () => {
+    expect(messages.zh.home.title).toBe("一个以可插拔工具插件为特色的 Coding Agent");
+    expect(messages.en.home.title).toBe("A coding agent built around pluggable tool plugins");
     expect(messages.zh.home.description).toContain("可插拔工具插件");
     expect(messages.en.home.description).toContain("pluggable tool plugins");
     expect(HOME_CONTENT.zh.hero.intro).toContain("可插拔工具插件");
@@ -16,9 +16,7 @@ describe("product positioning", () => {
     const packageJson = JSON.parse(
       await readFile(path.join(process.cwd(), "..", "package.json"), "utf8"),
     ) as { description?: string };
-    expect(packageJson.description).toBe(
-      "A hackable coding agent built around pluggable tool plugins",
-    );
+    expect(packageJson.description).toBe("A coding agent built around pluggable tool plugins");
   });
 
   it("keeps the plugin security boundary visible", () => {

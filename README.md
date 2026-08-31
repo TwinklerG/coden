@@ -4,18 +4,18 @@
 
 <!-- markdownlint-disable MD013 -->
 
-**一个有意思的 Coding Agent，以可插拔工具插件为特色。**
+**一个以可插拔工具插件为特色的 Coding Agent。**
 
 CodeN 直接使用模型原生 Tool Calling，在本地读取、修改文件和执行命令。它保持 Agent 核心小而透明，让你既能完成真实编码任务，也能理解并塑造模型请求、工具调用、权限、上下文和会话如何协作。
 
-## 为什么 CodeN 有意思
+## 应用特色
 
 - **可插拔工具**：用本地 TypeScript 或 npm 插件扩展模型的行动空间。
 - **机制透明**：Agent 循环、上下文压缩、审批和会话恢复都有明确边界。
 - **组合式扩展**：Plugin 增加动作，Skill 提供方法知识，Hook 加入确定性生命周期控制。
 - **本地优先**：代码和工具在当前机器运行，不依赖服务端代码执行。
 
-## 30 秒开始
+## 快速开始
 
 ```bash
 bun add -g @twinklerg/coden     # 或 npm install -g @twinklerg/coden

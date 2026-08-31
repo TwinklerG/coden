@@ -35,8 +35,7 @@ export const HOME_CONTENT: Record<Language, HomeContent> = {
     hero: {
       intro: "可插拔工具插件 · 模型原生 Tool Calling",
       title: "CodeN",
-      description:
-        "一个有意思的 Coding Agent：核心小而透明，可在本地工作区中观察并塑造完整工具循环。",
+      description: "以可插拔工具插件为特色，核心小而透明，可在本地工作区中观察并塑造完整工具循环。",
     },
     features: [
       {
@@ -118,7 +117,7 @@ export const HOME_CONTENT: Record<Language, HomeContent> = {
       intro: "Pluggable tool plugins · model-native tool calling",
       title: "CodeN",
       description:
-        "A hackable coding agent with a small, inspectable core for observing and shaping complete tool loops in a local workspace.",
+        "A coding agent built around pluggable tool plugins, with a small, inspectable core for observing and shaping complete tool loops in a local workspace.",
     },
     features: [
       {
