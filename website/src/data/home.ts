@@ -34,7 +34,7 @@ export const HOME_CONTENT: Record<Language, HomeContent> = {
   zh: {
     hero: {
       intro: "本地优先 · 模型原生 Tool Calling",
-      title: "把真实代码工作交给 CodeN",
+      title: "CodeN",
       description: "在本地工作区中安装、审查、编辑和验证代码，保留完整的审批和会话控制。",
     },
     features: [
@@ -115,7 +115,7 @@ export const HOME_CONTENT: Record<Language, HomeContent> = {
   en: {
     hero: {
       intro: "Local-first · model-native tool calling",
-      title: "Let CodeN handle real coding work",
+      title: "CodeN",
       description:
         "Install, inspect, edit, and verify code inside the local workspace with clear approval and session control.",
     },

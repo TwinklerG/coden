@@ -358,7 +358,7 @@ input {
   height: 1.7rem;
   border-radius: var(--coden-radius-lg);
   object-fit: cover;
-  background: color-mix(in srgb, var(--coden-accent) 18%, transparent);
+  /* background: color-mix(in srgb, var(--coden-accent) 18%, transparent); */
 }
 
 [data-theme="dark"] .site-brand-logo,

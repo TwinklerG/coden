@@ -57,7 +57,7 @@
 }
 
 .home-hero h1 {
-  max-width: 11ch;
+  /* max-width: 11ch; */
   margin: 0;
   font-family: var(--coden-font-mono);
   font-size: clamp(2.5rem, 6vw, 4.8rem);
@@ -72,7 +72,7 @@
 }
 
 .home-hero-description {
-  max-width: 58ch;
+  /* max-width: 58ch; */
   margin: 0;
   color: var(--coden-muted);
   font-size: 1.05rem;
@@ -323,6 +323,7 @@
 .feature-card,
 .step-card {
   display: grid;
+  min-width: 0;
   gap: 0.5rem;
   padding: 1rem;
   background: var(--coden-surface-strong);
@@ -424,7 +425,17 @@
     grid-template-columns: 1fr;
   }
 
+  .feature-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .feature-card {
     grid-column: auto !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .feature-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

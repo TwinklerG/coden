@@ -47,7 +47,7 @@ export function InstallCommand({ language }: Props) {
               setStatus(copyMessages.helper);
             }}
           >
-            {tabLabels[key]}
+            {tabLabels[key]} {key === "npm" && "(limited support for plugin tools)"}
           </button>
         ))}
       </div>
