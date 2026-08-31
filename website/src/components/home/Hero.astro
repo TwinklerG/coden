@@ -3,7 +3,6 @@ import { routeFor } from "../../lib/routes";
 import { messages } from "../../i18n/messages";
 import { HOME_CONTENT } from "../../data/home";
 import { InstallCommand } from "./InstallCommand";
-import { TerminalDemo } from "./TerminalDemo";
 import type { Language } from "../../lib/site";
 
 interface Props {
@@ -33,7 +32,4 @@ const content = HOME_CONTENT[language];
     <InstallCommand client:load language={language} />
   </div>
 
-  <div class="home-hero-demo">
-    <TerminalDemo client:load language={language} />
-  </div>
 </section>
