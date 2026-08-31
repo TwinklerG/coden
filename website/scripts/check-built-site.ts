@@ -17,6 +17,19 @@ export function extractInternalReferences(html: string): string[] {
   return [...references];
 }
 
+export function extractStylesheetReferences(html: string): string[] {
+  const references: string[] = [];
+  for (const match of html.matchAll(/<link\b[^>]*>/g)) {
+    const tag = match[0];
+    const rel = tag.match(/\brel=(["'])([^"']+)\1/)?.[2];
+    const href = tag.match(/\bhref=(["'])([^"']+)\1/)?.[2];
+    if (!rel?.split(/\s+/).includes("stylesheet") || !href) continue;
+    const reference = normalizeReference(href);
+    if (reference && isInternalReference(reference)) references.push(reference);
+  }
+  return references;
+}
+
 export function resolveBuiltTarget(
   distRoot: string,
   sourceFile: string,
@@ -85,6 +98,7 @@ export async function validateBuiltSite(distRoot: string): Promise<void> {
 
   const docsZh = new Set<string>();
   const docsEn = new Set<string>();
+  const stylesheetCache = new Map<string, string>();
 
   for (const filePath of htmlFiles) {
     const html = await readFile(filePath, "utf8");
@@ -110,6 +124,15 @@ export async function validateBuiltSite(distRoot: string): Promise<void> {
       assertAlternate(html, "zh", `${SITE_ORIGIN}${BASE_PATH}/zh/`, relative, errors);
       assertAlternate(html, "en", `${SITE_ORIGIN}${BASE_PATH}/en/`, relative, errors);
       assertAlternate(html, "x-default", `${SITE_ORIGIN}${BASE_PATH}/`, relative, errors);
+      await assertLinkedStylesheetMarker(
+        html,
+        distRoot,
+        filePath,
+        "--coden-bg",
+        relative,
+        errors,
+        stylesheetCache,
+      );
       continue;
     }
 
@@ -120,6 +143,15 @@ export async function validateBuiltSite(distRoot: string): Promise<void> {
       const counterpartUrl = pageUrl(counterpart);
       const defaultUrl = pageUrl(relative.replace(/^(zh|en)\//, "zh/"));
       assertPagefindMarkup(html, relative, errors);
+      await assertLinkedStylesheetMarker(
+        html,
+        distRoot,
+        filePath,
+        "--coden-doc-grid",
+        relative,
+        errors,
+        stylesheetCache,
+      );
       assertLink(html, "canonical", selfUrl, relative, errors);
       assertAlternate(html, locale, selfUrl, relative, errors);
       assertAlternate(html, locale === "zh" ? "en" : "zh", counterpartUrl, relative, errors);
@@ -240,6 +272,32 @@ function assertPagefindMarkup(html: string, relative: string, errors: string[]):
   if (!html.includes("data-pagefind-body")) {
     errors.push(`${relative}: missing Pagefind body marker`);
   }
+}
+
+async function assertLinkedStylesheetMarker(
+  html: string,
+  distRoot: string,
+  sourceFile: string,
+  marker: string,
+  relative: string,
+  errors: string[],
+  cache: Map<string, string>,
+): Promise<void> {
+  const stylesheets = extractStylesheetReferences(html);
+  for (const reference of stylesheets) {
+    const target = resolveBuiltTarget(distRoot, sourceFile, reference);
+    let css = cache.get(target);
+    if (css === undefined) {
+      try {
+        css = await readFile(target, "utf8");
+        cache.set(target, css);
+      } catch {
+        continue;
+      }
+    }
+    if (css.includes(marker)) return;
+  }
+  errors.push(`${relative}: linked stylesheets are missing ${marker}`);
 }
 
 function setsEqual(left: Set<string>, right: Set<string>): boolean {

@@ -23,7 +23,7 @@ export default defineConfig({
       editLink: {
         baseUrl: "https://github.com/TwinklerG/CodeN/edit/main/website/",
       },
-      customCss: ["./src/styles/global.css"],
+      customCss: ["./src/styles/global.css", "./src/styles/docs.css"],
       sidebar: [{ autogenerate: { directory: "docs" } }],
       components: {
         SiteTitle: "./src/components/docs/DocsSiteTitle.astro",
