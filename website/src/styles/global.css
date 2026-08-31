@@ -363,7 +363,8 @@ input {
 
 [data-theme="dark"] .site-brand-logo,
 [data-theme="dark"] .docs-title-logo {
-  background: color-mix(in srgb, var(--coden-accent) 28%, transparent);
+  --reserved: 0;
+  /* background: color-mix(in srgb, var(--coden-accent) 28%, transparent); */
 }
 
 .sr-only {
