@@ -32,6 +32,7 @@ export interface SystemMessage {
 export interface UserMessage {
   role: "user";
   content: string;
+  source?: "hook";
 }
 export interface AssistantMessage {
   role: "assistant";

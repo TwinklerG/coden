@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { isThinkingLevel, type ThinkingLevel } from "../core/thinking.js";
+import { mergeConfiguredHooks, type ParsedCommandHook, parseHookConfig } from "../hooks/config.js";
+import type { ConfiguredCommandHook, HookScope } from "../hooks/types.js";
 import { DEFAULT_LANGUAGE, isLanguage, type Language } from "../i18n/language.js";
 
 export type ProviderName = "openai" | "anthropic";
@@ -20,8 +22,11 @@ export interface CodeNConfig {
   env: Record<string, string>;
   language: Language;
   thinkingLevel: ThinkingLevel;
+  hooks: ConfiguredCommandHook[];
 }
-export type ConfigOverrides = Partial<Omit<CodeNConfig, "plugins" | "dataDir" | "env">> & {
+export type ConfigOverrides = Partial<
+  Omit<CodeNConfig, "plugins" | "dataDir" | "env" | "hooks">
+> & {
   plugins?: string[];
   env?: Record<string, string>;
 };
@@ -36,12 +41,20 @@ export function userDataDir(): string {
     ? path.join(process.env.XDG_DATA_HOME, "coden")
     : path.join(os.homedir(), ".local", "share", "coden");
 }
-async function readJson(file: string, includeLanguage = false): Promise<ConfigOverrides> {
+type LoadedConfigOverrides = ConfigOverrides & { hooks?: ParsedCommandHook[] };
+async function readJson(
+  file: string,
+  scope: HookScope,
+  includeLanguage = false,
+): Promise<LoadedConfigOverrides> {
   try {
     const value: unknown = JSON.parse(await readFile(file, "utf8"));
     if (!value || typeof value !== "object" || Array.isArray(value))
       throw new Error("config root must be a JSON object");
-    return pickOverrides(value as Record<string, unknown>, includeLanguage);
+    const raw = value as Record<string, unknown>;
+    const overrides: LoadedConfigOverrides = pickOverrides(raw, includeLanguage);
+    if (raw.hooks !== undefined) overrides.hooks = parseHookConfig(raw.hooks, scope);
+    return overrides;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw new Error(
@@ -93,8 +106,8 @@ function pickOverrides(raw: Record<string, unknown>, includeLanguage = false): C
   return overrides;
 }
 
-function stripEnv(overrides: ConfigOverrides): ConfigOverrides {
-  const { env: _env, ...rest } = overrides;
+function stripInternal(overrides: LoadedConfigOverrides): ConfigOverrides {
+  const { env: _env, hooks: _hooks, ...rest } = overrides;
   return rest;
 }
 
@@ -115,12 +128,14 @@ export async function loadConfig(
     env: {},
     language: DEFAULT_LANGUAGE,
     thinkingLevel: "default",
+    hooks: [],
   };
   const user = await readJson(
     path.join(userConfigDir(), "config.json"),
+    "user",
     cli.language === undefined,
   );
-  const project = await readJson(path.join(workspace, ".coden", "config.json"));
+  const project = await readJson(path.join(workspace, ".coden", "config.json"), "project");
   const env: ConfigOverrides = {};
   if (process.env.CODEN_PROVIDER === "openai" || process.env.CODEN_PROVIDER === "anthropic")
     env.provider = process.env.CODEN_PROVIDER;
@@ -137,13 +152,14 @@ export async function loadConfig(
   }
   const merged = {
     ...defaults,
-    ...stripEnv(user),
-    ...stripEnv(project),
+    ...stripInternal(user),
+    ...stripInternal(project),
     ...env,
     ...cli,
     env: mergedEnv,
   };
   merged.plugins = [...(user.plugins ?? []), ...(project.plugins ?? []), ...(cli.plugins ?? [])];
+  merged.hooks = mergeConfiguredHooks(user.hooks ?? [], project.hooks ?? []);
   if (merged.provider !== "openai" && merged.provider !== "anthropic")
     throw new Error("provider must be openai or anthropic");
   if (typeof merged.model !== "string" || !merged.model.trim())
