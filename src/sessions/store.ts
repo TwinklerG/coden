@@ -80,6 +80,9 @@ export class SessionStore {
   appendMessage(message: AgentMessage): Promise<void> {
     return this.append("message", message);
   }
+  appendToolCallUpdate(callId: string, input: unknown): Promise<void> {
+    return this.append("tool.call.updated", { callId, input });
+  }
   appendThinkingLevel(level: ThinkingLevel): Promise<void> {
     return this.append("session.thinking", { level });
   }
@@ -145,8 +148,12 @@ export class SessionStore {
         case "message":
           messageCount++;
           if (firstUserPrompt === undefined) {
-            const data = record.data as { role?: unknown; content?: unknown };
-            if (data?.role === "user" && typeof data.content === "string") {
+            const data = record.data as { role?: unknown; content?: unknown; source?: unknown };
+            if (
+              data?.role === "user" &&
+              data.source !== "hook" &&
+              typeof data.content === "string"
+            ) {
               firstUserPrompt = data.content;
             }
           }
@@ -196,7 +203,25 @@ export class SessionStore {
         }
         if (record.type === "message") {
           if (!isMessage(record.data)) throw new Error("invalid message structure");
-          messages.push(record.data);
+          if (record.data.role === "system") {
+            const firstNonSystem = messages.findIndex((message) => message.role !== "system");
+            messages.splice(firstNonSystem < 0 ? messages.length : firstNonSystem, 0, record.data);
+          } else messages.push(record.data);
+        }
+        if (record.type === "tool.call.updated") {
+          const data = record.data as { callId?: unknown; input?: unknown };
+          if (typeof data?.callId !== "string" || !("input" in data))
+            throw new Error("invalid tool call update");
+          const matches = messages.flatMap((message) =>
+            message.role === "assistant"
+              ? message.toolCalls.filter((call) => call.callId === data.callId)
+              : [],
+          );
+          if (matches.length !== 1)
+            throw new Error("tool call update target must exist exactly once");
+          const match = matches[0];
+          if (!match) throw new Error("tool call update target is missing");
+          match.input = data.input;
         }
         if (record.type === "context.compacted") {
           const data = record.data as {
@@ -237,8 +262,9 @@ export class SessionStore {
 function isMessage(value: unknown): value is AgentMessage {
   if (!value || typeof value !== "object") return false;
   const message = value as Record<string, unknown>;
-  if ((message.role === "system" || message.role === "user") && typeof message.content === "string")
-    return true;
+  if (message.role === "system" && typeof message.content === "string") return true;
+  if (message.role === "user" && typeof message.content === "string")
+    return message.source === undefined || message.source === "hook";
   if (message.role === "assistant" && typeof message.content === "string") {
     const stateValid =
       message.providerState === undefined || isProviderMessageState(message.providerState);

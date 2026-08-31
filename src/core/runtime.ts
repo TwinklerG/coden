@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { ContextManager } from "../context/manager.js";
 import { toModelRequest } from "../context/manager.js";
+import type { HookEngine } from "../hooks/engine.js";
+import type { HookEventName, HookInvocationContext } from "../hooks/types.js";
 import type { I18n } from "../i18n/i18n.js";
 import type { SessionStore } from "../sessions/store.js";
 import type { ToolExecutor } from "../tools/executor.js";
@@ -53,6 +55,8 @@ export class AgentRuntime {
     private readonly events: EventBus,
     private readonly options: RuntimeOptions,
     initialMessages?: AgentMessage[],
+    private readonly hooks?: HookEngine,
+    private readonly hookContext?: Omit<HookInvocationContext, "turnId" | "signal">,
   ) {
     this.maxSteps = options.maxSteps ?? 20;
     this.retries = options.retries ?? 3;
@@ -69,6 +73,28 @@ export class AgentRuntime {
               "You are CodeN, a concise coding agent. Inspect before editing, use tools carefully, and verify changes.",
           },
         ];
+  }
+
+  private started = false;
+  async start(source: "startup" | "resume", signal?: AbortSignal): Promise<void> {
+    if (this.started) return;
+    this.started = true;
+    if (!this.hooks || !this.hookContext) return;
+    const result = await this.hooks.run(
+      "SessionStart",
+      { source },
+      { ...this.hookContext, ...(signal ? { signal } : {}) },
+    );
+    if (result.additionalContext.length) {
+      const message: AgentMessage = {
+        role: "system",
+        content: `[CodeN hook context: SessionStart]\n${result.additionalContext.join("\n\n")}`,
+      };
+      let insertAt = 0;
+      while (this.messages[insertAt]?.role === "system") insertAt++;
+      this.messages.splice(insertAt, 0, message);
+      if (this.sessions.isCreated) await this.sessions.appendMessage(message);
+    }
   }
 
   get thinkingLevel(): ThinkingLevel {
@@ -88,12 +114,10 @@ export class AgentRuntime {
   }
 
   async reset(): Promise<void> {
-    const system = this.messages.find((message) => message.role === "system") ?? {
-      role: "system" as const,
-      content: "You are CodeN.",
-    };
+    const systems = this.messages.filter((message) => message.role === "system");
+    if (systems.length === 0) systems.push({ role: "system", content: "You are CodeN." });
     if (this.sessions.isCreated) await this.sessions.append("session.reset", {});
-    this.messages.splice(0, this.messages.length, system);
+    this.messages.splice(0, this.messages.length, ...systems);
     this.context.clearSummary();
     this.systemPersisted = false;
   }
@@ -113,21 +137,45 @@ export class AgentRuntime {
     const turnThinkingLevel = this.currentThinkingLevel;
     const start = Date.now();
     let toolsExecuted = 0;
+    let stopHookActive = false;
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
     const newSession = !this.sessions.isCreated;
+    let promptContext: string[] = [];
+    if (this.hooks && this.hookContext) {
+      const submitted = await this.hooks.run(
+        "UserPromptSubmit",
+        { prompt: userText },
+        { ...this.hookContext, turnId, signal },
+      );
+      if (submitted.blocked)
+        return {
+          answer: submitted.blockReason ?? "Prompt blocked by hook",
+          messages: this.messages,
+          toolsExecuted: 0,
+          usage,
+        };
+      promptContext = submitted.additionalContext;
+    }
     await this.sessions.create();
     if (newSession) await this.sessions.appendThinkingLevel(turnThinkingLevel);
     await this.events.emit("turn.started", { input: userText }, turnId);
     try {
       if (!this.systemPersisted) {
-        const system = this.messages[0];
-        if (system?.role === "system") await this.sessions.appendMessage(system);
+        for (const system of this.messages.filter((message) => message.role === "system"))
+          await this.sessions.appendMessage(system);
         this.systemPersisted = true;
       }
-      const hasPriorUser = this.messages.some((message) => message.role === "user");
+      const hasPriorUser = this.messages.some(
+        (message) => message.role === "user" && message.source !== "hook",
+      );
       const user: AgentMessage = { role: "user", content: userText };
       this.messages.push(user);
       await this.sessions.appendMessage(user);
+      if (promptContext.length) {
+        const hookMessage = hookContextMessage("UserPromptSubmit", promptContext.join("\n\n"));
+        this.messages.push(hookMessage);
+        await this.sessions.appendMessage(hookMessage);
+      }
       if (!hasPriorUser) await this.sessions.setTitle(userText);
       for (let step = 0; step < this.maxSteps; step++) {
         let prepared = this.context.prepare(this.messages, this.registry.list());
@@ -196,6 +244,24 @@ export class AgentRuntime {
         this.messages.push(assistant);
         await this.sessions.appendMessage(assistant);
         if (assistant.toolCalls.length === 0) {
+          if (this.hooks && this.hookContext) {
+            const stop = await this.hooks.run(
+              "Stop",
+              {
+                answer: assistant.content,
+                toolsExecuted,
+                stopHookActive,
+              },
+              { ...this.hookContext, turnId, signal },
+            );
+            if (stop.blocked) {
+              stopHookActive = true;
+              const feedback = hookContextMessage("Stop", stop.blockReason ?? "Continue working");
+              this.messages.push(feedback);
+              await this.sessions.appendMessage(feedback);
+              continue;
+            }
+          }
           await this.events.emit(
             "turn.completed",
             {
@@ -209,18 +275,30 @@ export class AgentRuntime {
           );
           return { answer: assistant.content, messages: this.messages, toolsExecuted, usage };
         }
+        const toolHookContext: string[] = [];
         for (const call of assistant.toolCalls) {
           const result = await this.executor.execute(call, signal, turnId, userText);
+          toolHookContext.push(...result.additionalContext);
           toolsExecuted++;
+          if (result.inputChanged) {
+            const matching = assistant.toolCalls.find((item) => item.callId === call.callId);
+            if (matching) matching.input = result.effectiveCall.input;
+            await this.sessions.appendToolCallUpdate(call.callId, result.effectiveCall.input);
+          }
           const message: AgentMessage = {
             role: "tool",
-            callId: call.callId,
-            name: call.name,
+            callId: result.effectiveCall.callId,
+            name: result.effectiveCall.name,
             content: result.content,
             isError: result.isError ?? false,
           };
           this.messages.push(message);
           await this.sessions.appendMessage(message);
+        }
+        if (toolHookContext.length) {
+          const hookMessage = hookContextMessage("PreToolUse", toolHookContext.join("\n\n"));
+          this.messages.push(hookMessage);
+          await this.sessions.appendMessage(hookMessage);
         }
       }
       throw new CodeNError(
@@ -229,6 +307,16 @@ export class AgentRuntime {
         `Maximum model steps (${this.maxSteps}) reached`,
       );
     } catch (error) {
+      if (!signal.aborted && this.hooks && this.hookContext)
+        await this.hooks.run(
+          "Notification",
+          {
+            notificationType: "attention_required",
+            title: "CodeN",
+            message: error instanceof Error ? error.message : String(error),
+          },
+          { ...this.hookContext, turnId, signal },
+        );
       await this.events.emit(
         "turn.failed",
         {
@@ -348,6 +436,10 @@ export class AgentRuntime {
       }
     }
   }
+}
+
+function hookContextMessage(event: HookEventName, content: string): AgentMessage {
+  return { role: "user", source: "hook", content: `[CodeN hook context: ${event}]\n${content}` };
 }
 
 export type ToolCallStreamEvent = Extract<

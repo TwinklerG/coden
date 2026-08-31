@@ -53,15 +53,15 @@ export class ContextManager {
   }
 
   prepare(messages: AgentMessage[], tools: ToolDefinition[]): PreparedContext {
-    const system = messages[0] ?? { role: "system", content: "You are CodeN." };
-    const units = buildMessageUnits(messages.slice(1));
+    const { systems, remainder, offset } = splitLeadingSystems(messages);
+    const units = buildMessageUnits(remainder, offset);
     const toolTokens = this.estimator.estimateTools(tools);
     const limit = this.inputBudget();
     let retained = this.summary
       ? units.filter((unit) => unit.end > this.compactedThrough)
       : [...units];
     const recentCount = Math.min(3, retained.length);
-    let projected = this.project(system, retained);
+    let projected = this.project(systems, retained);
     let estimated = this.estimator.estimateMessages(projected) + toolTokens;
     let compacted = false;
 
@@ -78,14 +78,14 @@ export class ContextManager {
         role: "system",
         content: `${this.i18n.messages.context.compactTitle}\n${summarizeDeterministically(oldMessages, this.i18n)}`,
       };
-      projected = this.project(system, retained);
+      projected = this.project(systems, retained);
       estimated = this.estimator.estimateMessages(projected) + toolTokens;
       compacted = true;
     }
 
     while (estimated > limit && retained.length > 1) {
       retained = retained.slice(1);
-      projected = this.project(system, retained);
+      projected = this.project(systems, retained);
       estimated = this.estimator.estimateMessages(projected) + toolTokens;
       compacted = true;
     }
@@ -93,8 +93,8 @@ export class ContextManager {
   }
 
   forceCompact(messages: AgentMessage[], tools: ToolDefinition[]): PreparedContext {
-    const system = messages[0] ?? { role: "system", content: "You are CodeN." };
-    const units = buildMessageUnits(messages.slice(1));
+    const { systems, remainder, offset } = splitLeadingSystems(messages);
+    const units = buildMessageUnits(remainder, offset);
     const unsummarized = this.summary
       ? units.filter((unit) => unit.end > this.compactedThrough)
       : units;
@@ -112,7 +112,7 @@ export class ContextManager {
       role: "system",
       content: `${this.i18n.messages.context.emergencyTitle}\n${summarizeDeterministically(oldMessages, this.i18n)}`,
     };
-    const projected = this.project(system, retained);
+    const projected = this.project(systems, retained);
     const estimated =
       this.estimator.estimateMessages(projected) + this.estimator.estimateTools(tools);
     return { messages: projected, estimatedTokens: estimated, compacted: true };
@@ -134,22 +134,37 @@ export class ContextManager {
     this.compactedThrough = 0;
   }
 
-  private project(system: AgentMessage, units: MessageUnit[]): AgentMessage[] {
+  private project(systems: AgentMessage[], units: MessageUnit[]): AgentMessage[] {
     return [
-      system,
+      ...systems,
       ...(this.summary ? [this.summary] : []),
       ...units.flatMap((unit) => unit.messages),
     ];
   }
 }
 
-function buildMessageUnits(messages: AgentMessage[]): MessageUnit[] {
+function splitLeadingSystems(messages: AgentMessage[]): {
+  systems: AgentMessage[];
+  remainder: AgentMessage[];
+  offset: number;
+} {
+  let offset = 0;
+  while (messages[offset]?.role === "system") offset++;
+  return {
+    systems:
+      offset > 0 ? messages.slice(0, offset) : [{ role: "system", content: "You are CodeN." }],
+    remainder: messages.slice(offset),
+    offset,
+  };
+}
+
+function buildMessageUnits(messages: AgentMessage[], offset = 0): MessageUnit[] {
   const units: MessageUnit[] = [];
   let current: MessageUnit | undefined;
   for (let index = 0; index < messages.length; index++) {
     const message = messages[index];
     if (!message) continue;
-    const sourceIndex = index + 1;
+    const sourceIndex = index + offset;
     if (message.role === "user" || !current) {
       if (current) units.push(current);
       current = { messages: [message], start: sourceIndex, end: sourceIndex };

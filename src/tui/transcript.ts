@@ -80,7 +80,7 @@ export function messagesToTranscript(messages: readonly AgentMessage[]): Transcr
   const blocks: TranscriptBlock[] = [];
   let index = 0;
   for (const message of messages) {
-    if (message.role === "user") {
+    if (message.role === "user" && message.source !== "hook") {
       blocks.push({ id: `history-${index++}`, kind: "user", text: message.content });
     } else if (message.role === "assistant" && message.content) {
       blocks.push({ id: `history-${index++}`, kind: "assistant", markdown: message.content });

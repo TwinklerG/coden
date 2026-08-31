@@ -77,7 +77,7 @@ export function renderResumeTranscript(
   i18n: I18n = new I18n("en"),
 ): string {
   const isVisible = (message: AgentMessage): message is UserMessage | AssistantMessage =>
-    message.role === "user" || message.role === "assistant";
+    (message.role === "user" && message.source !== "hook") || message.role === "assistant";
   const blocks: string[] = [i18n.messages.format.resumed(sessionId, messages.length)];
   for (const message of messages.filter(isVisible)) {
     blocks.push(
