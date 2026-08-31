@@ -365,9 +365,24 @@
 
 .home-final-cta {
   display: grid;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.55fr);
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 4rem);
   padding: 1.5rem;
   border-left: 3px solid var(--coden-accent);
+}
+
+.home-final-cta-content {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.home-final-cta-logo {
+  display: block;
+  width: min(100%, 22rem);
+  height: auto;
+  justify-self: center;
 }
 
 .home-final-cta p {
@@ -395,8 +410,13 @@
 }
 
 @media (max-width: 900px) {
-  .home-hero {
+  .home-hero,
+  .home-final-cta {
     grid-template-columns: 1fr;
+  }
+
+  .home-final-cta-logo {
+    width: min(75vw, 20rem);
   }
 
   .step-grid,

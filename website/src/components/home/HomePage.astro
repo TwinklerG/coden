@@ -3,6 +3,7 @@ import ProductLayout from "../../layouts/ProductLayout.astro";
 import { messages } from "../../i18n/messages";
 import { HOME_CONTENT } from "../../data/home";
 import { routeFor } from "../../lib/routes";
+import { withBase } from "../../lib/site";
 import Hero from "./Hero.astro";
 import Features from "./Features.astro";
 import GettingStarted from "./GettingStarted.astro";
@@ -30,22 +31,32 @@ const content = HOME_CONTENT[language];
     <GettingStarted language={language} />
 
     <section class="home-final-cta">
-      <div>
-        <p class="home-section-kicker">CodeN</p>
-        <h2>{language === "zh" ? "安装后立即进入工作流" : "Install and start working immediately"}</h2>
-        <p>{currentMessages.home.placeholder}</p>
+      <div class="home-final-cta-content">
+        <div>
+          <p class="home-section-kicker">CodeN</p>
+          <h2>{language === "zh" ? "安装后立即进入工作流" : "Install and start working immediately"}</h2>
+          <p>{currentMessages.home.placeholder}</p>
+        </div>
+        <div class="home-final-cta-actions">
+          <a class="home-button home-button--primary" href={routeFor(language, "docs")}>
+            {currentMessages.home.cta.docs}
+          </a>
+          <a class="home-button" href={routeFor(language, "plugins")}>
+            {currentMessages.home.cta.plugins}
+          </a>
+        </div>
+        <p class="home-final-cta-command">
+          <code>{currentMessages.home.installCommand}</code>
+        </p>
       </div>
-      <div class="home-final-cta-actions">
-        <a class="home-button home-button--primary" href={routeFor(language, "docs")}>
-          {currentMessages.home.cta.docs}
-        </a>
-        <a class="home-button" href={routeFor(language, "plugins")}>
-          {currentMessages.home.cta.plugins}
-        </a>
-      </div>
-      <p class="home-final-cta-command">
-        <code>{currentMessages.home.installCommand}</code>
-      </p>
+      <img
+        class="home-final-cta-logo"
+        src={withBase("/CodeN.svg")}
+        alt="CodeN"
+        width="1095"
+        height="1095"
+        loading="lazy"
+      />
     </section>
   </div>
 </ProductLayout>
