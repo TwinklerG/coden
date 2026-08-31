@@ -6,18 +6,25 @@ import { sanitizeTerminalText } from "../observability/terminal-text.js";
 import { formatToolInput } from "../observability/tool-input.js";
 import type { PermissionDecision } from "../permissions/policy.js";
 import { messagesToTranscript } from "./transcript.js";
-import type { TranscriptBlock, TuiDialog, TuiPhase, TuiSnapshot } from "./types.js";
+import type {
+  TranscriptBlock,
+  TranscriptInteractionBlock,
+  TuiInteractionAnswer,
+  TuiInteractionStatus,
+  TuiPhase,
+  TuiSnapshot,
+} from "./types.js";
 
 type Listener = () => void;
 type SnapshotPatch = { [Key in keyof TuiSnapshot]?: TuiSnapshot[Key] | undefined };
-type PendingDialog =
-  | {
-      id: number;
-      kind: "permission";
-      resolve: (decision: PermissionDecision) => void;
-      abort?: () => void;
-    }
-  | { id: number; kind: "confirm"; resolve: (decision: boolean) => void; abort?: () => void };
+type PendingInteraction = {
+  id: string;
+  kind: "permission" | "confirm";
+  allowSession: boolean;
+  fallback: PermissionDecision | boolean;
+  resolve(decision: PermissionDecision | boolean): void;
+  cleanup?: () => void;
+};
 
 const INITIAL: TuiSnapshot = {
   blocks: [],
@@ -34,7 +41,7 @@ export class TuiStore {
   #activeAssistant: string | undefined;
   #activeActivity: string | undefined;
   #toolPreview: { name: string; argumentsText: string } | undefined;
-  #pendingDialog: PendingDialog | undefined;
+  #pendingInteraction: PendingInteraction | undefined;
   #closed = false;
 
   constructor(i18n: I18n = new I18n("en")) {
@@ -82,6 +89,7 @@ export class TuiStore {
   }
 
   setFatal(error: unknown): void {
+    this.cancelPendingInteraction();
     this.clearActivity();
     const message = error instanceof Error ? error.message : String(error);
     this.addError(message);
@@ -100,55 +108,51 @@ export class TuiStore {
   ): Promise<PermissionDecision> {
     const display = formatToolInput(
       { name: tool.name, risk, inputSchema: tool.inputSchema, input: call.input },
-      { maxLines: 12, maxValueChars: 500, maxDepth: 4 },
+      { maxLines: Infinity, maxValueChars: Infinity, maxDepth: Infinity },
     );
-    return this.openDialog<PermissionDecision>(
-      {
-        id: this.#nextId++,
-        kind: "permission",
-        title: `${tool.name} · ${risk}`,
-        lines: display.lines,
-        risk,
-        allowSession: risk !== "dangerous",
-      },
-      "deny",
-      signal,
-    );
+    const block: TranscriptInteractionBlock = {
+      id: this.id("interaction"),
+      kind: "interaction",
+      interaction: "permission",
+      toolName: sanitizeTerminalText(tool.name),
+      risk,
+      lines: display.lines,
+      allowSession: risk !== "dangerous",
+      status: "pending",
+    };
+    return this.openPermission(block, signal);
   }
 
   requestConfirm(message: string, signal?: AbortSignal): Promise<boolean> {
-    return this.openDialog<boolean>(
-      { id: this.#nextId++, kind: "confirm", message: sanitizeTerminalText(message) },
-      false,
-      signal,
-    );
+    const block: TranscriptInteractionBlock = {
+      id: this.id("interaction"),
+      kind: "interaction",
+      interaction: "confirm",
+      message: sanitizeTerminalText(message),
+      status: "pending",
+    };
+    return this.openConfirm(block, signal);
   }
 
-  resolveDialog(decision: PermissionDecision | boolean): void {
-    const pending = this.#pendingDialog;
+  resolveInteraction(answer: TuiInteractionAnswer): void {
+    const pending = this.#pendingInteraction;
     if (!pending) return;
-    this.#pendingDialog = undefined;
-    pending.abort?.();
-    this.update({ dialog: undefined });
+    if (answer === "s" && (pending.kind !== "permission" || !pending.allowSession)) return;
+
     if (pending.kind === "permission") {
-      pending.resolve(
-        typeof decision === "boolean" ? (decision ? "allow_once" : "deny") : decision,
-      );
-    } else {
-      pending.resolve(typeof decision === "boolean" ? decision : decision !== "deny");
+      const decision = answer === "y" ? "allow_once" : answer === "s" ? "allow_session" : "deny";
+      this.settleInteraction(pending.id, "resolved", answer, decision);
+    } else if (answer !== "s") {
+      this.settleInteraction(pending.id, "resolved", answer, answer === "y");
     }
   }
 
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
-    const pending = this.#pendingDialog;
-    this.#pendingDialog = undefined;
-    pending?.abort?.();
-    if (pending?.kind === "permission") pending.resolve("deny");
-    if (pending?.kind === "confirm") pending.resolve(false);
+    this.cancelPendingInteraction();
     this.clearActivity();
-    this.update({ dialog: undefined, running: false });
+    this.update({ pendingInteraction: undefined, running: false });
     this.#listeners.clear();
   }
 
@@ -352,35 +356,101 @@ export class TuiStore {
     return `${prefix}-${this.#nextId++}`;
   }
 
-  private openDialog<T extends PermissionDecision | boolean>(
-    dialog: TuiDialog,
-    fallback: T,
+  private openPermission(
+    block: Extract<TranscriptInteractionBlock, { interaction: "permission" }>,
     signal?: AbortSignal,
-  ): Promise<T> {
-    if (this.#closed || signal?.aborted) return Promise.resolve(fallback);
-    if (this.#pendingDialog) return Promise.resolve(fallback);
-    return new Promise<T>((resolve) => {
-      const abort = () => {
-        if (this.#pendingDialog?.id !== dialog.id) return;
-        this.#pendingDialog = undefined;
-        this.update({ dialog: undefined });
-        resolve(fallback);
-      };
+  ): Promise<PermissionDecision> {
+    if (!this.canOpenInteraction(signal)) return Promise.resolve("deny");
+    return new Promise<PermissionDecision>((resolve) => {
+      const abort = () => this.settleInteraction(block.id, "cancelled", undefined, "deny");
       signal?.addEventListener("abort", abort, { once: true });
       const cleanup = signal ? () => signal.removeEventListener("abort", abort) : undefined;
-      this.#pendingDialog = {
-        id: dialog.id,
-        kind: dialog.kind,
-        resolve: resolve as never,
-        ...(cleanup ? { abort: cleanup } : {}),
-      } as PendingDialog;
-      this.update({ dialog });
+      this.#pendingInteraction = {
+        id: block.id,
+        kind: "permission",
+        allowSession: block.allowSession,
+        fallback: "deny",
+        resolve: (decision) => resolve(decision as PermissionDecision),
+        ...(cleanup ? { cleanup } : {}),
+      };
+      this.update({
+        blocks: [...this.#snapshot.blocks, block],
+        pendingInteraction: {
+          id: block.id,
+          kind: "permission",
+          allowSession: block.allowSession,
+        },
+      });
     });
+  }
+
+  private openConfirm(
+    block: Extract<TranscriptInteractionBlock, { interaction: "confirm" }>,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    if (!this.canOpenInteraction(signal)) return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      const abort = () => this.settleInteraction(block.id, "cancelled", undefined, false);
+      signal?.addEventListener("abort", abort, { once: true });
+      const cleanup = signal ? () => signal.removeEventListener("abort", abort) : undefined;
+      this.#pendingInteraction = {
+        id: block.id,
+        kind: "confirm",
+        allowSession: false,
+        fallback: false,
+        resolve: (decision) => resolve(Boolean(decision)),
+        ...(cleanup ? { cleanup } : {}),
+      };
+      this.update({
+        blocks: [...this.#snapshot.blocks, block],
+        pendingInteraction: { id: block.id, kind: "confirm", allowSession: false },
+      });
+    });
+  }
+
+  private canOpenInteraction(signal?: AbortSignal): boolean {
+    if (this.#closed || signal?.aborted) return false;
+    if (!this.#pendingInteraction) return true;
+    this.addError("interaction: another confirmation is already pending");
+    return false;
+  }
+
+  private settleInteraction(
+    id: string,
+    status: TuiInteractionStatus,
+    answer: TuiInteractionAnswer | undefined,
+    decision: PermissionDecision | boolean,
+  ): void {
+    const pending = this.#pendingInteraction;
+    if (!pending || pending.id !== id) return;
+    this.#pendingInteraction = undefined;
+    const blocks = this.#snapshot.blocks.map((block): TranscriptBlock => {
+      if (block.kind !== "interaction" || block.id !== id) return block;
+      if (block.interaction === "permission") {
+        if (answer) return { ...block, status, answer };
+        const { answer: _answer, ...withoutAnswer } = block;
+        return { ...withoutAnswer, status };
+      }
+      if (answer === "y" || answer === "n") return { ...block, status, answer };
+      const { answer: _answer, ...withoutAnswer } = block;
+      return { ...withoutAnswer, status };
+    });
+    this.update({ blocks, pendingInteraction: undefined });
+    pending.cleanup?.();
+    pending.resolve(decision);
+  }
+
+  private cancelPendingInteraction(): void {
+    const pending = this.#pendingInteraction;
+    if (!pending) return;
+    this.settleInteraction(pending.id, "cancelled", undefined, pending.fallback);
   }
 
   private update(patch: SnapshotPatch): void {
     const next = { ...this.#snapshot, ...patch } as TuiSnapshot;
-    if (patch.dialog === undefined && Object.hasOwn(patch, "dialog")) delete next.dialog;
+    if (patch.pendingInteraction === undefined && Object.hasOwn(patch, "pendingInteraction")) {
+      delete next.pendingInteraction;
+    }
     this.#snapshot = next;
     for (const listener of this.#listeners) listener();
   }

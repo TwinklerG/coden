@@ -1,9 +1,35 @@
 import type { AgentMessage } from "../core/types.js";
-import type { I18n } from "../i18n/i18n.js";
+import { I18n } from "../i18n/i18n.js";
 import { MarkdownStreamRenderer } from "../observability/markdown.js";
 import { sanitizeTerminalText } from "../observability/terminal-text.js";
 import { formatActivityLine } from "./activity.js";
-import type { TranscriptBlock } from "./types.js";
+import type { TranscriptBlock, TranscriptInteractionBlock } from "./types.js";
+
+function interactionSuffix(block: TranscriptInteractionBlock, i18n: I18n): string {
+  if (block.status === "cancelled") return i18n.messages.tui.interactionCancelled;
+  return block.answer ?? "";
+}
+
+function renderInteraction(block: TranscriptInteractionBlock, columns: number, i18n: I18n): string {
+  const suffix = interactionSuffix(block, i18n);
+  if (block.interaction === "confirm") {
+    const message = sanitizeTerminalText(block.message).trimEnd();
+    const prompt = /\[y\/N\]$/u.test(message) ? message : `${message} [y/N]`;
+    return `${prompt} ${suffix}`;
+  }
+
+  const rule = "─".repeat(Math.max(1, columns));
+  const values = block.lines.map((line) => `  ${sanitizeTerminalText(line)}`).join("\n");
+  const choices =
+    i18n.currentLanguage === "zh"
+      ? block.allowSession
+        ? "[y] 是 / [s] 本会话 / [N] 否"
+        : "[y] 是 / [N] 否"
+      : block.allowSession
+        ? "[y]es / [s]ession / [N]o"
+        : "[y]es / [N]o";
+  return `${rule}\n${block.risk.toUpperCase()}  ${sanitizeTerminalText(block.toolName)}\n\n${values}\n${rule}\n${i18n.messages.format.allow} ${choices}: ${suffix}`;
+}
 
 export function renderMarkdown(markdown: string, columns: number): string {
   let rendered = "";
@@ -45,6 +71,8 @@ export function renderTranscriptBlock(
         columns,
         activityFrame,
       );
+    case "interaction":
+      return renderInteraction(block, columns, i18n ?? new I18n("en"));
   }
 }
 

@@ -6,6 +6,7 @@ import {
   renderMarkdown,
   renderTranscriptBlock,
 } from "../src/tui/transcript.js";
+import type { TranscriptBlock } from "../src/tui/types.js";
 
 describe("TUI transcript", () => {
   it("projects only visible session messages", () => {
@@ -36,6 +37,56 @@ describe("TUI transcript", () => {
     expect(renderMarkdown("**bold**", 80)).toContain("bold");
     const source = "| Name | Value |\n| --- | --- |\n| long-name | long-value |\n";
     expect(renderMarkdown(source, 20)).not.toBe(renderMarkdown(source, 80));
+  });
+
+  it("renders persistent resize-aware permission interactions", () => {
+    const permission: TranscriptBlock = {
+      id: "permission-1",
+      kind: "interaction",
+      interaction: "permission",
+      toolName: "edit",
+      risk: "modify",
+      lines: ["path: src/a.ts", "content:", ...Array.from({ length: 20 }, (_, i) => `line ${i}`)],
+      allowSession: true,
+      status: "pending",
+    };
+    const pending = renderTranscriptBlock(permission, 30, new I18n("en"));
+    expect(pending).toContain("MODIFY  edit");
+    expect(pending).toContain("Allow? [y]es / [s]ession / [N]o: ");
+    expect(pending).toContain("line 19");
+    expect(pending.split("\n")[0]).toBe("─".repeat(30));
+
+    const resolved = renderTranscriptBlock(
+      { ...permission, status: "resolved", answer: "s" },
+      20,
+      new I18n("en"),
+    );
+    expect(resolved).toContain("[N]o: s");
+    expect(resolved.split("\n")[0]).toBe("─".repeat(20));
+
+    const dangerous = renderTranscriptBlock(
+      { ...permission, risk: "dangerous", allowSession: false },
+      30,
+      new I18n("en"),
+    );
+    expect(dangerous).not.toContain("session");
+    expect(
+      renderTranscriptBlock({ ...permission, status: "cancelled" }, 30, new I18n("zh")),
+    ).toContain("已取消");
+  });
+
+  it("renders generic confirmations without duplicating choices", () => {
+    const confirmation: TranscriptBlock = {
+      id: "confirm-1",
+      kind: "interaction",
+      interaction: "confirm",
+      message: "Trust workspace? [y/N] ",
+      status: "resolved",
+      answer: "y",
+    };
+    const rendered = renderTranscriptBlock(confirmation, 80, new I18n("en"));
+    expect(rendered).toBe("Trust workspace? [y/N] y");
+    expect(rendered.match(/\[y\/N\]/gu)).toHaveLength(1);
   });
 
   it("renders transient activity with localized fallback and a bounded spinner line", () => {

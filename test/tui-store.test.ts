@@ -86,22 +86,74 @@ describe("TuiStore", () => {
     expect(store.getSnapshot()).toMatchObject({ phase: "failed", running: false });
   });
 
-  it("settles permission and confirmation dialogs exactly once", async () => {
+  it("settles permission and confirmation interactions exactly once", async () => {
     const store = new TuiStore();
     const permission = store.requestPermission(
       edit,
       { callId: "1", name: "edit", input: { path: "src/a.ts" } },
       "modify",
     );
-    expect(store.getSnapshot().dialog).toMatchObject({ kind: "permission", allowSession: true });
-    store.resolveDialog("allow_session");
-    store.resolveDialog("deny");
+    expect(store.getSnapshot().pendingInteraction).toMatchObject({
+      kind: "permission",
+      allowSession: true,
+    });
+    expect(store.getSnapshot().blocks.at(-1)).toMatchObject({
+      kind: "interaction",
+      status: "pending",
+      lines: expect.arrayContaining(["path: src/a.ts"]),
+    });
+    store.resolveInteraction("s");
+    store.resolveInteraction("n");
     await expect(permission).resolves.toBe("allow_session");
+    expect(store.getSnapshot().pendingInteraction).toBeUndefined();
+    expect(store.getSnapshot().blocks.at(-1)).toMatchObject({
+      kind: "interaction",
+      status: "resolved",
+      answer: "s",
+    });
 
     const confirm = store.requestConfirm("Trust?\u001b[2J");
-    expect(store.getSnapshot().dialog).toMatchObject({ kind: "confirm", message: "Trust?" });
+    expect(store.getSnapshot().pendingInteraction).toMatchObject({ kind: "confirm" });
+    expect(store.getSnapshot().blocks.at(-1)).toMatchObject({
+      kind: "interaction",
+      interaction: "confirm",
+      message: "Trust?",
+    });
     store.close();
     await expect(confirm).resolves.toBe(false);
+    expect(store.getSnapshot().blocks.at(-1)).toMatchObject({
+      kind: "interaction",
+      status: "cancelled",
+    });
+  });
+
+  it("rejects invalid session approval for dangerous permissions", async () => {
+    const store = new TuiStore();
+    const permission = store.requestPermission(
+      edit,
+      { callId: "1", name: "edit", input: { path: "src/a.ts" } },
+      "dangerous",
+    );
+    store.resolveInteraction("s");
+    expect(store.getSnapshot().pendingInteraction).toBeDefined();
+    store.resolveInteraction("n");
+    await expect(permission).resolves.toBe("deny");
+  });
+
+  it("cancels on abort and safely rejects overlapping interactions", async () => {
+    const store = new TuiStore();
+    const abort = new AbortController();
+    const first = store.requestConfirm("First?", abort.signal);
+    const second = store.requestConfirm("Second?");
+    await expect(second).resolves.toBe(false);
+    expect(store.getSnapshot().blocks.at(-1)).toMatchObject({ kind: "error" });
+    abort.abort();
+    await expect(first).resolves.toBe(false);
+    expect(
+      store
+        .getSnapshot()
+        .blocks.find((block) => block.kind === "interaction" && block.interaction === "confirm"),
+    ).toMatchObject({ status: "cancelled" });
   });
 
   it("keeps one transient block across repeated starts and tool preparation", async () => {

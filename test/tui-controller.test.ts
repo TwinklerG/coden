@@ -186,7 +186,7 @@ describe("TuiController", () => {
     });
     await controller.bootstrap();
     await controller.requestExit();
-    expect(store.getSnapshot().dialog).toBeUndefined();
+    expect(store.getSnapshot().pendingInteraction).toBeUndefined();
     expect(fake.dispose).toHaveBeenCalledOnce();
     expect(exited).toHaveBeenCalledOnce();
   });
@@ -220,7 +220,7 @@ describe("TuiController", () => {
     expect(exited).toHaveBeenCalledOnce();
   });
 
-  it("settles dialogs and disposes once during shutdown", async () => {
+  it("settles inline interactions and disposes once during shutdown", async () => {
     const store = new TuiStore();
     const fake = fakeApplication(async () => {});
     const exited = vi.fn();
@@ -238,6 +238,10 @@ describe("TuiController", () => {
     const confirmation = store.requestConfirm("Trust?");
     await controller.shutdown();
     await expect(confirmation).resolves.toBe(false);
+    expect(store.getSnapshot().blocks.at(-1)).toMatchObject({
+      kind: "interaction",
+      status: "cancelled",
+    });
     await controller.shutdown();
     expect(fake.dispose).toHaveBeenCalledOnce();
     expect(exited).toHaveBeenCalledOnce();

@@ -40,6 +40,7 @@ export const en: Messages = {
     starting: "Starting…",
     exitConfirm: "Exit CodeN?",
     cancelled: "Current task cancelled.",
+    interactionCancelled: "cancelled",
     fatal: (reason) => `TUI error: ${reason}`,
     phases: {
       starting: "starting",

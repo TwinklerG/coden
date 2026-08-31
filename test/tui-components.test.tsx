@@ -1,11 +1,23 @@
 import { render } from "ink-testing-library";
+import { useReducer, useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { EditorState } from "../src/cli/editor-state.js";
 import { I18n } from "../src/i18n/i18n.js";
-import { InputBar } from "../src/tui/components/input-bar.js";
-import { PermissionDialog } from "../src/tui/components/permission-dialog.js";
+import {
+  calculateInputBarLayout,
+  InputBar,
+  type InputBarProps,
+} from "../src/tui/components/input-bar.js";
 import { formatStatus } from "../src/tui/components/status-bar.js";
 import { TranscriptView } from "../src/tui/components/transcript-view.js";
 import type { TranscriptBlock } from "../src/tui/types.js";
+
+function TestInputBar(props: Omit<InputBarProps, "state" | "layout" | "onEditorChange">) {
+  const state = useRef(new EditorState()).current;
+  const [, redraw] = useReducer((value: number) => value + 1, 0);
+  const layout = calculateInputBarLayout(state.text, state.cursor, props.language, props.columns);
+  return <InputBar {...props} state={state} layout={layout} onEditorChange={() => redraw()} />;
+}
 
 const metadata = {
   provider: "openai" as const,
@@ -41,7 +53,7 @@ describe("TUI components", () => {
   it("submits editor input and preserves continuation semantics", async () => {
     const onSubmit = vi.fn();
     const view = render(
-      <InputBar
+      <TestInputBar
         disabled={false}
         active={true}
         language="en"
@@ -62,7 +74,7 @@ describe("TUI components", () => {
   it("routes Ctrl+C to immediate idle exit even with a draft", async () => {
     const onInterrupt = vi.fn();
     const view = render(
-      <InputBar
+      <TestInputBar
         disabled={false}
         active={true}
         language="en"
@@ -81,7 +93,7 @@ describe("TUI components", () => {
   it("ignores the kitty keyboard probe response instead of inserting it", async () => {
     const onSubmit = vi.fn();
     const view = render(
-      <InputBar
+      <TestInputBar
         disabled={false}
         active={true}
         language="en"
@@ -104,7 +116,7 @@ describe("TUI components", () => {
   it("consumes mouse reports without inserting ANSI into editor input", async () => {
     const onSubmit = vi.fn();
     const view = render(
-      <InputBar
+      <TestInputBar
         disabled={false}
         active={true}
         language="en"
@@ -159,9 +171,8 @@ describe("TUI components", () => {
   });
 
   it("keeps the first editor row within the prompt boundary", async () => {
-    const onRowsChange = vi.fn();
     const view = render(
-      <InputBar
+      <TestInputBar
         disabled={false}
         active={true}
         language="en"
@@ -169,18 +180,17 @@ describe("TUI components", () => {
         onSubmit={() => {}}
         onEof={() => {}}
         onInterrupt={() => {}}
-        onRowsChange={onRowsChange}
       />,
     );
     view.stdin.write("abcd");
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(onRowsChange).toHaveBeenLastCalledWith(1);
-    expect(view.lastFrame()?.split("\n")[1]).toBe("Task > abcd▏");
+    expect(view.lastFrame()?.split("\n")[1]).toBe("Task > abcd");
+    expect(view.frames.join("\n")).not.toContain("▏");
   });
 
   it("draws terminal-width rules around the input", () => {
     const view = render(
-      <InputBar
+      <TestInputBar
         disabled={false}
         active={true}
         language="en"
@@ -191,13 +201,13 @@ describe("TUI components", () => {
       />,
     );
 
-    expect(view.lastFrame()?.split("\n")).toEqual(["────────────", "Task > ▏", "────────────"]);
+    expect(view.lastFrame()?.split("\n")).toEqual(["────────────", "Task >", "────────────"]);
   });
 
   it("uses Kitty Shift+Enter for a newline and Enter for submission", async () => {
     const onSubmit = vi.fn();
     const view = render(
-      <InputBar
+      <TestInputBar
         disabled={false}
         active={true}
         language="en"
@@ -219,7 +229,7 @@ describe("TUI components", () => {
   it("moves within a multiline draft without switching history", async () => {
     const onSubmit = vi.fn();
     const view = render(
-      <InputBar
+      <TestInputBar
         disabled={false}
         active={true}
         language="en"
@@ -253,19 +263,18 @@ describe("TUI components", () => {
       onEof: () => {},
       onInterrupt: () => {},
     };
-    const view = render(<InputBar {...props} columns={8} />);
+    const view = render(<TestInputBar {...props} columns={8} />);
     expect(view.lastFrame()?.split("\n")[0]).toBe("────────");
 
-    view.rerender(<InputBar {...props} columns={14} />);
+    view.rerender(<TestInputBar {...props} columns={14} />);
     const lines = view.lastFrame()?.split("\n") ?? [];
     expect(lines[0]).toBe("──────────────");
     expect(lines.at(-1)).toBe("──────────────");
   });
 
-  it("reports wrapped input rows", async () => {
-    const onRowsChange = vi.fn();
+  it("renders and resets wrapped input rows", async () => {
     const view = render(
-      <InputBar
+      <TestInputBar
         disabled={false}
         active={true}
         language="en"
@@ -273,17 +282,15 @@ describe("TUI components", () => {
         onSubmit={() => {}}
         onEof={() => {}}
         onInterrupt={() => {}}
-        onRowsChange={onRowsChange}
       />,
     );
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(onRowsChange).toHaveBeenLastCalledWith(1);
+    expect(view.lastFrame()?.split("\n")).toHaveLength(3);
     view.stdin.write("abcdefghij");
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(onRowsChange).toHaveBeenLastCalledWith(3);
+    expect(view.lastFrame()?.split("\n")).toHaveLength(5);
     view.stdin.write("\r");
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(onRowsChange).toHaveBeenLastCalledWith(1);
+    expect(view.lastFrame()?.split("\n")).toHaveLength(3);
   });
 
   it("formats status by priority", () => {
@@ -373,41 +380,5 @@ describe("TUI components", () => {
     view.rerender(renderView([...base, { ...activity, text: "updated thought" }], true));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(view.lastFrame()).toContain("updated thought");
-  });
-
-  it("uses risk-aware permission choices", async () => {
-    const onResolve = vi.fn();
-    const normal = render(
-      <PermissionDialog
-        dialog={{
-          id: 1,
-          kind: "permission",
-          title: "edit · modify",
-          lines: ["path: src/a.ts"],
-          risk: "modify",
-          allowSession: true,
-        }}
-        onResolve={onResolve}
-      />,
-    );
-    expect(normal.lastFrame()).toContain("[s] session");
-    normal.stdin.write("s");
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(onResolve).toHaveBeenCalledWith("allow_session");
-
-    const dangerous = render(
-      <PermissionDialog
-        dialog={{
-          id: 2,
-          kind: "permission",
-          title: "bash · dangerous",
-          lines: ["command: rm"],
-          risk: "dangerous",
-          allowSession: false,
-        }}
-        onResolve={() => {}}
-      />,
-    );
-    expect(dangerous.lastFrame()).not.toContain("session");
   });
 });

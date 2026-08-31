@@ -1,10 +1,10 @@
 import type { RenderOptions } from "ink";
 import { Box, render, useInput, useWindowSize } from "ink";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useReducer, useRef, useSyncExternalStore } from "react";
 import type { AgentCommandOptions } from "../cli/agent-command.js";
+import { EditorState } from "../cli/editor-state.js";
 import type { I18n } from "../i18n/i18n.js";
-import { InputBar } from "./components/input-bar.js";
-import { PermissionDialog } from "./components/permission-dialog.js";
+import { calculateInputBarLayout, InputBar } from "./components/input-bar.js";
 import { StatusBar } from "./components/status-bar.js";
 import { TranscriptView } from "./components/transcript-view.js";
 import { TuiController } from "./controller.js";
@@ -29,11 +29,10 @@ export function calculateTranscriptRows(terminalRows: number, inputRows: number)
 }
 
 export function calculateInputCursorTopRow(transcriptRows: number): number {
-  // The upper input rule, plus Ink's full-screen compensation.
-  return transcriptRows + 2;
+  return transcriptRows + 1;
 }
 
-function TuiApp({
+export function TuiApp({
   controller,
   store,
   i18n,
@@ -44,9 +43,16 @@ function TuiApp({
 }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const { columns, rows } = useWindowSize();
-  const [inputRows, setInputRows] = useState(1);
-  const onInputRowsChange = useCallback((next: number) => setInputRows(next), []);
-  const transcriptRows = calculateTranscriptRows(rows, inputRows);
+  const editor = useRef(new EditorState()).current;
+  const [, reviseEditor] = useReducer((value: number) => value + 1, 0);
+  const inputLayout = calculateInputBarLayout(
+    editor.text,
+    editor.cursor,
+    i18n.currentLanguage,
+    columns,
+  );
+  const transcriptRows = calculateTranscriptRows(rows, inputLayout.editor.rows.length);
+  const pendingInteraction = snapshot.pendingInteraction;
   useMouseReporting();
 
   useEffect(() => {
@@ -63,9 +69,21 @@ function TuiApp({
 
   useInput(
     (input, key) => {
-      if (key.ctrl && input === "c") void controller.requestExit();
+      if (key.ctrl && input === "c") {
+        void controller.requestExit();
+        return;
+      }
+      if (key.escape) {
+        store.resolveInteraction("n");
+        return;
+      }
+      const answer = input.toLowerCase();
+      if (answer === "y" || answer === "n") store.resolveInteraction(answer);
+      if (answer === "s" && pendingInteraction?.kind === "permission") {
+        store.resolveInteraction("s");
+      }
     },
-    { isActive: Boolean(snapshot.dialog) },
+    { isActive: Boolean(pendingInteraction) },
   );
 
   return (
@@ -75,20 +93,22 @@ function TuiApp({
         columns={columns}
         rows={transcriptRows}
         followOutput={snapshot.followOutput}
-        active={!snapshot.dialog}
+        active={true}
         i18n={i18n}
         onFollowChange={(follow) => store.setFollowOutput(follow)}
       />
       <InputBar
-        disabled={snapshot.running}
-        active={!snapshot.dialog}
+        state={editor}
+        layout={inputLayout}
+        disabled={snapshot.running || Boolean(pendingInteraction)}
+        active={!pendingInteraction}
         language={i18n.currentLanguage}
         columns={columns}
         topRow={calculateInputCursorTopRow(transcriptRows)}
         onSubmit={(text) => void controller.submit(text)}
         onEof={() => void controller.shutdown()}
         onInterrupt={() => void controller.requestExit()}
-        onRowsChange={onInputRowsChange}
+        onEditorChange={() => reviseEditor()}
       />
       <StatusBar
         metadata={snapshot.metadata}
@@ -98,15 +118,6 @@ function TuiApp({
         {...(snapshot.turnUsage ? { usage: snapshot.turnUsage } : {})}
         phaseLabel={i18n.messages.tui.phases[snapshot.phase]}
       />
-      {snapshot.dialog ? (
-        <Box position="absolute" width="100%" height="100%" justifyContent="center">
-          <PermissionDialog
-            dialog={snapshot.dialog}
-            i18n={i18n}
-            onResolve={(decision) => store.resolveDialog(decision)}
-          />
-        </Box>
-      ) : null}
     </Box>
   );
 }

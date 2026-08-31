@@ -51,7 +51,9 @@ coden --resume                   # 列出当前工作区的会话
 
 `coden` 默认进入连续输出 CLI；`--tui` 可在支持的 TTY 中显式启动 Ink 全屏 TUI，`--cli` 可显式指定 CLI。非 TTY、`TERM=dumb` 或无法进入 raw mode 时，显式 `--tui` 会降级为 CLI 并显示警告。`-p/--print` 始终保持纯文本、可管道化并在单轮后退出。`NO_COLOR` 只关闭颜色，不影响界面模式。
 
-TUI 内容区保持 CLI 风格，瞬时思考/工具活动跟随当前对话位置进入 transcript 流，不再固定在底部；输入区由上下两条贯穿全宽的水平线包围，下方依次是 provider/model、workspace、授权模式、阶段、上下文占用状态。Enter 提交；Shift+Enter 或行尾单个 `\` 插入换行；方向键在显式换行或自动折行的草稿行间移动，不会切换历史，仅 `Ctrl+P`/`Ctrl+N` 浏览输入历史；`PageUp`/`PageDown` 和鼠标滚轮浏览 transcript，`End` 回到最新内容；运行中 `Ctrl+C` 取消当前任务；空输入 `Ctrl+D` 或确认后的 `Ctrl+C` 退出。TUI 保持单任务串行，不在运行中排队输入。
+TUI 内容区保持 CLI 风格，瞬时思考/工具活动跟随当前对话位置进入 transcript 流，不再固定在底部；输入区由上下两条贯穿全宽的水平线包围，下方依次是 provider/model、workspace、授权模式、阶段、上下文占用状态。Enter 提交；Shift+Enter 或行尾单个 `\` 插入换行；方向键在显式换行或自动折行的草稿行间移动，不会切换历史，仅 `Ctrl+P`/`Ctrl+N` 浏览输入历史；`PageUp`/`PageDown` 和鼠标滚轮浏览 transcript，`End` 回到最新内容；运行中 `Ctrl+C` 取消当前任务；空输入 `Ctrl+D` 或空闲时 `Ctrl+C` 退出。TUI 保持单任务串行，不在运行中排队输入。
+
+工具授权、工作区信任和插件确认都以内联请求显示在 transcript 中，不再弹出 dialog。等待选择时任务输入区保持可见但禁用；普通授权使用 `y` 允许一次、`s` 本会话、`n`/`Esc` 拒绝，危险操作不提供会话授权。请求、可用选项和最终选择会永久保留在当前 TUI transcript 中。
 
 TUI 与传统 CLI 均支持 `/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new`、`/lang` 和 `/quit`。`/lang` 列出 `zh`、`en` 及当前语言；`/lang en` 或 `/lang zh` 会原子写入用户配置并立即切换界面、系统提示词和内建工具描述。传统 CLI 继续提供完整多行编辑与启动横幅。
 

@@ -4,7 +4,7 @@ import {
   calculateTranscriptRows,
   TUI_RENDER_OPTIONS,
 } from "../src/tui/app.js";
-import { inputRule } from "../src/tui/components/input-bar.js";
+import { calculateInputBarLayout, inputRule } from "../src/tui/components/input-bar.js";
 
 describe("TUI row allocation", () => {
   it("reserves two input rules and a status row", () => {
@@ -18,7 +18,14 @@ describe("TUI row allocation", () => {
   });
 
   it("offsets the real cursor past the upper input rule", () => {
-    expect(calculateInputCursorTopRow(20)).toBe(22);
+    expect(calculateInputCursorTopRow(20)).toBe(21);
+  });
+
+  it("derives transcript allocation from the same editor layout", () => {
+    const one = calculateInputBarLayout("a", 1, "en", 20);
+    const two = calculateInputBarLayout("a\nb", 3, "en", 20);
+    expect(calculateTranscriptRows(24, one.editor.rows.length)).toBe(20);
+    expect(calculateTranscriptRows(24, two.editor.rows.length)).toBe(19);
   });
 
   it("draws at least one rule cell and follows terminal width", () => {

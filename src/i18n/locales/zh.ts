@@ -38,6 +38,7 @@ export const zh = {
     starting: "正在启动…",
     exitConfirm: "退出 CodeN？",
     cancelled: "当前任务已取消。",
+    interactionCancelled: "已取消",
     fatal: (reason: string) => `TUI 错误：${reason}`,
     phases: {
       starting: "启动中",
