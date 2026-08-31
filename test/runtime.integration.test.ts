@@ -13,6 +13,7 @@ import { TrustStore } from "../src/config/trust.js";
 import { ContextManager } from "../src/context/manager.js";
 import { EventBus, type RuntimeEvent } from "../src/core/events.js";
 import { AgentRuntime } from "../src/core/runtime.js";
+import type { ThinkingLevel } from "../src/core/thinking.js";
 import type { ModelEvent, ModelProvider, ModelRequest, ToolDefinition } from "../src/core/types.js";
 import { TerminalRenderer } from "../src/observability/terminal.js";
 import { type PermissionMode, PermissionPolicy } from "../src/permissions/policy.js";
@@ -60,6 +61,7 @@ async function harness(
   maxSteps = 20,
   contextWindow = 10_000,
   reviewer?: ApprovalReviewer,
+  thinkingLevel?: ThinkingLevel,
 ) {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-runtime-"));
   const data = await mkdtemp(path.join(os.tmpdir(), "coden-data-"));
@@ -83,7 +85,13 @@ async function harness(
     new ContextManager({ contextWindow, reservedOutputTokens: 200, safetyMargin: 100 }),
     session,
     events,
-    { model: "scripted", retries: 2, retryBaseMs: 1, maxSteps },
+    {
+      model: "scripted",
+      retries: 2,
+      retryBaseMs: 1,
+      maxSteps,
+      ...(thinkingLevel ? { thinkingLevel } : {}),
+    },
   );
   return { workspace, events, observed, registry, session, runtime };
 }
@@ -658,5 +666,104 @@ describe("AgentRuntime integration", () => {
     // 第二条消息不会覆盖已有标题
     const text = await readFile(h.session.sessionPath, "utf8");
     expect(text.match(/"type":"session\.title"/g)).toHaveLength(1);
+  });
+
+  it("propagates the turn thinking snapshot through every tool step", async () => {
+    const provider = new ScriptedProvider([
+      (request) => {
+        expect(request.thinkingLevel).toBe("high");
+        return scriptedTool("r", "read", { path: "file.txt" });
+      },
+      (request) => {
+        expect(request.thinkingLevel).toBe("high");
+        return scriptedText("done");
+      },
+    ]);
+    const h = await harness(provider, "auto", async () => "deny", 20, 10_000, undefined, "high");
+    await writeFile(path.join(h.workspace, "file.txt"), "body", "utf8");
+    await h.runtime.run("inspect");
+    expect(provider.requests).toHaveLength(2);
+  });
+
+  it("keeps the same thinking snapshot across provider retries", async () => {
+    const provider = new ScriptedProvider([
+      Object.assign(new Error("rate limited"), { status: 429 }),
+      scriptedText("recovered"),
+    ]);
+    const h = await harness(provider, "auto", async () => "deny", 20, 10_000, undefined, "low");
+    await h.runtime.run("hello");
+    expect(provider.requests.map((request) => request.thinkingLevel)).toEqual(["low", "low"]);
+  });
+
+  it("applies a dynamic thinking switch only to the next turn", async () => {
+    const provider = new ScriptedProvider([scriptedText("one"), scriptedText("two")]);
+    const h = await harness(provider, "auto", async () => "deny", 20, 10_000, undefined, "low");
+    expect(h.runtime.thinkingLevel).toBe("low");
+    await h.runtime.run("first");
+    h.runtime.updateThinkingLevel("high");
+    await h.runtime.run("next");
+    expect(provider.requests.at(-1)?.thinkingLevel).toBe("high");
+    expect(provider.requests[0]?.thinkingLevel).toBe("low");
+  });
+
+  it("persists the initial thinking level on the first turn", async () => {
+    const h = await harness(
+      new ScriptedProvider([scriptedText("answer")]),
+      "auto",
+      async () => "deny",
+      20,
+      10_000,
+      undefined,
+      "medium",
+    );
+    await h.runtime.run("first task");
+    const text = await readFile(h.session.sessionPath, "utf8");
+    expect(text).toContain('"type":"session.thinking"');
+    expect(text).toContain('"level":"medium"');
+  });
+
+  it("persists Anthropic provider state onto assistant messages", async () => {
+    const providerState = {
+      provider: "anthropic",
+      data: {
+        thinkingBlocks: [{ type: "thinking", thinking: "inspect", signature: "signed" }],
+      },
+    };
+    const provider = new ScriptedProvider([
+      [
+        { type: "reasoning_delta", text: "inspect" },
+        { type: "text_delta", text: "answer" },
+        { type: "provider_state", state: providerState },
+        { type: "done" },
+      ],
+    ]);
+    const h = await harness(provider);
+    await h.runtime.run("hello");
+
+    expect(h.runtime.messages.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "answer",
+      providerState,
+    });
+    const recovered = await h.session.recover();
+    expect(recovered.messages.at(-1)).toMatchObject({ providerState });
+  });
+
+  it("leaves thinking unset on proactive compaction requests", async () => {
+    const provider = new ScriptedProvider([
+      scriptedText("one"),
+      scriptedText("two"),
+      scriptedText("three"),
+      scriptedText("Goals and decisions preserved."),
+      scriptedText("four"),
+    ]);
+    const h = await harness(provider, "auto", async () => "deny", 20, 900, undefined, "high");
+    await h.runtime.run("first");
+    await h.runtime.run("second");
+    await h.runtime.run("third");
+    await h.runtime.run("fourth");
+    const compaction = provider.requests.find((request) => request.tools.length === 0);
+    expect(compaction).toBeDefined();
+    expect(compaction?.thinkingLevel).toBeUndefined();
   });
 });

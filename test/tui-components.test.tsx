@@ -26,6 +26,8 @@ const metadata = {
   workspaceId: "abcdef123456",
   approvalMode: "smart" as const,
   sessionId: "session-123456",
+  thinkingLevel: "default" as const,
+  thinkingDisplay: "default",
 };
 
 describe("TUI components", () => {
@@ -295,9 +297,15 @@ describe("TUI components", () => {
 
   it("formats status by priority", () => {
     expect(formatStatus(metadata, "thinking", 42, 80)).toContain(
-      "openai/gpt-test · workspace · smart · thinking · context 42%",
+      "openai/gpt-test · workspace · smart · think default · thinking · context 42%",
     );
     expect(formatStatus(metadata, "thinking", 42, 18)).toBe("openai/gpt-test");
+  });
+
+  it("shows the honest OpenAI off mapping in the status bar", () => {
+    expect(
+      formatStatus({ ...metadata, thinkingDisplay: "off→minimal" }, "thinking", 42, 80),
+    ).toContain("think off→minimal");
   });
 
   it("renders thinking as the latest transcript block", () => {

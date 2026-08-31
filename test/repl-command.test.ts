@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { executeReplCommand } from "../src/cli/repl-command.js";
+import { executeReplCommand, formatThinkingStatus } from "../src/cli/repl-command.js";
 import { I18n } from "../src/i18n/i18n.js";
 import { SkillRegistry } from "../src/skills/registry.js";
 import { ToolRegistry } from "../src/tools/registry.js";
@@ -8,6 +8,16 @@ function dependencies() {
   const runtime = { compact: vi.fn(async () => {}), reset: vi.fn(async () => {}) };
   const reload = vi.fn(async () => ({ registry: new ToolRegistry(), loaded: [], failed: [] }));
   const switchLanguage = vi.fn(async (language: "zh" | "en") => i18n.setLanguage(language));
+  const getThinkingStatus = vi.fn(() => ({
+    level: "medium" as const,
+    effectiveLevel: "medium" as const,
+    displayLevel: "medium",
+  }));
+  const switchThinkingLevel = vi.fn(async () => ({
+    level: "off" as const,
+    effectiveLevel: "minimal" as const,
+    displayLevel: "off→minimal",
+  }));
   const i18n = new I18n("en");
   return {
     value: {
@@ -17,11 +27,15 @@ function dependencies() {
       skills: new SkillRegistry(),
       reload,
       switchLanguage,
+      getThinkingStatus,
+      switchThinkingLevel,
       i18n,
     },
     runtime,
     reload,
     switchLanguage,
+    getThinkingStatus,
+    switchThinkingLevel,
   };
 }
 
@@ -62,5 +76,39 @@ describe("shared REPL commands", () => {
       type: "output",
     });
     await expect(executeReplCommand("/quit", deps.value)).resolves.toEqual({ type: "exit" });
+  });
+
+  it("reports configured and effective thinking levels separately", () => {
+    expect(
+      formatThinkingStatus(
+        {
+          level: "off",
+          effectiveLevel: "minimal",
+          displayLevel: "off→minimal",
+        },
+        new I18n("en"),
+      ),
+    ).toContain("Current: off\nEffective: off→minimal");
+  });
+
+  it("queries, switches, and rejects thinking levels", async () => {
+    const deps = dependencies();
+    await expect(executeReplCommand("/thinking", deps.value)).resolves.toMatchObject({
+      type: "output",
+      text: expect.stringContaining("medium"),
+    });
+    await expect(executeReplCommand("/thinking off", deps.value)).resolves.toMatchObject({
+      type: "output",
+      text: expect.stringContaining("off→minimal"),
+    });
+    expect(deps.switchThinkingLevel).toHaveBeenCalledWith("off");
+    await expect(executeReplCommand("/thinking extreme", deps.value)).resolves.toMatchObject({
+      type: "output",
+      text: expect.stringContaining("Unsupported thinking level"),
+    });
+    await expect(executeReplCommand("/thinking high\ntext", deps.value)).resolves.toEqual({
+      type: "message",
+      text: "/thinking high\ntext",
+    });
   });
 });

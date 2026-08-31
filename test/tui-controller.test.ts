@@ -43,9 +43,21 @@ function fakeApplication(run: (text: string, signal: AbortSignal) => Promise<unk
         workspaceId: "workspace-id",
         approvalMode: "auto",
         sessionId: "session-123",
+        thinkingLevel: "default",
+        thinkingDisplay: "default",
       },
       reload: async () => ({ registry: new ToolRegistry(), loaded: [], failed: [] }),
       switchLanguage: async () => {},
+      getThinkingStatus: () => ({
+        level: "default",
+        effectiveLevel: "default",
+        displayLevel: "default",
+      }),
+      switchThinkingLevel: async () => ({
+        level: "default",
+        effectiveLevel: "default",
+        displayLevel: "default",
+      }),
       dispose,
     } as unknown as AgentApplication,
     events,
@@ -86,6 +98,26 @@ describe("TuiController", () => {
         expect.objectContaining({ kind: "assistant", markdown: "answer" }),
       ]),
     );
+  });
+
+  it("routes /thinking to the shared command without starting a turn", async () => {
+    const store = new TuiStore();
+    const run = vi.fn(async () => {});
+    const fake = fakeApplication(run);
+    const controller = new TuiController({
+      command,
+      i18n: new I18n("en"),
+      store,
+      createApplication: async (options) => {
+        options.onEvents?.(fake.events);
+        return fake.application;
+      },
+      onExit: () => {},
+    });
+    await controller.bootstrap();
+    await controller.submit("/thinking high");
+    expect(store.getSnapshot().blocks.at(-1)).toMatchObject({ kind: "info" });
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("exits and restores the TUI after bootstrap failure", async () => {

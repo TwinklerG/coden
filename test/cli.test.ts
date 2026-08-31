@@ -16,6 +16,7 @@ const baseEnv = {
   CODEN_PROVIDER: "",
   CODEN_MODEL: "",
   CODEN_MAX_STEPS: "",
+  CODEN_THINKING_LEVEL: "",
   XDG_CONFIG_HOME: path.join(os.tmpdir(), `coden-cli-config-${process.pid}`),
 };
 
@@ -67,6 +68,7 @@ describe("CLI exit codes", () => {
     expect(help.status).toBe(0);
     expect(help.stdout).toContain("--tui");
     expect(help.stdout).toContain("--cli");
+    expect(help.stdout).toContain("--thinking <level>");
 
     const conflict = spawnSync("bun", [cli, "--tui", "--cli"], {
       encoding: "utf8",
@@ -75,6 +77,16 @@ describe("CLI exit codes", () => {
     });
     expect(conflict.status).toBe(2);
     expect(conflict.stderr).toContain("不能");
+  });
+
+  it("rejects an invalid --thinking value before execution", () => {
+    const invalid = spawnSync("bun", [cli, "--thinking", "extreme", "task"], {
+      encoding: "utf8",
+      env: baseEnv,
+      timeout: 30_000,
+    });
+    expect(invalid.status).toBe(1);
+    expect(invalid.stderr).toContain("default, off, minimal, low, medium, or high");
   });
 
   it("warns and falls back when explicit TUI has no TTY", () => {

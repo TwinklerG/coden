@@ -40,6 +40,10 @@ coden --cli                       # use the legacy CLI/REPL
 coden -p --auto "implement the feature and run tests" # print once and exit
 coden --smart-approve "implement the feature and run tests"
 coden --lang en --help            # English for this process only
+coden --thinking high "analyze and fix this concurrency issue"
+
+export CODEN_THINKING_LEVEL=medium
+coden --resume <session-id>
 
 export CODEN_ANTHROPIC_API_KEY=...
 coden --provider anthropic --model claude-sonnet-4-20250514
@@ -54,11 +58,11 @@ The TUI keeps CLI-like content with a transient activity row, fixed multiline in
 
 Tool permissions, workspace trust, and plugin confirmations appear inline in the transcript instead of dialogs. The task input remains visible but disabled while a choice is pending. Normal permission uses `y` to allow once, `s` to allow for the session, and `n`/`Esc` to deny; dangerous operations do not offer session approval. The request, available choices, and final answer remain in the current TUI transcript.
 
-Both interfaces support `/help`, `/skills`, `/session`, `/sessions`, `/compact`, `/reload`, `/new`, `/lang`, and `/quit`. `/lang` lists `zh`, `en`, and the current language; `/lang en` or `/lang zh` atomically persists the preference and immediately changes the UI, system prompt, and built-in tool descriptions. The legacy CLI retains multiline editing, process-local history, and its startup banner.
+Both interfaces support `/help`, `/skills`, `/session`, `/sessions`, `/compact`, `/reload`, `/new`, `/lang`, `/thinking`, and `/quit`. `/lang` lists `zh`, `en`, and the current language; `/lang en` or `/lang zh` atomically persists the preference and immediately changes the UI, system prompt, and built-in tool descriptions. `/thinking` lists the six levels, the current value, and the effective mapping; `/thinking <level>` switches while idle and persists the choice to the current session. The legacy CLI retains multiline editing, process-local history, and its startup banner.
 
 CodeN has a fixed Chinese default and does not inspect the operating-system locale. `--lang zh|en` overrides only the current process and never writes configuration. The UI, system prompt, and built-in tools share one language. An explicit request for another reply language may be followed for one task without changing UI or persistent preferences. Third-party plugin names, descriptions, output, and errors remain exactly as authored.
 
-Core options are `--tui`, `--cli`, `--lang`, `--provider`, `--model`, `-p/--print`, `--resume [session-id]`, `--smart-approve`, `--auto`, `--allow-outside-workspace`, `--verbose`, `--max-steps`, repeatable `--plugin`, and `--version`. `--tui` cannot be combined with `--cli` or `--print`.
+Core options are `--tui`, `--cli`, `--lang`, `--provider`, `--model`, `-p/--print`, `--resume [session-id]`, `--smart-approve`, `--auto`, `--allow-outside-workspace`, `--verbose`, `--max-steps`, `--thinking <level>`, repeatable `--plugin`, and `--version`. `--tui` cannot be combined with `--cli` or `--print`.
 
 ## Configuration
 
@@ -75,6 +79,7 @@ Ordinary fields use this precedence: CLI > `CODEN_*` environment > `<workspace>/
   "contextWindow": 128000,
   "reservedOutputTokens": 8192,
   "safetyMargin": 4096,
+  "thinkingLevel": "default",
   "plugins": [],
   "env": {
     "CODEN_OPENAI_API_KEY": "sk-..."
@@ -84,11 +89,23 @@ Ordinary fields use this precedence: CLI > `CODEN_*` environment > `<workspace>/
 
 `language` is a user-only preference read exclusively from `~/.config/coden/config.json`. A `language` field in project `.coden/config.json` is ignored and cannot override personal UI or Agent language. Only canonical `zh` and `en` are accepted. `--lang` has highest startup precedence but affects only this process. `/lang <zh|en>` preserves every other configuration field and atomically updates the user file with mode `0600`.
 
-Supported environment variables include `CODEN_PROVIDER`, `CODEN_MODEL`, `CODEN_MAX_STEPS`, `CODEN_OPENAI_API_KEY`, `CODEN_OPENAI_BASE_URL`, `CODEN_ANTHROPIC_API_KEY`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME`. There is no `CODEN_LANG`.
+Supported environment variables include `CODEN_PROVIDER`, `CODEN_MODEL`, `CODEN_MAX_STEPS`, `CODEN_THINKING_LEVEL`, `CODEN_OPENAI_API_KEY`, `CODEN_OPENAI_BASE_URL`, `CODEN_ANTHROPIC_API_KEY`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME`. There is no `CODEN_LANG`.
 
 User and project `env` objects declare environment variables, including secrets. Project values override user values, but neither overrides an already exported shell variable. Keep secrets in ignored `~/.config/coden/` or `.coden/`, never in committed/shared files.
 
-`approvalModel` uses the task provider and credentials, defaulting to `model`. `approvalStrictness` is `soft`, `medium`, or `hard` (default `medium`). Sessions and traces live under `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`, normally `~/.local/share/coden`.
+`approvalModel` uses the task provider and credentials, defaulting to `model`. `approvalStrictness` is `soft`, `medium`, or `hard` (default `medium`). Sessions and traces live under `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`, normally `~/.local/share/coden`. Directories and files keep `0700`/`0600` permissions. **Note**: session JSONL and traces may contain model reasoning, redacted-thinking, signatures, user text, and code fragments — sensitive data. Do not share or distribute them without review, and keep local private permissions.
+
+### Thinking level
+
+CodeN exposes a unified `default | off | minimal | low | medium | high` thinking level via `--thinking <level>`, `CODEN_THINKING_LEVEL`, the `thinkingLevel` config field, or the in-session `/thinking [level]` command. The default `default` sends no thinking parameters and preserves pre-upgrade behavior.
+
+- OpenAI maps to `reasoning_effort`: `off` maps to `minimal` and is displayed as `off→minimal` (OpenAI reasoning models have no uniform true-off value); `minimal`/`low`/`medium`/`high` map to the same names.
+- Anthropic maps to `thinking`: `off` sends `{ type: "disabled" }`; `minimal` uses 1024 tokens; `low`/`medium`/`high` use 25%/50%/75% of `reservedOutputTokens`, clamped to `[1024, reservedOutputTokens - 1]`. Thinking budgets stay inside `reservedOutputTokens`; higher levels reduce final text and tool-call capacity in the same output. Enabled thinking requires `reservedOutputTokens > 1024`.
+- CodeN keeps no model-capability allowlist and never silently removes a rejected parameter. Explicit non-default values are always sent; unsupported endpoints return a clear Provider error.
+- Thinking level applies only to main Agent requests; compaction and Smart Approval requests keep Provider defaults. Every step in a tool loop and every Provider retry uses the snapshot taken at turn start.
+- On resume, `--resume` uses the session's last saved level. Explicit `--thinking` wins over the saved value, environment, project config, and user config, and overwrites the session at startup. `/new` resets only the conversation, not the level; `/thinking` affects only the current process and session, never user or project config files.
+
+Anthropic extended thinking requires replaying thinking, redacted-thinking, and signature blocks verbatim on follow-up requests. CodeN stores them as `providerState` on assistant messages, persists them in the session, and replays them automatically across tool loops and resume; switching providers ignores non-matching provider state.
 
 ## Agent Skills
 

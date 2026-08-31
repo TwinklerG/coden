@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, chmod, mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { isProviderMessageState, isThinkingLevel, type ThinkingLevel } from "../core/thinking.js";
 import type { AgentMessage } from "../core/types.js";
 
 interface SessionRecord {
@@ -14,6 +15,7 @@ export interface RecoveredSession {
   messages: AgentMessage[];
   summary?: string;
   compactionRange?: { start: number; end: number };
+  thinkingLevel?: ThinkingLevel;
   warnings: string[];
 }
 export interface SessionMeta {
@@ -77,6 +79,9 @@ export class SessionStore {
   }
   appendMessage(message: AgentMessage): Promise<void> {
     return this.append("message", message);
+  }
+  appendThinkingLevel(level: ThinkingLevel): Promise<void> {
+    return this.append("session.thinking", { level });
   }
   appendCompaction(summary: string, sourceRange?: { start: number; end: number }): Promise<void> {
     return this.append("context.compacted", sourceRange ? { summary, sourceRange } : { summary });
@@ -158,6 +163,7 @@ export class SessionStore {
     const warnings: string[] = [];
     let summary: string | undefined;
     let compactionRange: { start: number; end: number } | undefined;
+    let thinkingLevel: ThinkingLevel | undefined;
     const text = await readFile(this.sessionPath, "utf8");
     this.#created = true;
     const lines = text.split("\n");
@@ -204,6 +210,17 @@ export class SessionStore {
               ? { start: data.sourceRange.start, end: data.sourceRange.end }
               : undefined;
         }
+        if (record.type === "session.thinking") {
+          const data = record.data as { level?: unknown };
+          if (
+            !data ||
+            typeof data !== "object" ||
+            Array.isArray(data) ||
+            !isThinkingLevel(data.level)
+          )
+            throw new Error("invalid thinking level record");
+          thinkingLevel = data.level;
+        }
       } catch (error) {
         throw invalidRecord(index, error);
       }
@@ -213,6 +230,7 @@ export class SessionStore {
     const recovered: RecoveredSession = { messages, warnings };
     if (summary !== undefined) recovered.summary = summary;
     if (compactionRange !== undefined) recovered.compactionRange = compactionRange;
+    if (thinkingLevel !== undefined) recovered.thinkingLevel = thinkingLevel;
     return recovered;
   }
 }
@@ -222,7 +240,10 @@ function isMessage(value: unknown): value is AgentMessage {
   if ((message.role === "system" || message.role === "user") && typeof message.content === "string")
     return true;
   if (message.role === "assistant" && typeof message.content === "string") {
+    const stateValid =
+      message.providerState === undefined || isProviderMessageState(message.providerState);
     return (
+      stateValid &&
       Array.isArray(message.toolCalls) &&
       message.toolCalls.every(
         (call) =>

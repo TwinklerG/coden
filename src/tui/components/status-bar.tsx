@@ -17,6 +17,7 @@ export function formatStatus(
     `${metadata.provider}/${metadata.model}`,
     path.basename(metadata.workspace) || metadata.workspaceId,
     metadata.approvalMode,
+    metadata.thinkingDisplay ? `think ${metadata.thinkingDisplay}` : undefined,
     phaseLabel,
     contextPercent === undefined ? undefined : `context ${Math.round(contextPercent)}%`,
   ].filter((value): value is string => Boolean(value));

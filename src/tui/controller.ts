@@ -98,6 +98,8 @@ export class TuiController {
         skills: application.skills,
         i18n: this.#options.i18n,
         switchLanguage: application.switchLanguage,
+        getThinkingStatus: application.getThinkingStatus,
+        switchThinkingLevel: application.switchThinkingLevel,
       });
       if (command.type === "empty") return;
       if (command.type === "output") {

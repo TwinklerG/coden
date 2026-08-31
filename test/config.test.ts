@@ -171,4 +171,55 @@ describe("configuration", () => {
       }),
     ).rejects.toThrow("contextWindow must exceed");
   });
+
+  it("defaults thinkingLevel to default", async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));
+    vi.stubEnv("XDG_CONFIG_HOME", path.join(workspace, "missing"));
+    expect((await loadConfig(workspace)).thinkingLevel).toBe("default");
+  });
+
+  it("resolves thinkingLevel precedence across user, project, environment, and CLI", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));
+    const workspace = path.join(root, "workspace");
+    const configHome = path.join(root, "config");
+    await mkdir(path.join(workspace, ".coden"), { recursive: true });
+    await mkdir(path.join(configHome, "coden"), { recursive: true });
+    await writeFile(
+      path.join(configHome, "coden", "config.json"),
+      JSON.stringify({ thinkingLevel: "low" }),
+    );
+    await writeFile(
+      path.join(workspace, ".coden", "config.json"),
+      JSON.stringify({ thinkingLevel: "medium" }),
+    );
+    vi.stubEnv("XDG_CONFIG_HOME", configHome);
+    vi.stubEnv("CODEN_THINKING_LEVEL", "high");
+
+    await expect(loadConfig(workspace)).resolves.toMatchObject({ thinkingLevel: "high" });
+    await expect(loadConfig(workspace, { thinkingLevel: "off" })).resolves.toMatchObject({
+      thinkingLevel: "off",
+    });
+  });
+
+  it("rejects invalid thinkingLevel config and environment values", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));
+    const workspace = path.join(root, "workspace");
+    const configHome = path.join(root, "config");
+    await mkdir(path.join(workspace, ".coden"), { recursive: true });
+    await mkdir(path.join(configHome, "coden"), { recursive: true });
+    await writeFile(
+      path.join(configHome, "coden", "config.json"),
+      JSON.stringify({ thinkingLevel: "extreme" }),
+    );
+    vi.stubEnv("XDG_CONFIG_HOME", configHome);
+    await expect(loadConfig(workspace)).rejects.toThrow(
+      "thinkingLevel must be default, off, minimal, low, medium, or high",
+    );
+
+    vi.stubEnv("CODEN_THINKING_LEVEL", "extreme");
+    await writeFile(path.join(configHome, "coden", "config.json"), JSON.stringify({}));
+    await expect(loadConfig(workspace)).rejects.toThrow(
+      "CODEN_THINKING_LEVEL must be default, off, minimal, low, medium, or high",
+    );
+  });
 });

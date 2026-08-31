@@ -9,6 +9,7 @@ import { TrustStore } from "../config/trust.js";
 import { ContextManager } from "../context/manager.js";
 import { EventBus } from "../core/events.js";
 import { AgentRuntime } from "../core/runtime.js";
+import type { ThinkingLevel } from "../core/thinking.js";
 import type {
   AgentMessage,
   CodeNError,
@@ -36,6 +37,7 @@ import { resolvePluginPaths } from "../plugins/paths.js";
 import { PluginTransaction } from "../plugins/transaction.js";
 import { AnthropicProvider } from "../providers/anthropic.js";
 import { OpenAICompatibleProvider } from "../providers/openai.js";
+import { resolveThinkingStatus, type ThinkingStatus } from "../providers/thinking.js";
 import { SessionStore, workspaceHash } from "../sessions/store.js";
 import { SkillDiscovery } from "../skills/discovery.js";
 import { formatSkillCatalog } from "../skills/prompt.js";
@@ -65,6 +67,8 @@ export interface AgentApplicationMetadata {
   workspaceId: string;
   approvalMode: PermissionMode;
   sessionId: string;
+  thinkingLevel: ThinkingLevel;
+  thinkingDisplay: string;
 }
 
 export interface CreateAgentApplicationOptions {
@@ -86,6 +90,8 @@ export interface AgentApplication {
   metadata: AgentApplicationMetadata;
   reload(): Promise<PluginLoadResult>;
   switchLanguage(language: Language): Promise<void>;
+  getThinkingStatus(): ThinkingStatus;
+  switchThinkingLevel(level: ThinkingLevel): Promise<ThinkingStatus>;
   dispose(): Promise<void>;
 }
 
@@ -103,6 +109,14 @@ async function loadConfigOrFail(
   }
 }
 
+export function resolveInitialThinkingLevel(
+  explicit: ThinkingLevel | undefined,
+  recovered: ThinkingLevel | undefined,
+  configured: ThinkingLevel,
+): ThinkingLevel {
+  return explicit ?? recovered ?? configured;
+}
+
 export async function createAgentApplication(
   options: CreateAgentApplicationOptions,
 ): Promise<AgentApplication> {
@@ -117,6 +131,7 @@ export async function createAgentApplication(
     ...(command.provider ? { provider: command.provider } : {}),
     ...(command.model ? { model: command.model } : {}),
     ...(command.maxSteps ? { maxSteps: command.maxSteps } : {}),
+    ...(command.thinking ? { thinkingLevel: command.thinking } : {}),
     language: i18n.currentLanguage,
     plugins: command.plugin,
   });
@@ -127,13 +142,33 @@ export async function createAgentApplication(
   let initialMessages: AgentMessage[] | undefined;
   let recoveredSummary: string | undefined;
   let recoveredCompactionEnd = 0;
+  let recoveredThinkingLevel: ThinkingLevel | undefined;
   const startupWarnings: string[] = [];
   if (typeof command.resume === "string") {
     const recovered = await session.recover();
     initialMessages = recovered.messages;
     recoveredSummary = recovered.summary;
     recoveredCompactionEnd = recovered.compactionRange?.end ?? 0;
+    recoveredThinkingLevel = recovered.thinkingLevel;
     startupWarnings.push(...recovered.warnings);
+  }
+
+  const resolvedThinkingLevel = resolveInitialThinkingLevel(
+    command.thinking,
+    recoveredThinkingLevel,
+    config.thinkingLevel,
+  );
+  let initialThinking: ThinkingStatus;
+  try {
+    initialThinking = resolveThinkingStatus(
+      config.provider,
+      resolvedThinkingLevel,
+      config.reservedOutputTokens,
+    );
+  } catch (cause) {
+    throw new ConfigError(`thinking: ${cause instanceof Error ? cause.message : String(cause)}`, {
+      cause,
+    });
   }
 
   const trace = new JSONLTraceWriter(session.tracePath, events, () => session.isCreated);
@@ -274,6 +309,7 @@ export async function createAgentApplication(
       maxSteps: config.maxSteps,
       systemPrompt,
       i18n,
+      thinkingLevel: resolvedThinkingLevel,
     },
     initialMessages,
   );
@@ -295,6 +331,51 @@ export async function createAgentApplication(
     }
   };
 
+  const metadata: AgentApplicationMetadata = {
+    provider: config.provider,
+    model: config.model,
+    workspace,
+    workspaceId: workspaceHash(workspace),
+    approvalMode: permissionMode,
+    sessionId: session.sessionId,
+    thinkingLevel: initialThinking.level,
+    thinkingDisplay: initialThinking.displayLevel,
+  };
+
+  const getThinkingStatus = (): ThinkingStatus =>
+    resolveThinkingStatus(config.provider, runtime.thinkingLevel, config.reservedOutputTokens);
+
+  const switchThinkingLevel = async (level: ThinkingLevel): Promise<ThinkingStatus> => {
+    if (runtime.thinkingLevel === level) return getThinkingStatus();
+    let next: ThinkingStatus;
+    try {
+      next = resolveThinkingStatus(config.provider, level, config.reservedOutputTokens);
+    } catch (cause) {
+      throw new ConfigError(`thinking: ${cause instanceof Error ? cause.message : String(cause)}`, {
+        cause,
+      });
+    }
+    if (session.isCreated) await session.appendThinkingLevel(level);
+    runtime.updateThinkingLevel(level);
+    metadata.thinkingLevel = level;
+    metadata.thinkingDisplay = next.displayLevel;
+    await events.emit("thinking.changed", {
+      level: next.level,
+      effectiveLevel: next.effectiveLevel,
+      displayLevel: next.displayLevel,
+      ...(next.budgetTokens !== undefined ? { budgetTokens: next.budgetTokens } : {}),
+    });
+    return next;
+  };
+
+  if (
+    typeof command.resume === "string" &&
+    command.thinking !== undefined &&
+    command.thinking !== recoveredThinkingLevel
+  ) {
+    await session.appendThinkingLevel(command.thinking);
+  }
+
   return {
     runtime,
     events,
@@ -303,16 +384,11 @@ export async function createAgentApplication(
     skills,
     recoveredMessages: initialMessages ? [...initialMessages] : [],
     startupWarnings,
-    metadata: {
-      provider: config.provider,
-      model: config.model,
-      workspace,
-      workspaceId: workspaceHash(workspace),
-      approvalMode: permissionMode,
-      sessionId: session.sessionId,
-    },
+    metadata,
     reload,
     switchLanguage,
+    getThinkingStatus,
+    switchThinkingLevel,
     async dispose() {
       if (disposed) return;
       disposed = true;

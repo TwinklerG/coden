@@ -22,6 +22,8 @@ const metadata = {
   workspaceId: "abcdef123456",
   approvalMode: "manual" as const,
   sessionId: "session-123456",
+  thinkingLevel: "default" as const,
+  thinkingDisplay: "default",
 };
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 30));

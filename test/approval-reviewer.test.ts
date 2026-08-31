@@ -77,6 +77,7 @@ describe("LlmApprovalReviewer", () => {
       expect(request?.model).toBe("review-model");
       expect(request?.tools).toEqual([]);
       expect(request?.maxOutputTokens).toBe(256);
+      expect(request?.thinkingLevel).toBeUndefined();
       expect(request?.messages[0]?.content).toContain(`Strictness (${strictness})`);
       expect(request?.messages[0]?.content).toContain(
         '{"decision":"allow","reason":"The operation is a bounded workspace-local edit."}',

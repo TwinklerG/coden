@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { AgentMessage, ModelEvent, ModelProvider, ModelRequest } from "../core/types.js";
+import { toOpenAIReasoningEffort } from "./thinking.js";
 
 export interface OpenAIProviderOptions {
   apiKey: string;
@@ -16,6 +17,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     this.client = new OpenAI({ ...options, maxRetries: 0 });
   }
   async *stream(request: ModelRequest): AsyncIterable<ModelEvent> {
+    const reasoningEffort = toOpenAIReasoningEffort(request.thinkingLevel ?? "default");
     const response = await this.client.chat.completions.create(
       {
         model: request.model,
@@ -35,6 +37,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
         max_completion_tokens: request.maxOutputTokens,
         stream: true,
         stream_options: { include_usage: true },
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       },
       request.signal ? { signal: request.signal } : undefined,
     );

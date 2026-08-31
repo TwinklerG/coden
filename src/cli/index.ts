@@ -26,6 +26,7 @@ import {
   ConfigError,
   collect,
   parseProvider,
+  parseThinkingLevel,
   positiveInteger,
   runAgentCommand,
 } from "./agent-command.js";
@@ -71,6 +72,7 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
     .option("--allow-outside-workspace", m.outside, false)
     .option("--verbose", m.verbose, false)
     .option("--max-steps <number>", m.maxSteps, positiveInteger)
+    .option("--thinking <level>", m.thinking, parseThinkingLevel)
     .option("--plugin <path>", m.plugin, collect, [])
     .option("--lang <zh|en>", m.lang, (value: string): Language => {
       if (!isLanguage(value)) throw new Error(i18n.messages.language.invalid(value));

@@ -1,3 +1,4 @@
+import type { ThinkingLevel } from "../core/thinking.js";
 import type { AgentMessage, ModelRequest, ToolDefinition } from "../core/types.js";
 import { I18n } from "../i18n/i18n.js";
 
@@ -180,6 +181,7 @@ export function toModelRequest(
   tools: ToolDefinition[],
   budget: ContextBudget,
   signal?: AbortSignal,
+  thinkingLevel?: ThinkingLevel,
 ): ModelRequest {
   const request: ModelRequest = {
     model,
@@ -188,5 +190,6 @@ export function toModelRequest(
     maxOutputTokens: budget.reservedOutputTokens,
   };
   if (signal) request.signal = signal;
+  if (thinkingLevel !== undefined) request.thinkingLevel = thinkingLevel;
   return request;
 }

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { isThinkingLevel, type ThinkingLevel } from "../core/thinking.js";
 import { DEFAULT_LANGUAGE, isLanguage, type Language } from "../i18n/language.js";
 
 export type ProviderName = "openai" | "anthropic";
@@ -18,6 +19,7 @@ export interface CodeNConfig {
   dataDir: string;
   env: Record<string, string>;
   language: Language;
+  thinkingLevel: ThinkingLevel;
 }
 export type ConfigOverrides = Partial<Omit<CodeNConfig, "plugins" | "dataDir" | "env">> & {
   plugins?: string[];
@@ -71,6 +73,11 @@ function pickOverrides(raw: Record<string, unknown>, includeLanguage = false): C
   if (typeof raw.reservedOutputTokens === "number")
     overrides.reservedOutputTokens = raw.reservedOutputTokens;
   if (typeof raw.safetyMargin === "number") overrides.safetyMargin = raw.safetyMargin;
+  if (raw.thinkingLevel !== undefined) {
+    if (!isThinkingLevel(raw.thinkingLevel))
+      throw new Error("thinkingLevel must be default, off, minimal, low, medium, or high");
+    overrides.thinkingLevel = raw.thinkingLevel;
+  }
   if (Array.isArray(raw.plugins))
     overrides.plugins = raw.plugins.filter((item): item is string => typeof item === "string");
   if (raw.env !== undefined) {
@@ -107,6 +114,7 @@ export async function loadConfig(
     dataDir: userDataDir(),
     env: {},
     language: DEFAULT_LANGUAGE,
+    thinkingLevel: "default",
   };
   const user = await readJson(
     path.join(userConfigDir(), "config.json"),
@@ -118,6 +126,11 @@ export async function loadConfig(
     env.provider = process.env.CODEN_PROVIDER;
   if (process.env.CODEN_MODEL) env.model = process.env.CODEN_MODEL;
   if (process.env.CODEN_MAX_STEPS) env.maxSteps = Number(process.env.CODEN_MAX_STEPS);
+  if (process.env.CODEN_THINKING_LEVEL) {
+    if (!isThinkingLevel(process.env.CODEN_THINKING_LEVEL))
+      throw new Error("CODEN_THINKING_LEVEL must be default, off, minimal, low, medium, or high");
+    env.thinkingLevel = process.env.CODEN_THINKING_LEVEL;
+  }
   const mergedEnv = { ...(user.env ?? {}), ...(project.env ?? {}) };
   for (const [k, v] of Object.entries(mergedEnv)) {
     if (process.env[k] === undefined) process.env[k] = v;
@@ -147,5 +160,7 @@ export async function loadConfig(
     throw new Error("contextWindow must exceed reservedOutputTokens plus safetyMargin");
   if (!Array.isArray(merged.plugins) || merged.plugins.some((item) => typeof item !== "string"))
     throw new Error("plugins must be an array of paths");
+  if (!isThinkingLevel(merged.thinkingLevel))
+    throw new Error("thinkingLevel must be default, off, minimal, low, medium, or high");
   return merged;
 }

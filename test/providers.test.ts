@@ -207,3 +207,192 @@ describe("providers", () => {
     ).rejects.toMatchObject({ code: "provider.incomplete_tool_call" });
   });
 });
+
+describe("provider thinking mapping", () => {
+  async function captureOpenAIRequest(level: "default" | "off" | "medium") {
+    const provider = new OpenAICompatibleProvider({ apiKey: "test" });
+    const client = (
+      provider as unknown as {
+        client: {
+          chat: {
+            completions: {
+              create: (body: unknown) => Promise<AsyncIterable<unknown>>;
+            };
+          };
+        };
+      }
+    ).client;
+    let captured: unknown;
+    client.chat.completions.create = async (body) => {
+      captured = body;
+      return chunks([]);
+    };
+    for await (const _event of provider.stream({
+      model: "test",
+      messages: [],
+      tools: [],
+      maxOutputTokens: 128,
+      thinkingLevel: level,
+    })) {
+      // consume
+    }
+    return captured;
+  }
+
+  it.each([
+    ["default", undefined],
+    ["off", "minimal"],
+    ["medium", "medium"],
+  ] as const)("maps OpenAI reasoning effort for %s", async (level, expected) => {
+    const request = await captureOpenAIRequest(level);
+    if (expected === undefined) expect(request).not.toHaveProperty("reasoning_effort");
+    else expect(request).toHaveProperty("reasoning_effort", expected);
+  });
+
+  async function captureAnthropicRequest(
+    level: "default" | "off" | "high",
+    maxOutputTokens = 8192,
+  ) {
+    const provider = new AnthropicProvider({ apiKey: "test" });
+    const client = provider as unknown as {
+      client: { messages: { stream: (body: unknown) => AsyncIterable<unknown> } };
+    };
+    let captured: unknown;
+    client.client.messages.stream = (body) => {
+      captured = body;
+      return chunks([]);
+    };
+    for await (const _event of provider.stream({
+      model: "test",
+      messages: [],
+      tools: [],
+      maxOutputTokens,
+      thinkingLevel: level,
+    })) {
+      // consume
+    }
+    return captured;
+  }
+
+  it("maps Anthropic thinking config", async () => {
+    await expect(captureAnthropicRequest("default")).resolves.not.toHaveProperty("thinking");
+    await expect(captureAnthropicRequest("off")).resolves.toHaveProperty("thinking", {
+      type: "disabled",
+    });
+    await expect(captureAnthropicRequest("high")).resolves.toHaveProperty("thinking", {
+      type: "enabled",
+      budget_tokens: 6144,
+    });
+  });
+
+  it("collects Anthropic reasoning and provider state in block order", async () => {
+    const provider = new AnthropicProvider({ apiKey: "test" });
+    const client = provider as unknown as {
+      client: { messages: { stream: () => AsyncIterable<unknown> } };
+    };
+    client.client.messages.stream = () =>
+      chunks([
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "thinking", thinking: "", signature: "" },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "thinking_delta", thinking: "inspect files" },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "signature_delta", signature: "signed" },
+        },
+        { type: "content_block_stop", index: 0 },
+        {
+          type: "content_block_start",
+          index: 1,
+          content_block: { type: "redacted_thinking", data: "opaque" },
+        },
+        { type: "content_block_stop", index: 1 },
+      ]);
+
+    const streamed: ModelEvent[] = [];
+    for await (const event of provider.stream({
+      model: "test",
+      messages: [],
+      tools: [],
+      maxOutputTokens: 8192,
+    })) {
+      streamed.push(event);
+    }
+
+    expect(streamed.filter((event) => event.type === "reasoning_delta")).toEqual([
+      { type: "reasoning_delta", text: "inspect files" },
+    ]);
+    expect(streamed.at(-2)).toEqual({
+      type: "provider_state",
+      state: {
+        provider: "anthropic",
+        data: {
+          thinkingBlocks: [
+            { type: "thinking", thinking: "inspect files", signature: "signed" },
+            { type: "redacted_thinking", data: "opaque" },
+          ],
+        },
+      },
+    });
+    expect(streamed.at(-1)).toEqual({ type: "done" });
+  });
+
+  it("replays Anthropic provider state before text and tool calls", () => {
+    const converted = toAnthropicMessages([
+      { role: "user", content: "task" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ callId: "c1", name: "read", input: { path: "a" } }],
+        providerState: {
+          provider: "anthropic",
+          data: {
+            thinkingBlocks: [
+              { type: "thinking", thinking: "inspect files", signature: "signed" },
+              { type: "redacted_thinking", data: "opaque" },
+            ],
+          },
+        },
+      },
+    ]);
+    expect(converted.messages[1]).toMatchObject({
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "inspect files", signature: "signed" },
+        { type: "redacted_thinking", data: "opaque" },
+        { type: "tool_use", id: "c1" },
+      ],
+    });
+  });
+
+  it("ignores non-matching provider state and rejects malformed matching state", () => {
+    const openaiState = {
+      role: "assistant" as const,
+      content: "",
+      toolCalls: [],
+      providerState: { provider: "openai", data: { anything: [1] } },
+    };
+    expect(toAnthropicMessages([openaiState]).messages[0]).toMatchObject({
+      role: "assistant",
+      content: [],
+    });
+
+    expect(() =>
+      toAnthropicMessages([
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [],
+          providerState: { provider: "anthropic", data: { wrong: true } },
+        },
+      ]),
+    ).toThrow("invalid anthropic thinking blocks");
+  });
+});

@@ -3,6 +3,7 @@ import { createInterface, type Interface } from "node:readline/promises";
 import { InvalidArgumentError } from "commander";
 import { loadConfig, type ProviderName } from "../config/config.js";
 import type { AgentRuntime } from "../core/runtime.js";
+import { isThinkingLevel, type ThinkingLevel } from "../core/thinking.js";
 import type { ToolCall, ToolDefinition, ToolRisk } from "../core/types.js";
 import { I18n } from "../i18n/i18n.js";
 import type { Language } from "../i18n/language.js";
@@ -44,6 +45,7 @@ export interface AgentCommandOptions {
   tui: boolean;
   cli: boolean;
   lang?: Language;
+  thinking?: ThinkingLevel;
 }
 
 export async function runAgentCommand(
@@ -127,6 +129,7 @@ async function loadConfigForSessionList(
       ...(options.provider ? { provider: options.provider } : {}),
       ...(options.model ? { model: options.model } : {}),
       ...(options.maxSteps ? { maxSteps: options.maxSteps } : {}),
+      ...(options.thinking ? { thinkingLevel: options.thinking } : {}),
       language: i18n.currentLanguage,
       plugins: options.plugin,
     });
@@ -172,6 +175,8 @@ async function repl(
       skills: application.skills,
       i18n,
       switchLanguage: application.switchLanguage,
+      getThinkingStatus: application.getThinkingStatus,
+      switchThinkingLevel: application.switchThinkingLevel,
     });
     if (command.type === "empty") continue;
     if (command.type === "exit") break;
@@ -282,6 +287,12 @@ export function positiveInteger(value: string): number {
   if (!Number.isInteger(parsed) || parsed < 1)
     throw new InvalidArgumentError("must be a positive integer");
   return parsed;
+}
+
+export function parseThinkingLevel(value: string): ThinkingLevel {
+  if (!isThinkingLevel(value))
+    throw new InvalidArgumentError("must be default, off, minimal, low, medium, or high");
+  return value;
 }
 
 export function collect(value: string, previous: string[]): string[] {

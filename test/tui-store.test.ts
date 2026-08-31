@@ -222,4 +222,59 @@ describe("TuiStore", () => {
     store.close();
     expect(store.getSnapshot().blocks.some((block) => block.kind === "activity")).toBe(false);
   });
+
+  it("refreshes thinking metadata immutably on thinking.changed", async () => {
+    const events = new EventBus();
+    const store = new TuiStore();
+    store.setMetadata({
+      provider: "openai",
+      model: "test",
+      workspace: "/workspace",
+      workspaceId: "workspace-id",
+      approvalMode: "auto",
+      sessionId: "session-123",
+      thinkingLevel: "default",
+      thinkingDisplay: "default",
+    });
+    store.connect(events);
+    const before = store.getSnapshot();
+
+    await events.emit("thinking.changed", {
+      level: "off",
+      effectiveLevel: "minimal",
+      displayLevel: "off→minimal",
+    });
+
+    const after = store.getSnapshot();
+    expect(after).not.toBe(before);
+    expect(after.metadata).toMatchObject({
+      provider: "openai",
+      model: "test",
+      workspace: "/workspace",
+      workspaceId: "workspace-id",
+      approvalMode: "auto",
+      sessionId: "session-123",
+      thinkingLevel: "off",
+      thinkingDisplay: "off→minimal",
+    });
+  });
+
+  it("ignores malformed thinking.changed events", async () => {
+    const events = new EventBus();
+    const store = new TuiStore();
+    const metadata = {
+      provider: "openai" as const,
+      model: "test",
+      workspace: "/workspace",
+      workspaceId: "workspace-id",
+      approvalMode: "auto" as const,
+      sessionId: "session-123",
+      thinkingLevel: "default" as const,
+      thinkingDisplay: "default",
+    };
+    store.setMetadata(metadata);
+    store.connect(events);
+    await events.emit("thinking.changed", { level: "extreme", displayLevel: "extreme" });
+    expect(store.getSnapshot().metadata).toEqual(metadata);
+  });
 });

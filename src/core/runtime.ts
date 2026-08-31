@@ -7,6 +7,11 @@ import type { ToolExecutor } from "../tools/executor.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { EventBus } from "./events.js";
 import {
+  isProviderMessageState,
+  type ProviderMessageState,
+  type ThinkingLevel,
+} from "./thinking.js";
+import {
   type AgentMessage,
   type AssistantMessage,
   CodeNError,
@@ -23,6 +28,7 @@ export interface RuntimeOptions {
   retryBaseMs?: number;
   systemPrompt?: string;
   i18n?: I18n;
+  thinkingLevel?: ThinkingLevel;
 }
 export interface TurnResult {
   answer: string;
@@ -37,6 +43,7 @@ export class AgentRuntime {
   private readonly retries: number;
   private readonly retryBaseMs: number;
   private systemPersisted: boolean;
+  private currentThinkingLevel: ThinkingLevel;
   constructor(
     private readonly provider: ModelProvider,
     private readonly registry: ToolRegistry,
@@ -50,6 +57,7 @@ export class AgentRuntime {
     this.maxSteps = options.maxSteps ?? 20;
     this.retries = options.retries ?? 3;
     this.retryBaseMs = options.retryBaseMs ?? 250;
+    this.currentThinkingLevel = options.thinkingLevel ?? "default";
     this.systemPersisted = Boolean(initialMessages?.length);
     this.messages = initialMessages?.length
       ? [...initialMessages]
@@ -61,6 +69,14 @@ export class AgentRuntime {
               "You are CodeN, a concise coding agent. Inspect before editing, use tools carefully, and verify changes.",
           },
         ];
+  }
+
+  get thinkingLevel(): ThinkingLevel {
+    return this.currentThinkingLevel;
+  }
+
+  updateThinkingLevel(level: ThinkingLevel): void {
+    this.currentThinkingLevel = level;
   }
 
   updateSystemPrompt(content: string): void {
@@ -94,10 +110,13 @@ export class AgentRuntime {
 
   async run(userText: string, signal = new AbortController().signal): Promise<TurnResult> {
     const turnId = randomUUID();
+    const turnThinkingLevel = this.currentThinkingLevel;
     const start = Date.now();
     let toolsExecuted = 0;
     const usage: Usage = { inputTokens: 0, outputTokens: 0 };
+    const newSession = !this.sessions.isCreated;
     await this.sessions.create();
+    if (newSession) await this.sessions.appendThinkingLevel(turnThinkingLevel);
     await this.events.emit("turn.started", { input: userText }, turnId);
     try {
       if (!this.systemPersisted) {
@@ -146,6 +165,7 @@ export class AgentRuntime {
             this.registry.list(),
             this.context.budget,
             signal,
+            turnThinkingLevel,
           ),
           turnId,
           async () => {
@@ -159,6 +179,7 @@ export class AgentRuntime {
               this.registry.list(),
               this.context.budget,
               signal,
+              turnThinkingLevel,
             );
           },
         );
@@ -170,6 +191,7 @@ export class AgentRuntime {
           toolCalls: accumulated.toolCalls,
           model: this.options.model,
           usage: accumulated.usage,
+          ...(accumulated.providerState ? { providerState: accumulated.providerState } : {}),
         };
         this.messages.push(assistant);
         await this.sessions.appendMessage(assistant);
@@ -262,7 +284,7 @@ export class AgentRuntime {
     initialRequest: ReturnType<typeof toModelRequest>,
     turnId: string,
     emergency: () => Promise<ReturnType<typeof toModelRequest>>,
-  ): Promise<{ text: string; toolCalls: ToolCall[]; usage: Usage }> {
+  ): Promise<AccumulatedStreamResult> {
     let request = initialRequest;
     let emergencyUsed = false;
     for (let attempt = 0; ; attempt++) {
@@ -333,14 +355,22 @@ export type ToolCallStreamEvent = Extract<
   { type: "tool_call_start" | "tool_call_delta" | "tool_call_end" }
 >;
 
+export interface AccumulatedStreamResult {
+  text: string;
+  toolCalls: ToolCall[];
+  usage: Usage;
+  providerState?: ProviderMessageState;
+}
+
 export async function accumulateStream(
   stream: AsyncIterable<ModelEvent>,
   onText?: (text: string) => void | Promise<void>,
   onReasoning?: (text: string) => void | Promise<void>,
   onToolCall?: (event: ToolCallStreamEvent) => void | Promise<void>,
-): Promise<{ text: string; toolCalls: ToolCall[]; usage: Usage }> {
+): Promise<AccumulatedStreamResult> {
   let text = "";
   let usage: Usage = { inputTokens: 0, outputTokens: 0 };
+  let providerState: ProviderMessageState | undefined;
   const builders = new Map<
     number,
     { callId: string; name: string; json: string; ended: boolean }
@@ -351,6 +381,14 @@ export async function accumulateStream(
     } else if (event.type === "text_delta") {
       text += event.text;
       await onText?.(event.text);
+    } else if (event.type === "provider_state") {
+      if (!isProviderMessageState(event.state))
+        throw new CodeNError(
+          "provider",
+          "provider.invalid_state",
+          "Provider stream returned malformed reasoning state",
+        );
+      providerState = event.state;
     } else if (event.type === "tool_call_start") {
       builders.set(event.index, {
         callId: event.callId,
@@ -407,7 +445,12 @@ export async function accumulateStream(
         );
       }
     });
-  return { text, toolCalls, usage };
+  return {
+    text,
+    toolCalls,
+    usage,
+    ...(providerState ? { providerState } : {}),
+  };
 }
 function isRetryable(error: unknown): boolean {
   if (error instanceof CodeNError) return error.retryable;

@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "../plugin/index.js";
+import type { ProviderMessageState, ThinkingLevel } from "./thinking.js";
 
 export type {
   JsonSchema,
@@ -7,6 +8,11 @@ export type {
   ToolResult,
   ToolRisk,
 } from "../plugin/index.js";
+export type {
+  JsonValue,
+  ProviderMessageState,
+  ThinkingLevel,
+} from "./thinking.js";
 
 export interface Usage {
   inputTokens: number;
@@ -33,6 +39,7 @@ export interface AssistantMessage {
   toolCalls: ToolCall[];
   model?: string;
   usage?: Usage;
+  providerState?: ProviderMessageState;
 }
 export interface ToolResultMessage {
   role: "tool";
@@ -48,6 +55,7 @@ export interface ModelRequest {
   messages: AgentMessage[];
   tools: ToolDefinition[];
   maxOutputTokens: number;
+  thinkingLevel?: ThinkingLevel;
   signal?: AbortSignal;
 }
 
@@ -58,6 +66,7 @@ export type ModelEvent =
   | { type: "tool_call_delta"; index: number; argumentsDelta: string }
   | { type: "tool_call_end"; index: number }
   | { type: "usage"; usage: Usage }
+  | { type: "provider_state"; state: ProviderMessageState }
   | { type: "done"; finishReason?: string };
 
 export interface ModelProvider {

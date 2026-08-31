@@ -30,6 +30,17 @@ describe("i18n", () => {
     expect(i18n.messages.tui.phases.reviewing).toBe("reviewing");
   });
 
+  it("localizes thinking controls in both languages", () => {
+    const zh = new I18n("zh");
+    expect(zh.messages.cli.thinking).toContain("思考等级");
+    expect(zh.messages.repl.help).toContain("/thinking");
+    expect(zh.messages.thinking.invalid("extreme")).toContain("不支持");
+    const en = new I18n("en");
+    expect(en.messages.cli.thinking).toContain("thinking level");
+    expect(en.messages.repl.help).toContain("/thinking");
+    expect(en.messages.thinking.invalid("extreme")).toContain("Unsupported");
+  });
+
   it("resolves CLI over user preference and respects --", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "coden-lang-"));
     const config = path.join(root, "config.json");

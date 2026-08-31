@@ -304,4 +304,54 @@ describe("context and sessions", () => {
       ).toBe(true);
     }
   });
+
+  it("persists and recovers the last thinking level", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-session-"));
+    const store = new SessionStore(root, root, "session-thinking");
+    await store.create(root);
+    await store.appendThinkingLevel("low");
+    await store.appendThinkingLevel("high");
+    expect((await store.recover()).thinkingLevel).toBe("high");
+  });
+
+  it("rejects an invalid stored thinking level", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-session-"));
+    const store = new SessionStore(root, root, "session-thinking-invalid");
+    await store.create(root);
+    await store.append("session.thinking", { level: "extreme" });
+    await expect(store.recover()).rejects.toThrow("invalid thinking level record");
+  });
+
+  it("round-trips a valid assistant provider state and rejects malformed state", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-session-"));
+    const store = new SessionStore(root, root, "session-state");
+    await store.create(root);
+    await store.appendMessage({
+      role: "assistant",
+      content: "",
+      toolCalls: [],
+      providerState: {
+        provider: "anthropic",
+        data: { thinkingBlocks: [{ type: "thinking", thinking: "t", signature: "s" }] },
+      },
+    });
+    const recovered = await store.recover();
+    expect(recovered.messages.at(-1)).toMatchObject({
+      role: "assistant",
+      providerState: {
+        provider: "anthropic",
+        data: { thinkingBlocks: [{ type: "thinking", thinking: "t", signature: "s" }] },
+      },
+    });
+
+    const bad = new SessionStore(root, root, "session-state-bad");
+    await bad.create(root);
+    await bad.append("message", {
+      role: "assistant",
+      content: "",
+      toolCalls: [],
+      providerState: { provider: 42, data: {} },
+    });
+    await expect(bad.recover()).rejects.toThrow("invalid message structure");
+  });
 });

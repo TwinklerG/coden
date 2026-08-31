@@ -1,5 +1,6 @@
 import type { AgentApplicationMetadata } from "../cli/agent-application.js";
 import type { EventBus, RuntimeEvent } from "../core/events.js";
+import { isThinkingLevel } from "../core/thinking.js";
 import type { AgentMessage, ToolCall, ToolDefinition, ToolRisk } from "../core/types.js";
 import { I18n } from "../i18n/i18n.js";
 import { sanitizeTerminalText } from "../observability/terminal-text.js";
@@ -272,6 +273,19 @@ export class TuiStore {
         this.addError(String(data.message ?? "failed"));
         this.update({ phase: "failed", running: false });
         break;
+      case "thinking.changed": {
+        const metadata = this.#snapshot.metadata;
+        if (!metadata || !isThinkingLevel(data.level) || typeof data.displayLevel !== "string")
+          break;
+        this.update({
+          metadata: {
+            ...metadata,
+            thinkingLevel: data.level,
+            thinkingDisplay: data.displayLevel,
+          },
+        });
+        break;
+      }
       case "plugin.failed":
         this.addError(`plugin: ${String(data.message ?? data.path ?? "failed")}`);
         break;

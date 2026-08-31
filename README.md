@@ -41,6 +41,10 @@ coden --cli                       # 显式使用 CLI/REPL
 coden -p --auto "实现功能并运行测试" # 纯文本输出后退出
 coden --smart-approve "实现功能并运行测试"
 coden --lang en --help            # 仅为当前进程切换为英文
+coden --thinking high "分析并修复这个并发问题"
+
+export CODEN_THINKING_LEVEL=medium
+coden --resume <session-id>
 
 export CODEN_ANTHROPIC_API_KEY=...
 coden --provider anthropic --model claude-sonnet-4-20250514
@@ -55,11 +59,11 @@ TUI 内容区保持 CLI 风格，瞬时思考/工具活动跟随当前对话位�
 
 工具授权、工作区信任和插件确认都以内联请求显示在 transcript 中，不再弹出 dialog。等待选择时任务输入区保持可见但禁用；普通授权使用 `y` 允许一次、`s` 本会话、`n`/`Esc` 拒绝，危险操作不提供会话授权。请求、可用选项和最终选择会永久保留在当前 TUI transcript 中。
 
-TUI 与传统 CLI 均支持 `/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new`、`/lang` 和 `/quit`。`/lang` 列出 `zh`、`en` 及当前语言；`/lang en` 或 `/lang zh` 会原子写入用户配置并立即切换界面、系统提示词和内建工具描述。传统 CLI 继续提供完整多行编辑与启动横幅。
+TUI 与传统 CLI 均支持 `/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new`、`/lang`、`/thinking` 和 `/quit`。`/lang` 列出 `zh`、`en` 及当前语言；`/lang en` 或 `/lang zh` 会原子写入用户配置并立即切换界面、系统提示词和内建工具描述。`/thinking` 列出六种思考等级、当前值与有效映射；`/thinking <level>` 在空闲时切换并持久化到当前会话。传统 CLI 继续提供完整多行编辑与启动横幅。
 
 CodeN 固定默认中文，不读取系统区域设置。`--lang zh|en` 仅覆盖当前进程且不写配置。系统提示词、内建工具和界面共享同一语言；用户在单次任务中明确要求其他回复语言时，Agent 可以遵从，但不会更改界面或持久化偏好。第三方插件的名称、描述、输出和错误始终保留插件作者原文。
 
-核心选项：`--tui`、`--cli`、`--lang`、`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--smart-approve`、`--auto`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。`--tui` 不能与 `--cli` 或 `--print` 同时使用。
+核心选项：`--tui`、`--cli`、`--lang`、`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--smart-approve`、`--auto`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、`--thinking <level>`、可重复的 `--plugin` 和 `--version`。`--tui` 不能与 `--cli` 或 `--print` 同时使用。
 
 ## 配置
 
@@ -76,6 +80,7 @@ CodeN 固定默认中文，不读取系统区域设置。`--lang zh|en` 仅覆�
   "contextWindow": 128000,
   "reservedOutputTokens": 8192,
   "safetyMargin": 4096,
+  "thinkingLevel": "default",
   "plugins": [],
   "env": {
     "CODEN_OPENAI_API_KEY": "sk-..."
@@ -85,13 +90,25 @@ CodeN 固定默认中文，不读取系统区域设置。`--lang zh|en` 仅覆�
 
 `language` 是用户专属偏好，只从 `~/.config/coden/config.json` 读取；项目 `.coden/config.json` 中的同名字段会被忽略，不能覆盖个人界面或 Agent 语言。只接受规范值 `zh`、`en`。启动参数 `--lang` 的优先级最高，但仅影响本次进程；REPL `/lang <zh|en>` 会保留配置中的其他字段，以 `0600` 权限原子更新用户文件。
 
-支持 `CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`CODEN_OPENAI_API_KEY`、`CODEN_OPENAI_BASE_URL`、`CODEN_ANTHROPIC_API_KEY`、`XDG_CONFIG_HOME` 和 `XDG_DATA_HOME`。
+支持 `CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`CODEN_THINKING_LEVEL`、`CODEN_OPENAI_API_KEY`、`CODEN_OPENAI_BASE_URL`、`CODEN_ANTHROPIC_API_KEY`、`XDG_CONFIG_HOME` 和 `XDG_DATA_HOME`。
 
 `env` 字段（用户级与项目级均可）声明环境变量（含敏感密钥），加载配置时注入进程环境，无需手动 `export`。两级 `env` 合并时**项目级逐键覆盖用户级**；注入**不覆盖** `shell` 中已导出的同名变量（CLI > 环境变量 > 配置 env）。密钥请放 `~/.config/coden/` 或 `.coden/`（已被 `gitignore` 忽略、默认不入库），不要放进会被提交、共享或分发的目录。
 
 `approvalModel` 使用与任务相同的 provider 和凭据，未设置时回退到 `model`。`approvalStrictness` 只能是 `soft`、`medium` 或 `hard`，默认 `medium`。
 
-会话和 trace 位于 `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`（默认 `~/.local/share/coden`）。
+### 思考等级
+
+CodeN 通过统一的 `default | off | minimal | low | medium | high` 六种等级控制模型的推理强度，可经 CLI `--thinking <level>`、环境变量 `CODEN_THINKING_LEVEL`、配置 `thinkingLevel` 或会话内 `/thinking [level]` 设置。默认 `default` 不发送任何 thinking 参数，保持升级 CodeN 前的既有行为。
+
+- OpenAI 映射到 `reasoning_effort`：`off` 映射 `minimal` 并在界面显示 `off→minimal`（OpenAI 推理模型没有统一的真正关闭值）；`minimal`/`low`/`medium`/`high` 分别映射同名值。
+- Anthropic 映射到 `thinking`：`off` 发送 `{ type: "disabled" }`；`minimal` 使用 1024 tokens；`low`/`medium`/`high` 分别使用 `reservedOutputTokens` 的 25%/50%/75%，并按 `[1024, reservedOutputTokens - 1]` 截断。thinking 预算包含在 `reservedOutputTokens` 内，提高等级会减少同一次输出中用于最终文本和工具调用的 tokens。启用 thinking 要求 `reservedOutputTokens > 1024`。
+- CodeN 不维护模型能力白名单，也不因参数被拒绝而静默降级；显式设置会原样发送，不支持的服务会返回清晰的 Provider 错误。
+- thinking level 只作用于主 Agent 请求，上下文压缩和 Smart Approval 审查请求保持 Provider 默认行为。同一 turn 内的工具循环与 Provider 重试使用该 turn 开始时的快照。
+- 恢复会话时，`--resume` 使用会话最后保存的等级；显式 `--thinking` 优先于保存值、环境变量、项目配置和用户配置，并在启动时覆盖写入会话。`/new` 只重置当前对话，不改变等级；`/thinking` 只影响当前进程与会话，不修改用户或项目配置文件。
+
+Anthropic extended thinking 依赖将 `thinking`、`redacted_thinking` 和签名块原样回传给后续请求。CodeN 会把这些块作为 `providerState` 随 assistant 消息保存到会话，并在工具调用与 resume 后自动回传；切换 provider 时会忽略不匹配的 provider 状态。
+
+会话和 trace 位于 `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`（默认 `~/.local/share/coden`）。目录和文件继续使用 `0700`、`0600` 权限。**注意**：会话 JSONL 和 trace 可能包含模型推理内容、`redacted-thinking`、签名、用户输入和代码片段，属于敏感数据；请勿未经审查地分享或分发，并保留本地私有权限。
 
 ## Agent Skills
 
