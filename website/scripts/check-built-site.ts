@@ -128,7 +128,7 @@ export async function validateBuiltSite(distRoot: string): Promise<void> {
         html,
         distRoot,
         filePath,
-        "--coden-bg",
+        "--coden-grid",
         relative,
         errors,
         stylesheetCache,
