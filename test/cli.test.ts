@@ -58,6 +58,36 @@ describe("REPL input helpers", () => {
 });
 
 describe("CLI exit codes", () => {
+  it("advertises and validates TUI/CLI modes", () => {
+    const help = spawnSync("bun", [cli, "--help"], {
+      encoding: "utf8",
+      env: baseEnv,
+      timeout: 30_000,
+    });
+    expect(help.status).toBe(0);
+    expect(help.stdout).toContain("--tui");
+    expect(help.stdout).toContain("--cli");
+
+    const conflict = spawnSync("bun", [cli, "--tui", "--cli"], {
+      encoding: "utf8",
+      env: baseEnv,
+      timeout: 30_000,
+    });
+    expect(conflict.status).toBe(2);
+    expect(conflict.stderr).toContain("不能");
+  });
+
+  it("warns and falls back when explicit TUI has no TTY", () => {
+    const result = spawnSync("bun", [cli, "--tui", "task"], {
+      encoding: "utf8",
+      env: baseEnv,
+      timeout: 30_000,
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("已降级为 CLI");
+    expect(result.stderr).toContain("CODEN_OPENAI_API_KEY");
+  });
+
   it("exits 2 for configuration errors (missing API key)", () => {
     const result = spawnSync("bun", [cli, "-p", "--provider", "openai", "task"], {
       encoding: "utf8",

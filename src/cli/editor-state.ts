@@ -173,19 +173,10 @@ export class EditorState {
     if (this.preferredColumn === undefined) this.preferredColumn = contentColumn;
 
     const targetRowIndex = layout.cursor.row + direction;
-    if (targetRowIndex >= 0 && targetRowIndex < layout.rows.length) {
-      const targetRow = layout.rows[targetRowIndex];
-      if (targetRow) {
-        this._cursor = offsetAtColumn(targetRow, this.preferredColumn);
-      }
-      return;
-    }
+    if (targetRowIndex < 0 || targetRowIndex >= layout.rows.length) return;
 
-    if (direction < 0) {
-      this.historyPrevious();
-    } else {
-      this.historyNext();
-    }
+    const targetRow = layout.rows[targetRowIndex];
+    if (targetRow) this._cursor = offsetAtColumn(targetRow, this.preferredColumn);
   }
 
   historyPrevious(): void {

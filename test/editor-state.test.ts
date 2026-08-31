@@ -61,10 +61,10 @@ describe("editor state", () => {
   it("restores the unsent draft after editable history copies", () => {
     const state = new EditorState(["one", "two"]);
     state.insert("draft");
-    state.moveVertical(-1, 80);
+    state.historyPrevious();
     expect(state.text).toBe("two");
     state.insert("!");
-    state.moveVertical(1, 80);
+    state.historyNext();
     expect(state.text).toBe("draft");
     expect(state.entries).toEqual(["one", "two"]);
   });
@@ -157,5 +157,50 @@ describe("editor state", () => {
     expect(state.text).toBe("one");
     state.historyNext();
     expect(state.text).toBe("");
+  });
+
+  it("moves horizontally across explicit newline boundaries", () => {
+    const state = new EditorState();
+    state.insert("a\nb");
+
+    state.moveHorizontal(-1);
+    expect(state.cursor).toBe(2);
+    state.moveHorizontal(-1);
+    expect(state.cursor).toBe(1);
+    state.moveHorizontal(1);
+    expect(state.cursor).toBe(2);
+  });
+
+  it("moves vertically across explicit and wrapped visual rows", () => {
+    const explicit = new EditorState();
+    explicit.insert("abcd\nxy");
+    explicit.moveVertical(-1, 80);
+    expect(explicit.cursor).toBe(2);
+    explicit.moveVertical(1, 80);
+    expect(explicit.cursor).toBe(7);
+
+    const wrapped = new EditorState();
+    wrapped.insert("abcdef");
+    wrapped.moveVertical(-1, 6);
+    expect(wrapped.cursor).toBe(2);
+    wrapped.moveVertical(1, 6);
+    expect(wrapped.cursor).toBe(6);
+  });
+
+  it("stops vertical arrows at draft boundaries without recalling history", () => {
+    const state = new EditorState(["history"]);
+    state.insert("ab\ncd");
+
+    state.moveVertical(1, 80);
+    expect(state.text).toBe("ab\ncd");
+    expect(state.cursor).toBe(5);
+
+    state.moveVertical(-1, 80);
+    state.moveVertical(-1, 80);
+    expect(state.text).toBe("ab\ncd");
+    expect(state.cursor).toBe(2);
+
+    state.historyPrevious();
+    expect(state.text).toBe("history");
   });
 });

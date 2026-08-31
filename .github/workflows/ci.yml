@@ -22,3 +22,8 @@ jobs:
         run: just check
       - name: Build artifact
         run: just build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Smoke test Node artifact
+        run: node dist/index.js --help

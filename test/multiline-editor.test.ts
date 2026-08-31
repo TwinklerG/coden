@@ -193,7 +193,7 @@ describe("MultilineEditor", () => {
     h.input.write("one\r");
     await first;
     const second = h.editor.read();
-    h.input.write("\u001b[A!\r");
+    h.input.write("\u0010!\r");
     await expect(second).resolves.toEqual({ type: "submit", text: "one!" });
     expect(h.screen.lines().at(-1)).toBe("> one!");
   });

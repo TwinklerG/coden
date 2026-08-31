@@ -16,7 +16,7 @@ coden --version                 # 0.1.8
 coden --help
 ```
 
-The published artifact is a minified, single-file Node CLI (`dist/index.js`). Node is the only runtime requirement; Bun is not required at runtime.
+The published artifact is a minified, single-file Node CLI (`dist/index.js`). It requires **Node.js 22+**; Bun is not required at runtime.
 
 ### Run from source
 
@@ -33,10 +33,13 @@ The source uses only standard Web/Node.js APIs. Bun provides dependency manageme
 
 ```bash
 export CODEN_OPENAI_API_KEY=...
-coden "fix the failing tests"
-coden -p --auto "implement the feature and run tests"
+coden                             # default full-screen TUI
+coden "fix the failing tests"    # submit in TUI and remain interactive
+coden --tui                       # explicitly start TUI
+coden --cli                       # use the legacy CLI/REPL
+coden -p --auto "implement the feature and run tests" # print once and exit
 coden --smart-approve "implement the feature and run tests"
-coden --lang en --help          # English for this process only
+coden --lang en --help            # English for this process only
 
 export CODEN_ANTHROPIC_API_KEY=...
 coden --provider anthropic --model claude-sonnet-4-20250514
@@ -45,13 +48,15 @@ coden --resume <session-id>
 coden --resume                  # list sessions for this workspace
 ```
 
-Without a prompt, CodeN opens its REPL. Enter submits; Shift+Enter inserts a newline when the terminal distinguishes it. A single trailing `\` continues on every terminal (`\\` preserves one literal backslash). Multiline paste, cross-line cursor movement, and process-local input history are supported.
+On a capable TTY, `coden` defaults to the Ink full-screen TUI. `--tui` requests it explicitly and `--cli` selects the original continuous-output CLI. Non-TTY input/output, `TERM=dumb`, or unavailable raw mode automatically falls back to CLI; explicit TUI fallback prints a warning. `-p/--print` always remains plain, pipeable, and exits after one turn. `NO_COLOR` disables colors without disabling TUI.
 
-Commands are `/help`, `/skills`, `/session`, `/sessions`, `/compact`, `/reload`, `/new`, `/lang`, and `/quit`. `/lang` lists `zh`, `en`, and the current language. `/lang en` or `/lang zh` atomically persists the user preference and immediately changes the UI, system prompt, and built-in tool descriptions. The banner shows the version and a 16-character workspace hash.
+The TUI keeps CLI-like content with a transient activity row, fixed multiline input, and provider/model, workspace, approval, phase, and context status. Enter submits; Shift+Enter or one trailing `\` adds a newline. Use `PageUp`/`PageDown` or the mouse wheel to browse and `End` to follow the latest output. `Ctrl+C` cancels a running turn; empty `Ctrl+D` or confirmed idle `Ctrl+C` exits. Turns remain serial and input is not queued while running.
+
+Both interfaces support `/help`, `/skills`, `/session`, `/sessions`, `/compact`, `/reload`, `/new`, `/lang`, and `/quit`. `/lang` lists `zh`, `en`, and the current language; `/lang en` or `/lang zh` atomically persists the preference and immediately changes the UI, system prompt, and built-in tool descriptions. The legacy CLI retains multiline editing, process-local history, and its startup banner.
 
 CodeN has a fixed Chinese default and does not inspect the operating-system locale. `--lang zh|en` overrides only the current process and never writes configuration. The UI, system prompt, and built-in tools share one language. An explicit request for another reply language may be followed for one task without changing UI or persistent preferences. Third-party plugin names, descriptions, output, and errors remain exactly as authored.
 
-Core options are `--lang`, `--provider`, `--model`, `-p/--print`, `--resume [session-id]`, `--smart-approve`, `--auto`, `--allow-outside-workspace`, `--verbose`, `--max-steps`, repeatable `--plugin`, and `--version`.
+Core options are `--tui`, `--cli`, `--lang`, `--provider`, `--model`, `-p/--print`, `--resume [session-id]`, `--smart-approve`, `--auto`, `--allow-outside-workspace`, `--verbose`, `--max-steps`, repeatable `--plugin`, and `--version`. `--tui` cannot be combined with `--cli` or `--print`.
 
 ## Configuration
 

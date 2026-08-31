@@ -1,0 +1,173 @@
+import { describe, expect, it } from "vitest";
+import { EventBus } from "../src/core/events.js";
+import type { ToolDefinition } from "../src/core/types.js";
+import { I18n } from "../src/i18n/i18n.js";
+import { TuiStore } from "../src/tui/store.js";
+
+const edit: ToolDefinition = {
+  name: "edit",
+  description: "edit",
+  risk: "modify",
+  inputSchema: { type: "object", properties: { path: { type: "string" } } },
+  async execute() {
+    return { content: "ok" };
+  },
+};
+
+describe("TuiStore", () => {
+  it("replaces thinking in place with real streamed assistant deltas", async () => {
+    const events = new EventBus();
+    const store = new TuiStore(new I18n("en"));
+    store.connect(events);
+
+    await events.emit("turn.started", { input: "hello" }, "turn");
+    expect(store.getSnapshot().blocks.map((block) => block.kind)).toEqual(["user", "activity"]);
+
+    await events.emit("provider.started", {}, "turn");
+    await events.emit("provider.reasoning_delta", { text: " checking\nfiles " }, "turn");
+    expect(store.getSnapshot().blocks[1]).toMatchObject({
+      kind: "activity",
+      phase: "thinking",
+      text: "checking files",
+    });
+
+    await events.emit("provider.delta", { text: "final " }, "turn");
+    expect(store.getSnapshot().blocks[1]).toMatchObject({
+      kind: "assistant",
+      markdown: "final ",
+    });
+    expect(store.getSnapshot().blocks).toHaveLength(2);
+
+    await events.emit("provider.delta", { text: "answer" }, "turn");
+    expect(store.getSnapshot().blocks[1]).toMatchObject({
+      kind: "assistant",
+      markdown: "final answer",
+    });
+
+    await events.emit("provider.completed", {}, "turn");
+    await events.emit("turn.completed", { inputTokens: 3, outputTokens: 4, durationMs: 5 }, "turn");
+    expect(store.getSnapshot()).toMatchObject({
+      phase: "idle",
+      running: false,
+      turnUsage: { inputTokens: 3, outputTokens: 4, durationMs: 5 },
+    });
+    expect(store.getSnapshot().blocks.some((block) => block.kind === "activity")).toBe(false);
+  });
+
+  it("discards a failed provider attempt before retry", async () => {
+    const events = new EventBus();
+    const store = new TuiStore();
+    store.connect(events);
+    await events.emit("turn.started", { input: "hello" }, "turn");
+    await events.emit("provider.started", {}, "turn");
+    await events.emit("provider.delta", { text: "partial" }, "turn");
+    await events.emit("provider.retry", { attempt: 1 }, "turn");
+    await events.emit("provider.started", {}, "turn");
+    await events.emit("provider.delta", { text: "final" }, "turn");
+    expect(store.getSnapshot().blocks.filter((block) => block.kind === "assistant")).toEqual([
+      expect.objectContaining({ markdown: "final" }),
+    ]);
+  });
+
+  it("tracks tools, review activity, context, and failures", async () => {
+    const events = new EventBus();
+    const store = new TuiStore();
+    store.connect(events);
+    await events.emit("context.prepared", { estimatedTokens: 150, budget: 100 });
+    await events.emit("permission.review_started", { name: "edit" });
+    expect(store.getSnapshot()).toMatchObject({ contextPercent: 100, phase: "reviewing" });
+    await events.emit("tool.started", { name: "edit", summary: "src/a.ts" });
+    await events.emit("tool.completed", { name: "edit", durationMs: 12, isError: false });
+    expect(store.getSnapshot().blocks.map((block) => ("text" in block ? block.text : ""))).toEqual([
+      "◇ edit  src/a.ts",
+      "✓ edit  12ms",
+    ]);
+    await events.emit("turn.failed", { message: "cancelled" });
+    expect(store.getSnapshot()).toMatchObject({ phase: "failed", running: false });
+  });
+
+  it("settles permission and confirmation dialogs exactly once", async () => {
+    const store = new TuiStore();
+    const permission = store.requestPermission(
+      edit,
+      { callId: "1", name: "edit", input: { path: "src/a.ts" } },
+      "modify",
+    );
+    expect(store.getSnapshot().dialog).toMatchObject({ kind: "permission", allowSession: true });
+    store.resolveDialog("allow_session");
+    store.resolveDialog("deny");
+    await expect(permission).resolves.toBe("allow_session");
+
+    const confirm = store.requestConfirm("Trust?\u001b[2J");
+    expect(store.getSnapshot().dialog).toMatchObject({ kind: "confirm", message: "Trust?" });
+    store.close();
+    await expect(confirm).resolves.toBe(false);
+  });
+
+  it("keeps one transient block across repeated starts and tool preparation", async () => {
+    const events = new EventBus();
+    const store = new TuiStore();
+    store.connect(events);
+
+    await events.emit("turn.started", { input: "hello" }, "turn");
+    await events.emit("provider.started", {}, "turn");
+    await events.emit("provider.started", {}, "turn");
+    expect(store.getSnapshot().blocks.filter((block) => block.kind === "activity")).toHaveLength(1);
+
+    await events.emit("provider.tool_call_start", { index: 0, name: "read" }, "turn");
+    await events.emit(
+      "provider.tool_call_delta",
+      { index: 0, argumentsDelta: '{"path":"src/a.ts"}' },
+      "turn",
+    );
+    expect(store.getSnapshot().blocks.at(-1)).toMatchObject({ kind: "activity", phase: "tool" });
+
+    await events.emit("tool.started", { name: "read", summary: "src/a.ts" }, "turn");
+    expect(store.getSnapshot().blocks.some((block) => block.kind === "activity")).toBe(false);
+
+    await events.emit("permission.review_started", { name: "edit" }, "turn");
+    expect(store.getSnapshot().blocks.at(-1)).toMatchObject({
+      kind: "activity",
+      phase: "reviewing",
+    });
+    await events.emit("permission.review_completed", { name: "edit" }, "turn");
+    expect(store.getSnapshot().blocks.some((block) => block.kind === "activity")).toBe(false);
+  });
+
+  it.each([
+    ["provider.completed", {}],
+    ["provider.retry", { attempt: 1 }],
+    ["turn.completed", {}],
+    ["turn.failed", { message: "cancelled" }],
+  ] as const)("cleans transient activity on %s", async (type, data) => {
+    const events = new EventBus();
+    const store = new TuiStore();
+    store.connect(events);
+
+    await events.emit("provider.started", {}, "turn");
+    await events.emit(type, data, "turn");
+    expect(store.getSnapshot().blocks.some((block) => block.kind === "activity")).toBe(false);
+  });
+
+  it("cleans transient activity on controller state changes and close", async () => {
+    const events = new EventBus();
+    const store = new TuiStore();
+    store.connect(events);
+
+    await events.emit("provider.started", {}, "turn");
+    store.setSubmitting();
+    expect(store.getSnapshot().blocks.some((block) => block.kind === "activity")).toBe(false);
+
+    await events.emit("provider.started", {}, "turn");
+    store.setIdle();
+    expect(store.getSnapshot().blocks.some((block) => block.kind === "activity")).toBe(false);
+
+    await events.emit("provider.started", {}, "turn");
+    store.setFatal(new Error("fatal"));
+    expect(store.getSnapshot().blocks.some((block) => block.kind === "activity")).toBe(false);
+
+    await events.emit("provider.started", {}, "turn");
+    store.close();
+    expect(store.getSnapshot().blocks.some((block) => block.kind === "activity")).toBe(false);
+  });
+});

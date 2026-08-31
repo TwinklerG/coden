@@ -19,6 +19,7 @@ import {
   type PluginOperationOptions,
 } from "../plugins/installer.js";
 import { builtinTools } from "../tools/builtin/index.js";
+import { runTuiCommand, TuiInitializationError } from "../tui/app.js";
 import { CODEN_VERSION } from "../version.js";
 import {
   type AgentCommandOptions,
@@ -28,6 +29,7 @@ import {
   positiveInteger,
   runAgentCommand,
 } from "./agent-command.js";
+import { detectTuiCapabilities, resolveInterfaceMode } from "./interface-mode.js";
 import { type PluginCommandService, registerPluginCommand } from "./plugin-command.js";
 
 export interface CliDependencies {
@@ -59,6 +61,8 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
     .version(CODEN_VERSION)
     .argument("[prompt]", m.promptArgument)
     .option("-p, --print", m.print, false)
+    .option("--tui", m.tui, false)
+    .option("--cli", m.legacyCli, false)
     .option("--provider <provider>", m.provider, parseProvider)
     .option("--model <model-id>", m.model)
     .option("--resume [session-id]", m.resume)
@@ -72,9 +76,27 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       if (!isLanguage(value)) throw new Error(i18n.messages.language.invalid(value));
       return value;
     })
-    .action((prompt: string | undefined, options: AgentCommandOptions) =>
-      runAgentCommand(prompt, options, i18n),
-    );
+    .action(async (prompt: string | undefined, options: AgentCommandOptions) => {
+      let resolved: ReturnType<typeof resolveInterfaceMode>;
+      try {
+        resolved = resolveInterfaceMode(
+          { tui: options.tui, cli: options.cli, print: options.print },
+          detectTuiCapabilities(process.stdin, process.stdout, process.env.TERM),
+        );
+      } catch {
+        throw new ConfigError(m.conflictingInterface);
+      }
+      if (options.resume === true) return runAgentCommand(prompt, options, i18n);
+      if (resolved.warning) process.stderr.write(`${m.tuiUnavailable}\n`);
+      if (resolved.mode !== "tui") return runAgentCommand(prompt, options, i18n);
+      try {
+        await runTuiCommand(prompt, options, i18n);
+      } catch (error) {
+        if (!(error instanceof TuiInitializationError)) throw error;
+        process.stderr.write(`${m.tuiUnavailable}\n`);
+        await runAgentCommand(prompt, { ...options, tui: false, cli: true }, i18n);
+      }
+    });
 
   registerPluginCommand(program, {
     service: pluginService,

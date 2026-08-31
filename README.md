@@ -16,7 +16,7 @@ coden --version                 # 0.1.8
 coden --help
 ```
 
-发布产物是构建后的单文件 Node CLI（`dist/index.js`，已 minify），运行时只需 Node，不需要 Bun。
+发布产物是构建后的单文件 Node CLI（`dist/index.js`，已 minify），运行时需要 **Node.js 22+**，不需要 Bun。
 
 ### 从源码运行（开发）
 
@@ -34,10 +34,13 @@ just check
 
 ```bash
 export CODEN_OPENAI_API_KEY=...
-coden "修复当前项目的测试失败"
-coden -p --auto "实现功能并运行测试"
+coden                             # 默认进入 CLI/REPL
+coden "修复当前项目的测试失败"   # 在 CLI 中自动提交并继续交互
+coden --tui                       # 显式启动 TUI
+coden --cli                       # 显式使用 CLI/REPL
+coden -p --auto "实现功能并运行测试" # 纯文本输出后退出
 coden --smart-approve "实现功能并运行测试"
-coden --lang en --help          # 仅为当前进程切换为英文
+coden --lang en --help            # 仅为当前进程切换为英文
 
 export CODEN_ANTHROPIC_API_KEY=...
 coden --provider anthropic --model claude-sonnet-4-20250514
@@ -46,13 +49,15 @@ coden --resume <session-id>      # 恢复指定会话
 coden --resume                   # 列出当前工作区的会话
 ```
 
-无 prompt 时进入 REPL。交互式 REPL 支持完整多行编辑：Enter 提交；终端可区分该按键时，Shift+Enter 插入换行；所有终端均可在行尾输入单个 `\` 后按 Enter 继续下一行（`\\` 表示保留一个字面反斜杠）。支持多行粘贴、跨行方向键编辑和当前进程内输入历史。传统终端若无法区分 Shift+Enter，请使用行尾 `\`。
+`coden` 默认进入连续输出 CLI；`--tui` 可在支持的 TTY 中显式启动 Ink 全屏 TUI，`--cli` 可显式指定 CLI。非 TTY、`TERM=dumb` 或无法进入 raw mode 时，显式 `--tui` 会降级为 CLI 并显示警告。`-p/--print` 始终保持纯文本、可管道化并在单轮后退出。`NO_COLOR` 只关闭颜色，不影响界面模式。
 
-支持 `/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new`、`/lang` 和 `/quit`。`/lang` 列出 `zh`、`en` 及当前语言；`/lang en` 或 `/lang zh` 会原子写入用户配置并立即切换界面、系统提示词和内建工具描述。启动横幅会显示当前版本与 16 位 workspace hash。
+TUI 内容区保持 CLI 风格，瞬时思考/工具活动跟随当前对话位置进入 transcript 流，不再固定在底部；输入区由上下两条贯穿全宽的水平线包围，下方依次是 provider/model、workspace、授权模式、阶段、上下文占用状态。Enter 提交；Shift+Enter 或行尾单个 `\` 插入换行；方向键在显式换行或自动折行的草稿行间移动，不会切换历史，仅 `Ctrl+P`/`Ctrl+N` 浏览输入历史；`PageUp`/`PageDown` 和鼠标滚轮浏览 transcript，`End` 回到最新内容；运行中 `Ctrl+C` 取消当前任务；空输入 `Ctrl+D` 或确认后的 `Ctrl+C` 退出。TUI 保持单任务串行，不在运行中排队输入。
+
+TUI 与传统 CLI 均支持 `/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new`、`/lang` 和 `/quit`。`/lang` 列出 `zh`、`en` 及当前语言；`/lang en` 或 `/lang zh` 会原子写入用户配置并立即切换界面、系统提示词和内建工具描述。传统 CLI 继续提供完整多行编辑与启动横幅。
 
 CodeN 固定默认中文，不读取系统区域设置。`--lang zh|en` 仅覆盖当前进程且不写配置。系统提示词、内建工具和界面共享同一语言；用户在单次任务中明确要求其他回复语言时，Agent 可以遵从，但不会更改界面或持久化偏好。第三方插件的名称、描述、输出和错误始终保留插件作者原文。
 
-核心选项：`--lang`、`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--smart-approve`、`--auto`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。
+核心选项：`--tui`、`--cli`、`--lang`、`--provider`、`--model`、`-p/--print`、`--resume [session-id]`、`--smart-approve`、`--auto`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、可重复的 `--plugin` 和 `--version`。`--tui` 不能与 `--cli` 或 `--print` 同时使用。
 
 ## 配置
 
