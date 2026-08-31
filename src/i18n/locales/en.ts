@@ -57,7 +57,10 @@ export const en: Messages = {
   repl: {
     version: (version) => `Version: ${version}`,
     workspace: (hash) => `Workspace hash: ${hash}`,
-    session: (id) => `CodeN session ${id}. Type /help for commands.`,
+    model: (model) => `Model: ${model}`,
+    approvalMode: (mode) => `Approval: ${mode}`,
+    thinking: (level) => `Thinking: ${level}`,
+    session: (id) => `Session ID: ${id}`,
     resumedHelp: "Type /help for commands.",
     help: "/help /skills /session /sessions /compact /reload /new /lang /thinking /quit\n",
     compacted: "Context compacted.\n",

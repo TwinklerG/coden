@@ -55,7 +55,10 @@ export const zh = {
   repl: {
     version: (version: string) => `版本：${version}`,
     workspace: (hash: string) => `工作区哈希：${hash}`,
-    session: (id: string) => `CodeN 会话 ${id}。输入 /help 查看命令。`,
+    model: (model: string) => `模型：${model}`,
+    approvalMode: (mode: string) => `审批模式：${mode}`,
+    thinking: (level: string) => `思考等级：${level}`,
+    session: (id: string) => `会话ID：${id}`,
     resumedHelp: "输入 /help 查看命令。",
     help: "/help /skills /session /sessions /compact /reload /new /lang /thinking /quit\n",
     compacted: "上下文已压缩。\n",
