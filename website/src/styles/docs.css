@@ -146,6 +146,13 @@ starlight-lang-select select {
   font-family: var(--coden-font-mono);
 }
 
+starlight-theme-select select {
+  border: 1px solid var(--sl-color-hairline);
+  background: var(--sl-color-bg-inline-code);
+  color: var(--sl-color-gray-2);
+  cursor: pointer;
+}
+
 nav.sidebar .top-level > li > a,
 nav.sidebar summary,
 nav.sidebar .group-label {

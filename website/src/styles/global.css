@@ -134,7 +134,6 @@ input {
 
 .site-brand,
 .site-lang-switch,
-.site-theme-toggle,
 .site-nav a,
 .site-footer a,
 .docs-title-brand,
@@ -174,7 +173,6 @@ input {
 
 .site-nav a,
 .site-lang-switch,
-.site-theme-toggle,
 .docs-title-nav a,
 .docs-title-lang,
 .root-language-links a {
@@ -185,7 +183,6 @@ input {
 
 .site-nav a:hover,
 .site-lang-switch:hover,
-.site-theme-toggle:hover,
 .root-language-links a:hover {
   border-color: var(--coden-border);
   background: var(--coden-accent-soft);
@@ -194,7 +191,6 @@ input {
 
 .site-nav a[aria-current="page"],
 .site-lang-switch,
-.site-theme-toggle,
 .docs-title-lang,
 .root-language-links a {
   border-color: var(--coden-border);
@@ -242,7 +238,28 @@ input {
 }
 
 .site-theme-toggle {
+  min-height: 2.5rem;
+  padding: 0 1.6rem 0 0.65rem;
+  border: 1px solid var(--coden-border);
+  border-radius: var(--coden-radius-md);
+  background: var(--coden-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%2391809d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  background-size: 0.7rem;
+  color: var(--coden-text);
+  font-family: var(--coden-font-mono);
+  font-size: 0.9rem;
+  line-height: 1.2;
   cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.site-theme-toggle:hover {
+  border-color: var(--coden-accent);
+  background-color: var(--coden-accent-soft);
+  color: var(--coden-accent-strong);
 }
 
 .site-footer {

@@ -15,6 +15,7 @@ export interface LocalizedMessages {
   };
   theme: {
     label: string;
+    auto: string;
     light: string;
     dark: string;
   };
@@ -100,10 +101,11 @@ export const messages = {
     a11y: {
       skipToContent: "跳到主内容",
       switchLanguage: "切换语言",
-      toggleTheme: "切换明暗主题",
+      toggleTheme: "选择主题",
     },
     theme: {
       label: "主题",
+      auto: "自动",
       light: "浅色",
       dark: "深色",
     },
@@ -187,10 +189,11 @@ export const messages = {
     a11y: {
       skipToContent: "Skip to main content",
       switchLanguage: "Switch language",
-      toggleTheme: "Toggle light and dark theme",
+      toggleTheme: "Choose theme",
     },
     theme: {
       label: "Theme",
+      auto: "Auto",
       light: "Light",
       dark: "Dark",
     },

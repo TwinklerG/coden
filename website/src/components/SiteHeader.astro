@@ -62,13 +62,25 @@ const links = [
     >
       {currentMessages.localeSwitch}
     </a>
-    <button
+    <select
       class="site-theme-toggle"
-      type="button"
-      data-theme-toggle
+      data-theme-select
       aria-label={currentMessages.a11y.toggleTheme}
     >
-      {currentMessages.theme.label}
-    </button>
+      <option value="auto">{currentMessages.theme.auto}</option>
+      <option value="light">{currentMessages.theme.light}</option>
+      <option value="dark">{currentMessages.theme.dark}</option>
+    </select>
+    <script is:inline>
+      (() => {
+        // The head-run theme script sets data-theme-pref before this select is parsed,
+        // so we can reflect the stored preference without a flash of the wrong option.
+        const pref = document.documentElement.getAttribute("data-theme-pref");
+        const select = document.querySelector("[data-theme-select]");
+        if (select && (pref === "auto" || pref === "light" || pref === "dark")) {
+          select.value = pref;
+        }
+      })();
+    </script>
   </div>
 </header>

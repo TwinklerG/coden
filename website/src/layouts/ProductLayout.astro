@@ -25,61 +25,74 @@ const pathname = Astro.url.pathname;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <Seo language={language} title={title} description={description} pathname={pathname} />
     <script is:inline>
-      const storageKey = "coden-theme";
-      const root = document.documentElement;
-      const media = window.matchMedia("(prefers-color-scheme: dark)");
+      (() => {
+        // Shared key with Starlight (docs) so the two surfaces stay in sync.
+        const storageKey = "starlight-theme";
+        const root = document.documentElement;
+        const media = window.matchMedia("(prefers-color-scheme: light)");
 
-      const readTheme = () => {
-        try {
-          const stored = window.localStorage.getItem(storageKey);
-          if (stored === "light" || stored === "dark") {
-            return stored;
-          }
-        } catch {
-          // Ignore storage failures.
-        }
+        const parseTheme = (value) =>
+          value === "auto" || value === "light" || value === "dark" ? value : "auto";
 
-        return media.matches ? "dark" : "light";
-      };
-
-      const applyTheme = (theme) => {
-        root.setAttribute("data-theme", theme);
-        root.style.colorScheme = theme;
-        document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
-          button.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
-        });
-      };
-
-      const toggleTheme = () => {
-        const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-        try {
-          window.localStorage.setItem(storageKey, next);
-        } catch {
-          // Ignore storage failures.
-        }
-        applyTheme(next);
-      };
-
-      applyTheme(readTheme());
-      document.addEventListener("DOMContentLoaded", () => applyTheme(readTheme()));
-      document.addEventListener("click", (event) => {
-        const target = event.target instanceof Element ? event.target.closest("[data-theme-toggle]") : null;
-        if (target) {
-          toggleTheme();
-        }
-      });
-
-      if (typeof media.addEventListener === "function") {
-        media.addEventListener("change", () => {
+        const readTheme = () => {
+          let stored = null;
           try {
-            if (window.localStorage.getItem(storageKey) == null) {
-              applyTheme(media.matches ? "dark" : "light");
+            stored = window.localStorage.getItem(storageKey);
+            // Migrate the previous product-site key so a prior light/dark choice carries over.
+            if (stored === null) {
+              const legacy = window.localStorage.getItem("coden-theme");
+              if (legacy === "light" || legacy === "dark") {
+                stored = legacy;
+                window.localStorage.setItem(storageKey, stored);
+              }
             }
           } catch {
-            applyTheme(media.matches ? "dark" : "light");
+            // Ignore storage failures.
+          }
+          return parseTheme(stored);
+        };
+
+        const systemTheme = () => (media.matches ? "light" : "dark");
+
+        const applyTheme = (preference) => {
+          const resolved = preference === "auto" ? systemTheme() : preference;
+          root.setAttribute("data-theme", resolved);
+          // Expose the raw preference so the header select can set its value at parse time.
+          root.setAttribute("data-theme-pref", preference);
+          root.style.colorScheme = resolved;
+          document.querySelectorAll("[data-theme-select]").forEach((select) => {
+            select.value = preference;
+          });
+        };
+
+        const storeTheme = (preference) => {
+          try {
+            window.localStorage.setItem(storageKey, preference === "auto" ? "" : preference);
+          } catch {
+            // Ignore storage failures.
+          }
+        };
+
+        applyTheme(readTheme());
+
+        document.addEventListener("change", (event) => {
+          const select =
+            event.target instanceof Element ? event.target.closest("[data-theme-select]") : null;
+          if (select instanceof HTMLSelectElement) {
+            const next = parseTheme(select.value);
+            storeTheme(next);
+            applyTheme(next);
           }
         });
-      }
+
+        if (typeof media.addEventListener === "function") {
+          media.addEventListener("change", () => {
+            if (readTheme() === "auto") {
+              applyTheme("auto");
+            }
+          });
+        }
+      })();
     </script>
   </head>
   <body>
