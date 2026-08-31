@@ -20,15 +20,15 @@ A minimal coding agent implemented independently in TypeScript: it drives the mo
 
 ## Which models are supported?
 
-Two providers, `openai` and `anthropic`, with model IDs set explicitly (default `gpt-5-mini`). CodeN maintains no model capability allowlist and sends parameters as-is. See [Configure Your First Provider](../getting-started/provider).
+Two providers, `openai` and `anthropic`, with model IDs set explicitly (default `gpt-5-mini`). CodeN maintains no model capability allowlist and sends parameters as-is. See [Configure Your First Provider](/coden/en/docs/getting-started/provider/).
 
 ## Are custom endpoints supported?
 
-OpenAI-compatible endpoints via `CODEN_OPENAI_BASE_URL`. Anthropic always uses the official endpoint. See [Custom Base URL](../advanced/custom-base-url).
+OpenAI-compatible endpoints via `CODEN_OPENAI_BASE_URL`. Anthropic always uses the official endpoint. See [Custom Base URL](/coden/en/docs/advanced/custom-base-url/).
 
 ## Where are sessions stored?
 
-`$XDG_DATA_HOME/coden/sessions/<workspace-hash>/` (default `~/.local/share/coden`). File permissions are `0700`/`0600`; contents include model output and reasoning and are sensitive. See [Session Storage](../advanced/session-storage).
+`$XDG_DATA_HOME/coden/sessions/<workspace-hash>/` (default `~/.local/share/coden`). File permissions are `0700`/`0600`; contents include model output and reasoning and are sensitive. See [Session Storage](/coden/en/docs/advanced/session-storage/).
 
 ## How do I control usage?
 
@@ -39,7 +39,7 @@ OpenAI-compatible endpoints via `CODEN_OPENAI_BASE_URL`. Anthropic always uses t
 
 ## Can plugins do dangerous things?
 
-Plugins and `bash` run with the current user's process permissions and are **not a sandbox**. Guards: project plugins require workspace trust; npm lifecycle scripts are disabled by default; dangerous-command detection; `--auto` never skips trust confirmation. See [Plugin Trust and Security](../plugins/trust-and-security).
+Plugins and `bash` run with the current user's process permissions and are **not a sandbox**. Guards: project plugins require workspace trust; npm lifecycle scripts are disabled by default; dangerous-command detection; `--auto` never skips trust confirmation. See [Plugin Trust and Security](/coden/en/docs/plugins/trust-and-security/).
 
 ## Are private npm registries supported?
 
@@ -66,6 +66,6 @@ Yes. Every command, default, and behavior is checked against the current source,
 
 ## Related references
 
-- [Troubleshooting](./troubleshooting)
-- [CLI Reference](./cli)
-- [Security Model](./security-model)
+- [Troubleshooting](/coden/en/docs/reference/troubleshooting/)
+- [CLI Reference](/coden/en/docs/reference/cli/)
+- [Security Model](/coden/en/docs/reference/security-model/)

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { allDocEntries } from "../src/data/docs";
+import { BASE_PATH } from "../src/lib/site";
 
 const SCAFFOLD_MARKERS = [
   "Documentation scaffold",
@@ -12,6 +13,9 @@ const SCAFFOLD_MARKERS = [
   "TODO",
 ];
 
+/** Product-site routes that legitimately live outside the docs tree. */
+const PRODUCT_ROUTES = new Set(["plugins/"]);
+
 function blocks(source: string): string[] {
   return [...source.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map((match) => match[1].trim());
 }
@@ -20,6 +24,11 @@ function links(source: string): string[] {
   return [...source.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)]
     .map((match) => match[1])
     .filter((target) => !target.startsWith("http"));
+}
+
+/** Normalizes language-specific absolute links to a language-neutral form. */
+function normalized(target: string): string {
+  return target.replace(/^\/coden\/(?:zh|en)\//, "/LANG/");
 }
 
 async function page(language: "zh" | "en", slug: string): Promise<string> {
@@ -49,27 +58,51 @@ describe("documentation content", () => {
       const zh = await page("zh", slug);
       const en = await page("en", slug);
       expect(blocks(zh)).toEqual(blocks(en));
-      expect(links(zh)).toEqual(links(en));
+      expect(links(zh).map(normalized)).toEqual(links(en).map(normalized));
     },
   );
 
-  it("keeps every internal link resolvable within the docs tree", async () => {
+  it("uses absolute base-aware links for every docs link", async () => {
+    const entries = allDocEntries();
+    for (const entry of entries) {
+      for (const language of ["zh", "en"] as const) {
+        const source = await page(language, entry.slug);
+        for (const target of links(source)) {
+          if (target.startsWith("#")) continue;
+          const prefix = `${BASE_PATH}/${language}/docs/`;
+          const productPrefix = `${BASE_PATH}/${language}/`;
+          if (target.startsWith(prefix)) continue;
+          if (target.startsWith(productPrefix)) {
+            const rest = target.slice(productPrefix.length);
+            expect(
+              PRODUCT_ROUTES.has(rest),
+              `product link "${target}" from ${language}/${entry.slug}`,
+            ).toBe(true);
+            continue;
+          }
+          expect(
+            target.startsWith("/"),
+            `non-absolute link "${target}" from ${language}/${entry.slug}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("keeps every docs link resolvable within the docs tree", async () => {
     const entries = allDocEntries();
     const expected = new Set(entries.map((entry) => entry.slug));
     for (const entry of entries) {
       for (const language of ["zh", "en"] as const) {
         const source = await page(language, entry.slug);
         for (const target of links(source)) {
-          if (target.startsWith("#") || target.startsWith("/")) continue;
-          const resolved = path.posix.normalize(
-            path.posix.join(path.posix.dirname(entry.slug), target),
+          if (target.startsWith("#")) continue;
+          const prefix = `${BASE_PATH}/${language}/docs/`;
+          if (!target.startsWith(prefix)) continue;
+          const slug = target.slice(prefix.length).replace(/\/$/, "");
+          expect(expected.has(slug), `broken link "${target}" from ${language}/${entry.slug}`).toBe(
+            true,
           );
-          if (resolved.startsWith("../")) continue;
-          const candidate = resolved.replace(/\.mdx?$/, "").replace(/\/$/, "");
-          expect(
-            expected.has(candidate),
-            `broken link "${target}" from ${language}/${entry.slug}`,
-          ).toBe(true);
         }
       }
     }

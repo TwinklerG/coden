@@ -21,7 +21,7 @@ sidebar:
 - **插件不是沙箱**：在 CodeN 主进程内执行，拥有完整用户进程权限，可访问文件、网络、环境变量与子进程。
 - 工具 `risk` 只影响调用确认，不提供进程隔离。
 - 安装校验导入插件入口：即使禁用生命周期脚本，顶层代码与静态依赖也会以当前用户权限运行。
-- 本地 `.ts` 插件通过 `data:` URL 加载，无法被 Node 运行时加载（见 [运行时能力矩阵](../getting-started/requirements)）。
+- 本地 `.ts` 插件通过 `data:` URL 加载，无法被 Node 运行时加载（见 [运行时能力矩阵](/coden/zh/docs/getting-started/requirements/)）。
 
 ## 生命周期脚本
 
@@ -46,7 +46,7 @@ sidebar:
 
 ## 相关参考
 
-- [本地 TypeScript 插件](./local-typescript)
-- [npm 插件安装和管理](./npm-management)
-- [Agent Hooks 信任与安全](../hooks/trust-and-security)
-- [安全模型](../reference/security-model)
+- [本地 TypeScript 插件](/coden/zh/docs/plugins/local-typescript/)
+- [npm 插件安装和管理](/coden/zh/docs/plugins/npm-management/)
+- [Agent Hooks 信任与安全](/coden/zh/docs/hooks/trust-and-security/)
+- [安全模型](/coden/zh/docs/reference/security-model/)

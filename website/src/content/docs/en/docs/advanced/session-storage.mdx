@@ -25,7 +25,7 @@ One record per line:
 {"version":1,"id":"…","timestamp":"2026-08-31T12:00:00.000Z","type":"message","data":{"role":"user","content":"…"}}
 ```
 
-Record types and resume semantics are covered in [Sessions](../concepts/sessions). Immutable during recovery: message structure checks (`isMessage`), and tool-call update uniqueness (`tool.call.updated` must match exactly one assistant `toolCalls`).
+Record types and resume semantics are covered in [Sessions](/coden/en/docs/concepts/sessions/). Immutable during recovery: message structure checks (`isMessage`), and tool-call update uniqueness (`tool.call.updated` must match exactly one assistant `toolCalls`).
 
 ## Resume validation
 
@@ -47,6 +47,6 @@ Session files may contain model reasoning, `redacted-thinking`, signatures, user
 
 ## Related references
 
-- [Sessions](../concepts/sessions)
-- [Data Security](../configuration/data-security)
-- [CLI Reference](../reference/cli)
+- [Sessions](/coden/en/docs/concepts/sessions/)
+- [Data Security](/coden/en/docs/configuration/data-security/)
+- [CLI Reference](/coden/en/docs/reference/cli/)

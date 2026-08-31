@@ -21,7 +21,7 @@ Confirmation accepts only `y` (`--yes` affects plugin commands only, never works
 - **Plugins are not a sandbox**: they run inside the CodeN main process with full user process permissions, reaching files, network, environment variables, and subprocesses.
 - Tool `risk` affects call confirmations only and provides no process isolation.
 - Install validation imports the plugin entry: even with lifecycle scripts disabled, top-level code and static dependencies run with the current user's permissions.
-- Local `.ts` plugins load through a `data:` URL and cannot load under a Node runtime (see the [Runtime capability matrix](../getting-started/requirements)).
+- Local `.ts` plugins load through a `data:` URL and cannot load under a Node runtime (see the [Runtime capability matrix](/coden/en/docs/getting-started/requirements/)).
 
 ## Lifecycle scripts
 
@@ -46,7 +46,7 @@ Confirmation accepts only `y` (`--yes` affects plugin commands only, never works
 
 ## Related references
 
-- [Local TypeScript Plugins](./local-typescript)
-- [npm Plugin Management](./npm-management)
-- [Trust and Security](../hooks/trust-and-security)
-- [Security Model](../reference/security-model)
+- [Local TypeScript Plugins](/coden/en/docs/plugins/local-typescript/)
+- [npm Plugin Management](/coden/en/docs/plugins/npm-management/)
+- [Trust and Security](/coden/en/docs/hooks/trust-and-security/)
+- [Security Model](/coden/en/docs/reference/security-model/)

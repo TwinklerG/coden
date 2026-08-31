@@ -20,15 +20,15 @@ sidebar:
 
 ## 支持哪些模型？
 
-`openai` 与 `anthropic` 两个 Provider，模型 ID 由用户显式指定（默认 `gpt-5-mini`）。CodeN 不维护模型能力白名单，参数按原样发送。详见 [配置第一个 Provider](../getting-started/provider)。
+`openai` 与 `anthropic` 两个 Provider，模型 ID 由用户显式指定（默认 `gpt-5-mini`）。CodeN 不维护模型能力白名单，参数按原样发送。详见 [配置第一个 Provider](/coden/zh/docs/getting-started/provider/)。
 
 ## 支持自定义端点吗？
 
-OpenAI 兼容端点：`CODEN_OPENAI_BASE_URL`。Anthropic 固定使用官方端点。详见 [自定义 Base URL](../advanced/custom-base-url)。
+OpenAI 兼容端点：`CODEN_OPENAI_BASE_URL`。Anthropic 固定使用官方端点。详见 [自定义 Base URL](/coden/zh/docs/advanced/custom-base-url/)。
 
 ## 会话保存在哪里？
 
-`$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`（默认 `~/.local/share/coden`）。文件权限 `0700`/`0600`；内容含模型输出与推理，属敏感数据。详见 [会话存储](../advanced/session-storage)。
+`$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`（默认 `~/.local/share/coden`）。文件权限 `0700`/`0600`；内容含模型输出与推理，属敏感数据。详见 [会话存储](/coden/zh/docs/advanced/session-storage/)。
 
 ## 如何控制用量？
 
@@ -39,7 +39,7 @@ OpenAI 兼容端点：`CODEN_OPENAI_BASE_URL`。Anthropic 固定使用官方端�
 
 ## 插件会做危险的事吗？
 
-插件与 `bash` 一样以当前用户进程权限运行，**不是沙箱**。防护措施：项目插件需要工作区信任；npm 生命周期脚本默认禁用；危险命令识别；`--auto` 不跳过信任确认。详见 [插件信任与安全](../plugins/trust-and-security)。
+插件与 `bash` 一样以当前用户进程权限运行，**不是沙箱**。防护措施：项目插件需要工作区信任；npm 生命周期脚本默认禁用；危险命令识别；`--auto` 不跳过信任确认。详见 [插件信任与安全](/coden/zh/docs/plugins/trust-and-security/)。
 
 ## 支持私有 npm Registry 吗？
 
@@ -66,6 +66,6 @@ just check
 
 ## 相关参考
 
-- [常见错误](./troubleshooting)
-- [CLI 命令参考](./cli)
-- [安全模型](./security-model)
+- [常见错误](/coden/zh/docs/reference/troubleshooting/)
+- [CLI 命令参考](/coden/zh/docs/reference/cli/)
+- [安全模型](/coden/zh/docs/reference/security-model/)

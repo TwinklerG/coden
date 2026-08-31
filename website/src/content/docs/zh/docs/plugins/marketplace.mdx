@@ -19,16 +19,16 @@ coden plugin install npm:coden-modern-unix
 coden plugin install npm:coden-msb
 ```
 
-安装后重启 CodeN 生效；`coden plugin list` 确认工具注册（见 [npm 插件安装和管理](./npm-management)）。项目级清单 `plugins.json` 与锁文件会写入 `.coden/`，建议提交到版本控制。
+安装后重启 CodeN 生效；`coden plugin list` 确认工具注册（见 [npm 插件安装和管理](/coden/zh/docs/plugins/npm-management/)）。项目级清单 `plugins.json` 与锁文件会写入 `.coden/`，建议提交到版本控制。
 
-安装时若包不满足作者协议（元数据缺失、`apiVersion` 不支持等），安装会失败并给出对应错误码；可对照 [插件作者协议](./author-protocol) 与 [常见错误](../reference/troubleshooting) 排查。
+安装时若包不满足作者协议（元数据缺失、`apiVersion` 不支持等），安装会失败并给出对应错误码；可对照 [插件作者协议](/coden/zh/docs/plugins/author-protocol/) 与 [常见错误](/coden/zh/docs/reference/troubleshooting/) 排查。
 
 ## 提交新插件
 
-插件作者将自己的 npm 包托管到公开仓库即可被浏览；包必须满足 [插件作者协议](./author-protocol)。目录收录条件以市场页展示为准。
+插件作者将自己的 npm 包托管到公开仓库即可被浏览；包必须满足 [插件作者协议](/coden/zh/docs/plugins/author-protocol/)。目录收录条件以市场页展示为准。
 
 ## 相关参考
 
-- [npm 插件安装和管理](./npm-management)
-- [插件作者协议](./author-protocol)
-- [信任与安全边界](./trust-and-security)
+- [npm 插件安装和管理](/coden/zh/docs/plugins/npm-management/)
+- [插件作者协议](/coden/zh/docs/plugins/author-protocol/)
+- [信任与安全边界](/coden/zh/docs/plugins/trust-and-security/)

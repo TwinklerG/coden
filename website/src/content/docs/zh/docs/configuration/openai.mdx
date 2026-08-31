@@ -34,11 +34,11 @@ coden --model your-model-id "your task"
 - 使用 `chat.completions` 流式接口，`stream_options.include_usage` 获取用量。
 - 工具以 OpenAI function calling 形式传递（`type: "function"`，名称/描述/JSON Schema）。
 - 每次请求的 `max_completion_tokens` = `reservedOutputTokens`（默认 8192）。
-- SDK 内部 `maxRetries` 为 0：重试由 Agent 循环执行（最多 3 次指数退避，见 [Agent 循环](../concepts/agent-loop)）。
+- SDK 内部 `maxRetries` 为 0：重试由 Agent 循环执行（最多 3 次指数退避，见 [Agent 循环](/coden/zh/docs/concepts/agent-loop/)）。
 
 ## 思考参数
 
-`--thinking` 等级映射到 `reasoning_effort`；`off` 映射 `minimal`（界面显示 `off→minimal`），`minimal`/`low`/`medium`/`high` 同名映射。`default` 不发送。详见 [语言与思考等级](./language-and-thinking)。
+`--thinking` 等级映射到 `reasoning_effort`；`off` 映射 `minimal`（界面显示 `off→minimal`），`minimal`/`low`/`medium`/`high` 同名映射。`default` 不发送。详见 [语言与思考等级](/coden/zh/docs/configuration/language-and-thinking/)。
 
 ## 配置示例
 
@@ -57,7 +57,7 @@ coden --model your-model-id "your task"
 
 ## 相关参考
 
-- [配置第一个 Provider](../getting-started/provider)
-- [环境变量](./environment)
-- [字段参考](./reference)
-- [常见错误](../reference/troubleshooting)
+- [配置第一个 Provider](/coden/zh/docs/getting-started/provider/)
+- [环境变量](/coden/zh/docs/configuration/environment/)
+- [字段参考](/coden/zh/docs/configuration/reference/)
+- [常见错误](/coden/zh/docs/reference/troubleshooting/)
