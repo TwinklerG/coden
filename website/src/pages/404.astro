@@ -1,0 +1,17 @@
+---
+import ProductLayout from "../layouts/ProductLayout.astro";
+import { routeFor } from "../lib/routes";
+import { messages } from "../i18n/messages";
+---
+
+<ProductLayout language="en" title={messages.en.shell.notFoundTitle} description={messages.en.shell.notFoundDescription} section="home">
+  <section class="page-not-found">
+    <h1>{messages.en.shell.notFoundTitle}</h1>
+    <p>{messages.en.shell.notFoundDescription}</p>
+    <p>
+      <a href={routeFor("zh", "home")}>中文首页</a>
+      <span> · </span>
+      <a href={routeFor("en", "home")}>English home</a>
+    </p>
+  </section>
+</ProductLayout>

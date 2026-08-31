@@ -1,0 +1,60 @@
+---
+import { alternateLanguagePath, routeFor, type ProductSection } from "../lib/routes";
+import { messages } from "../i18n/messages";
+import type { Language } from "../lib/site";
+
+interface Props {
+  language: Language;
+  pathname: string;
+  section: ProductSection;
+}
+
+const { language, pathname, section } = Astro.props;
+const currentMessages = messages[language];
+const alternateLanguage = language === "zh" ? "en" : "zh";
+const links = [
+  { href: routeFor(language, "home"), label: currentMessages.nav.home, current: section === "home" },
+  { href: routeFor(language, "docs"), label: currentMessages.nav.docs, current: section === "docs" },
+  {
+    href: routeFor(language, "plugins"),
+    label: currentMessages.nav.plugins,
+    current: section === "plugins",
+  },
+] as const;
+---
+
+<header class="site-header">
+  <a class="site-brand" href={routeFor(language, "home")} aria-label={currentMessages.brand}>
+    <span class="site-brand-mark" aria-hidden="true">◧</span>
+    <span class="site-brand-name">{currentMessages.brand}</span>
+  </a>
+
+  <nav class="site-nav" aria-label={currentMessages.nav.label}>
+    {links.map((link) => (
+      <a href={link.href} aria-current={link.current ? "page" : undefined}>
+        {link.label}
+      </a>
+    ))}
+    <a href="https://github.com/TwinklerG/CodeN" rel="noreferrer noopener" target="_blank">
+      {currentMessages.nav.github}
+    </a>
+  </nav>
+
+  <div class="site-actions">
+    <a
+      class="site-lang-switch"
+      href={alternateLanguagePath(pathname, alternateLanguage)}
+      aria-label={currentMessages.a11y.switchLanguage}
+    >
+      {currentMessages.localeSwitch}
+    </a>
+    <button
+      class="site-theme-toggle"
+      type="button"
+      data-theme-toggle
+      aria-label={currentMessages.a11y.toggleTheme}
+    >
+      {currentMessages.theme.label}
+    </button>
+  </div>
+</header>

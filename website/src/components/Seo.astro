@@ -1,0 +1,38 @@
+---
+import { alternateLanguagePath } from "../lib/routes";
+import { SITE_ORIGIN, withBase, type Language } from "../lib/site";
+
+interface Props {
+  language: Language;
+  title: string;
+  description: string;
+  pathname: string;
+}
+
+const { language, title, description, pathname } = Astro.props;
+const canonical = new URL(pathname, SITE_ORIGIN).toString();
+const zhAlternate = new URL(alternateLanguagePath(pathname, "zh"), SITE_ORIGIN).toString();
+const enAlternate = new URL(alternateLanguagePath(pathname, "en"), SITE_ORIGIN).toString();
+const xDefault = new URL(withBase("/"), SITE_ORIGIN).toString();
+const ogImage =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-label="CodeN"><rect width="1200" height="630" fill="#0f766e"/><rect x="72" y="72" width="1056" height="486" rx="44" fill="#042f2e" opacity="0.92"/><text x="108" y="250" fill="#f7fffd" font-family="Inter,Segoe UI,sans-serif" font-size="82" font-weight="700">CodeN</text><text x="108" y="345" fill="#d7fffa" font-family="Inter,Segoe UI,sans-serif" font-size="44">Minimal local-first coding agent</text></svg>`,
+  );
+---
+
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonical} />
+<link rel="alternate" hreflang="zh" href={zhAlternate} />
+<link rel="alternate" hreflang="en" href={enAlternate} />
+<link rel="alternate" hreflang="x-default" href={xDefault} />
+<meta property="og:locale" content={language === "zh" ? "zh_CN" : "en_US"} />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="CodeN" />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:image" content={ogImage} />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4fbfa" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#041a1a" />

@@ -1,0 +1,19 @@
+---
+import ProductLayout from "../../layouts/ProductLayout.astro";
+import { messages } from "../../i18n/messages";
+---
+
+<ProductLayout
+  language="en"
+  title={messages.en.home.title}
+  description={messages.en.home.description}
+  section="home"
+>
+  <section class="home-shell">
+    <p class="home-eyebrow">{messages.en.home.eyebrow}</p>
+    <h1>{messages.en.home.title}</h1>
+    <p>{messages.en.home.description}</p>
+    <p><code>{messages.en.home.installCommand}</code></p>
+    <p>{messages.en.home.placeholder}</p>
+  </section>
+</ProductLayout>

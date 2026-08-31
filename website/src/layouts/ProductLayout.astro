@@ -1,0 +1,92 @@
+---
+import Seo from "../components/Seo.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import { messages } from "../i18n/messages";
+import type { ProductSection } from "../lib/routes";
+import type { Language } from "../lib/site";
+
+interface Props {
+  language: Language;
+  title: string;
+  description: string;
+  section: ProductSection;
+}
+
+const { language, title, description, section } = Astro.props;
+const currentMessages = messages[language];
+const pathname = Astro.url.pathname;
+---
+
+<html lang={language} data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <Seo language={language} title={title} description={description} pathname={pathname} />
+    <script is:inline>
+      const storageKey = "coden-theme";
+      const root = document.documentElement;
+      const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+      const readTheme = () => {
+        try {
+          const stored = window.localStorage.getItem(storageKey);
+          if (stored === "light" || stored === "dark") {
+            return stored;
+          }
+        } catch {
+          // Ignore storage failures.
+        }
+
+        return media.matches ? "dark" : "light";
+      };
+
+      const applyTheme = (theme) => {
+        root.setAttribute("data-theme", theme);
+        root.style.colorScheme = theme;
+        document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+          button.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+        });
+      };
+
+      const toggleTheme = () => {
+        const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+        try {
+          window.localStorage.setItem(storageKey, next);
+        } catch {
+          // Ignore storage failures.
+        }
+        applyTheme(next);
+      };
+
+      applyTheme(readTheme());
+      document.addEventListener("DOMContentLoaded", () => applyTheme(readTheme()));
+      document.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target.closest("[data-theme-toggle]") : null;
+        if (target) {
+          toggleTheme();
+        }
+      });
+
+      if (typeof media.addEventListener === "function") {
+        media.addEventListener("change", () => {
+          try {
+            if (window.localStorage.getItem(storageKey) == null) {
+              applyTheme(media.matches ? "dark" : "light");
+            }
+          } catch {
+            applyTheme(media.matches ? "dark" : "light");
+          }
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">{currentMessages.a11y.skipToContent}</a>
+    <SiteHeader language={language} pathname={pathname} section={section} />
+    <main id="main-content" class="page-shell">
+      <slot />
+    </main>
+    <SiteFooter language={language} />
+  </body>
+</html>

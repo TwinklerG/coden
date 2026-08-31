@@ -1,0 +1,39 @@
+---
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { messages } from "../i18n/messages";
+import { routeFor } from "../lib/routes";
+import type { Language } from "../lib/site";
+
+interface Props {
+  language: Language;
+}
+
+const { language } = Astro.props;
+const currentMessages = messages[language];
+const packageJson = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8")) as {
+  version?: string;
+};
+const version = packageJson.version ?? "0.0.0";
+---
+
+<footer class="site-footer">
+  <div class="site-footer-links">
+    <a href="https://github.com/TwinklerG/CodeN" rel="noreferrer noopener" target="_blank">
+      {currentMessages.footer.github}
+    </a>
+    <a href="https://www.npmjs.com/package/@twinklerg/coden" rel="noreferrer noopener" target="_blank">
+      {currentMessages.footer.npm}
+    </a>
+    <a href={routeFor(language, "docs")}>
+      {currentMessages.footer.docs}
+    </a>
+    <a href={routeFor(language, "plugins")}>
+      {currentMessages.footer.plugins}
+    </a>
+    <span>{currentMessages.footer.license}</span>
+  </div>
+  <p class="site-footer-version">
+    {currentMessages.footer.version} v{version}
+  </p>
+</footer>

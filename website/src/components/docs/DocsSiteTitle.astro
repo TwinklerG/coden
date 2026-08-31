@@ -1,0 +1,29 @@
+---
+import { alternateLanguagePath, routeFor } from "../../lib/routes";
+import { messages } from "../../i18n/messages";
+import type { Language } from "../../lib/site";
+
+const pathname = Astro.url.pathname;
+const language: Language = pathname.includes("/en/") ? "en" : "zh";
+const currentMessages = messages[language];
+const alternateLanguage = language === "zh" ? "en" : "zh";
+---
+
+<div class="docs-title-shell">
+  <a class="docs-title-brand" href={routeFor(language, "home")}>
+    <span class="docs-title-mark" aria-hidden="true">◧</span>
+    <span>{currentMessages.brand}</span>
+  </a>
+  <nav class="docs-title-nav" aria-label={currentMessages.nav.label}>
+    <a href={routeFor(language, "home")}>{currentMessages.nav.home}</a>
+    <a href={routeFor(language, "docs")}>{currentMessages.nav.docs}</a>
+    <a href={routeFor(language, "plugins")}>{currentMessages.nav.plugins}</a>
+  </nav>
+  <a
+    class="docs-title-lang"
+    href={alternateLanguagePath(pathname, alternateLanguage)}
+    aria-label={currentMessages.a11y.switchLanguage}
+  >
+    {currentMessages.localeSwitch}
+  </a>
+</div>
