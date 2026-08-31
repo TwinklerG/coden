@@ -34,6 +34,5 @@ jobs:
           registry-url: https://registry.npmjs.org
       - name: Smoke test Node artifact
         run: node dist/index.js --help
-      - uses: npm/action-setup@v4
       - name: Publish to npm (trusted publishing)
         run: npm publish --provenance --access public
