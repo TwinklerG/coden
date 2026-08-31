@@ -32,7 +32,7 @@
     "@anthropic-ai/sdk": "^0.61.0",
     "ajv": "^8.17.1",
     "commander": "^14.0.0",
-    "ink": "^7.1.1",
+    "ink": "7.1.1",
     "marked": "^18.0.11",
     "openai": "^5.16.0",
     "picocolors": "^1.1.1",
@@ -55,5 +55,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "patchedDependencies": {
+    "ink@7.1.1": "patches/ink@7.1.1.patch"
   }
 }

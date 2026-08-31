@@ -8,7 +8,7 @@
         "@anthropic-ai/sdk": "^0.61.0",
         "ajv": "^8.17.1",
         "commander": "^14.0.0",
-        "ink": "^7.1.1",
+        "ink": "7.1.1",
         "marked": "^18.0.11",
         "openai": "^5.16.0",
         "picocolors": "^1.1.1",
@@ -26,6 +26,9 @@
         "vitest": "^3.2.4",
       },
     },
+  },
+  "patchedDependencies": {
+    "ink@7.1.1": "patches/ink@7.1.1.patch",
   },
   "packages": {
     "@alcalzone/ansi-tokenize": ["@alcalzone/ansi-tokenize@0.3.0", "", { "dependencies": { "ansi-styles": "^6.2.1", "is-fullwidth-code-point": "^5.0.0" } }, "sha512-p+CMKJ93HFmLkjXKlXiVGlMQEuRb6H0MokBSwUsX+S6BRX8eV5naFZpQJFfJHjRZY0Hmnqy1/r6UWl3x+19zYA=="],

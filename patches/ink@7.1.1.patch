@@ -1,0 +1,140 @@
+diff --git a/build/cursor-helpers.d.ts b/build/cursor-helpers.d.ts
+index c6e94667f9aef310093d40520fd8611448d0f0b6..f2374af47abc4ab281b7ff0e2c5592868e556804 100644
+--- a/build/cursor-helpers.d.ts
++++ b/build/cursor-helpers.d.ts
+@@ -10,10 +10,9 @@ Compare two cursor positions. Returns true if they differ.
+ */
+ export declare const cursorPositionChanged: (a: CursorPosition | undefined, b: CursorPosition | undefined) => boolean;
+ /**
+-Build escape sequence to move cursor from bottom of output to the target position and show it.
+-Assumes cursor is at (col 0, line visibleLineCount) — i.e. just after the last output line.
++Build escape sequence to move cursor from the end of output to the target position and show it.
+ */
+-export declare const buildCursorSuffix: (visibleLineCount: number, cursorPosition: CursorPosition | undefined) => string;
++export declare const buildCursorSuffix: (visibleLineCount: number, cursorPosition: CursorPosition | undefined, outputEndsWithNewline: boolean) => string;
+ /**
+ Build escape sequence to move cursor from previousCursorPosition back to the bottom of output.
+ This must be done before eraseLines or any operation that assumes cursor is at the bottom.
+@@ -25,6 +24,7 @@ export type CursorOnlyInput = {
+     previousCursorPosition: CursorPosition | undefined;
+     visibleLineCount: number;
+     cursorPosition: CursorPosition | undefined;
++    outputEndsWithNewline: boolean;
+ };
+ /**
+ Build the escape sequence for cursor-only updates (output unchanged, cursor moved).
+diff --git a/build/cursor-helpers.js b/build/cursor-helpers.js
+index be493545f0a22d2972a36ad858d2e4bbc4c9326a..040fa31eba9ebb6a458891287138301aaad86e4c 100644
+--- a/build/cursor-helpers.js
++++ b/build/cursor-helpers.js
+@@ -7,14 +7,14 @@ Compare two cursor positions. Returns true if they differ.
+ */
+ export const cursorPositionChanged = (a, b) => a?.x !== b?.x || a?.y !== b?.y;
+ /**
+-Build escape sequence to move cursor from bottom of output to the target position and show it.
+-Assumes cursor is at (col 0, line visibleLineCount) — i.e. just after the last output line.
++Build escape sequence to move cursor from the end of output to the target position and show it.
+ */
+-export const buildCursorSuffix = (visibleLineCount, cursorPosition) => {
++export const buildCursorSuffix = (visibleLineCount, cursorPosition, outputEndsWithNewline) => {
+     if (!cursorPosition) {
+         return '';
+     }
+-    const moveUp = visibleLineCount - cursorPosition.y;
++    const outputEndRow = visibleLineCount - (outputEndsWithNewline ? 0 : 1);
++    const moveUp = outputEndRow - cursorPosition.y;
+     return ((moveUp > 0 ? ansiEscapes.cursorUp(moveUp) : '') +
+         ansiEscapes.cursorTo(cursorPosition.x) +
+         showCursorEscape);
+@@ -39,7 +39,7 @@ Hides cursor if it was previously shown, returns to bottom, then repositions.
+ export const buildCursorOnlySequence = (input) => {
+     const hidePrefix = input.cursorWasShown ? hideCursorEscape : '';
+     const returnToBottom = buildReturnToBottom(input.previousLineCount, input.previousCursorPosition);
+-    const cursorSuffix = buildCursorSuffix(input.visibleLineCount, input.cursorPosition);
++    const cursorSuffix = buildCursorSuffix(input.visibleLineCount, input.cursorPosition, input.outputEndsWithNewline);
+     return hidePrefix + returnToBottom + cursorSuffix;
+ };
+ /**
+diff --git a/build/log-update.js b/build/log-update.js
+index cdb5fc41f158304c4c4f230a765065ab1fe0a2f7..2f1569c93e7c70fa128dcce056f1c415fa462ae7 100644
+--- a/build/log-update.js
++++ b/build/log-update.js
+@@ -32,7 +32,8 @@ const createStandard = (stream, { showCursor = false } = {}) => {
+         }
+         const lines = str.split('\n');
+         const visibleCount = visibleLineCount(lines, str);
+-        const cursorSuffix = buildCursorSuffix(visibleCount, activeCursor);
++        const outputEndsWithNewline = str.endsWith('\n');
++        const cursorSuffix = buildCursorSuffix(visibleCount, activeCursor, outputEndsWithNewline);
+         if (str === previousOutput && cursorChanged) {
+             stream.write(buildCursorOnlySequence({
+                 cursorWasShown,
+@@ -40,6 +41,7 @@ const createStandard = (stream, { showCursor = false } = {}) => {
+                 previousCursorPosition,
+                 visibleLineCount: visibleCount,
+                 cursorPosition: activeCursor,
++                outputEndsWithNewline,
+             }));
+         }
+         else {
+@@ -89,7 +91,7 @@ const createStandard = (stream, { showCursor = false } = {}) => {
+             stream.write(hideCursorEscape);
+         }
+         if (activeCursor) {
+-            stream.write(buildCursorSuffix(visibleLineCount(lines, str), activeCursor));
++            stream.write(buildCursorSuffix(visibleLineCount(lines, str), activeCursor, str.endsWith('\n')));
+         }
+         previousCursorPosition = activeCursor ? { ...activeCursor } : undefined;
+         cursorWasShown = activeCursor !== undefined;
+@@ -131,6 +133,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+         const nextLines = str.split('\n');
+         const visibleCount = visibleLineCount(nextLines, str);
+         const previousVisible = visibleLineCount(previousLines, previousOutput);
++        const outputEndsWithNewline = str.endsWith('\n');
+         if (str === previousOutput && cursorChanged) {
+             stream.write(buildCursorOnlySequence({
+                 cursorWasShown,
+@@ -138,6 +141,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+                 previousCursorPosition,
+                 visibleLineCount: visibleCount,
+                 cursorPosition: activeCursor,
++                outputEndsWithNewline,
+             }));
+             previousCursorPosition = activeCursor ? { ...activeCursor } : undefined;
+             cursorWasShown = activeCursor !== undefined;
+@@ -145,7 +149,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+         }
+         const returnPrefix = buildReturnToBottomPrefix(cursorWasShown, previousLines.length, previousCursorPosition);
+         if (str === '\n' || previousOutput.length === 0) {
+-            const cursorSuffix = buildCursorSuffix(visibleCount, activeCursor);
++            const cursorSuffix = buildCursorSuffix(visibleCount, activeCursor, outputEndsWithNewline);
+             stream.write(returnPrefix +
+                 ansiEscapes.eraseLines(previousLines.length) +
+                 str +
+@@ -156,7 +160,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+             previousLines = nextLines;
+             return true;
+         }
+-        const hasTrailingNewline = str.endsWith('\n');
++        const hasTrailingNewline = outputEndsWithNewline;
+         // We aggregate all chunks for incremental rendering into a buffer, and then write them to stdout at the end.
+         const buffer = [];
+         buffer.push(returnPrefix);
+@@ -187,7 +191,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+                 // has no trailing newline (fullscreen mode).
+                 (isLastLine && !hasTrailingNewline ? '' : '\n'));
+         }
+-        const cursorSuffix = buildCursorSuffix(visibleCount, activeCursor);
++        const cursorSuffix = buildCursorSuffix(visibleCount, activeCursor, outputEndsWithNewline);
+         buffer.push(cursorSuffix);
+         stream.write(buffer.join(''));
+         cursorWasShown = activeCursor !== undefined;
+@@ -230,7 +234,7 @@ const createIncremental = (stream, { showCursor = false } = {}) => {
+             stream.write(hideCursorEscape);
+         }
+         if (activeCursor) {
+-            stream.write(buildCursorSuffix(visibleLineCount(lines, str), activeCursor));
++            stream.write(buildCursorSuffix(visibleLineCount(lines, str), activeCursor, str.endsWith('\n')));
+         }
+         previousCursorPosition = activeCursor ? { ...activeCursor } : undefined;
+         cursorWasShown = activeCursor !== undefined;

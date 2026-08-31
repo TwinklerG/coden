@@ -4,6 +4,7 @@ export class VirtualTerminal {
   private readonly grid: string[][];
   private readonly touched: number[];
   cursor = { row: 0, column: 0 };
+  cursorVisible = false;
 
   constructor(
     private columns = 80,
@@ -18,10 +19,9 @@ export class VirtualTerminal {
     while (index < chunk.length) {
       const character = chunk[index] ?? "";
       if (character === "\u001b" && chunk[index + 1] === "[") {
-        const match = /^((?:\?\d+|\d*))(?:;(\d+))?([ABCDJKhl])/.exec(chunk.slice(index + 2));
+        const match = /^([?]?[0-9;]*)([A-Za-z])/.exec(chunk.slice(index + 2));
         if (match) {
-          const count = Number(match[1]?.replace("?", "") || 1);
-          this.applyCsi(match[3] ?? "", count);
+          this.applyCsi(match[1] ?? "", match[2] ?? "");
           index += 2 + match[0].length;
           continue;
         }
@@ -52,12 +52,29 @@ export class VirtualTerminal {
     this.columns = columns;
   }
 
-  private applyCsi(final: string, count: number): void {
-    if (final === "A") this.cursor.row = Math.max(0, this.cursor.row - count);
-    if (final === "B") this.cursor.row = Math.min(this.rows - 1, this.cursor.row + count);
-    if (final === "C") this.cursor.column = Math.min(this.columns - 1, this.cursor.column + count);
+  private applyCsi(parameters: string, final: string): void {
+    const privateMode = parameters.startsWith("?");
+    const values = (privateMode ? parameters.slice(1) : parameters)
+      .split(";")
+      .filter(Boolean)
+      .map(Number);
+    const first = values[0] || 1;
+
+    if (final === "A") this.cursor.row = Math.max(0, this.cursor.row - first);
+    if (final === "B") this.cursor.row = Math.min(this.rows - 1, this.cursor.row + first);
+    if (final === "C") this.cursor.column = Math.min(this.columns - 1, this.cursor.column + first);
+    if (final === "D") this.cursor.column = Math.max(0, this.cursor.column - first);
+    if (final === "G") {
+      this.cursor.column = Math.max(0, Math.min(this.columns - 1, first - 1));
+    }
+    if (final === "H" || final === "f") {
+      this.cursor.row = Math.max(0, Math.min(this.rows - 1, (values[0] || 1) - 1));
+      this.cursor.column = Math.max(0, Math.min(this.columns - 1, (values[1] || 1) - 1));
+    }
     if (final === "K") this.eraseLine();
     if (final === "J") this.eraseDown();
+    if (privateMode && first === 25 && final === "h") this.cursorVisible = true;
+    if (privateMode && first === 25 && final === "l") this.cursorVisible = false;
   }
 
   private write(grapheme: string): void {
