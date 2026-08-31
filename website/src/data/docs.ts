@@ -535,14 +535,7 @@ export const DOC_GROUPS: DocGroup[] = [
         "Troubleshooting",
         "Lists common errors and how to handle them.",
       ),
-      createPage(
-        "faq",
-        940,
-        "FAQ",
-        "回答常见问题。",
-        "FAQ",
-        "Answers frequently asked questions.",
-      ),
+      createPage("faq", 940, "FAQ", "回答常见问题。", "FAQ", "Answers frequently asked questions."),
       createPage(
         "security-model",
         950,
@@ -556,12 +549,15 @@ export const DOC_GROUPS: DocGroup[] = [
 ];
 
 export function allDocEntries(): DocPage[] {
-  const entries = [DOC_INDEX, ...DOC_GROUPS.flatMap((group) =>
-    group.pages.map((page) => ({
-      ...page,
-      slug: `${group.slug}/${page.slug}`,
-    })),
-  )];
+  const entries = [
+    DOC_INDEX,
+    ...DOC_GROUPS.flatMap((group) =>
+      group.pages.map((page) => ({
+        ...page,
+        slug: `${group.slug}/${page.slug}`,
+      })),
+    ),
+  ];
 
   return entries.sort((left, right) => left.order - right.order);
 }

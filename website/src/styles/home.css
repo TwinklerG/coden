@@ -1,0 +1,327 @@
+.home-page {
+  display: grid;
+  gap: 3rem;
+}
+
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.home-hero-copy,
+.home-hero-demo,
+.home-final-cta,
+.home-section,
+.feature-card,
+.step-card,
+.install-command,
+.terminal-demo {
+  border: 1px solid var(--coden-border);
+  border-radius: var(--coden-radius-lg);
+  background: var(--coden-surface);
+  box-shadow: var(--coden-shadow);
+}
+
+.home-hero-copy {
+  position: relative;
+  overflow: hidden;
+  padding: 2rem;
+  display: grid;
+  gap: 1.1rem;
+}
+
+.home-hero-copy::before,
+.terminal-window::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--coden-accent) 12%, transparent) 0 1px, transparent 1px),
+    linear-gradient(135deg, color-mix(in srgb, var(--coden-accent) 6%, transparent), transparent 70%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.home-hero-copy > * {
+  position: relative;
+  z-index: 1;
+}
+
+.home-hero-intro,
+.home-section-kicker,
+.feature-tag,
+.step-number {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+  color: var(--coden-muted);
+}
+
+.home-hero h1 {
+  margin: 0;
+  font-size: clamp(2.5rem, 6vw, 4.8rem);
+  line-height: 1.02;
+  max-width: 11ch;
+}
+
+.home-hero-description {
+  margin: 0;
+  max-width: 58ch;
+  font-size: 1.05rem;
+  color: var(--coden-muted);
+}
+
+.home-hero-actions,
+.home-final-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.home-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--coden-border);
+  background: var(--coden-surface-strong);
+  color: var(--coden-text);
+  text-decoration: none;
+}
+
+.home-button--primary {
+  background: var(--coden-accent);
+  color: var(--coden-accent-contrast);
+  border-color: transparent;
+}
+
+.home-hero-demo {
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.install-command {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.install-command-tabs {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.install-command-tab[aria-selected="true"],
+.terminal-tab[aria-selected="true"] {
+  background: var(--coden-accent);
+  color: var(--coden-accent-contrast);
+  border-color: transparent;
+}
+
+.install-command-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.install-command-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid var(--coden-border);
+  background: color-mix(in srgb, var(--coden-surface-strong) 86%, transparent);
+  overflow-x: auto;
+}
+
+.install-command-status {
+  margin: 0;
+  color: var(--coden-muted);
+}
+
+.terminal-demo {
+  position: relative;
+  overflow: hidden;
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.terminal-tabs {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+}
+
+.terminal-window {
+  position: relative;
+  min-height: 28rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  border: 1px solid var(--coden-border);
+  background:
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--coden-accent) 10%, transparent) 0 2px, transparent 2px),
+    linear-gradient(180deg, color-mix(in srgb, var(--coden-surface-strong) 92%, transparent), var(--coden-surface));
+}
+
+.terminal-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 1rem;
+}
+
+.terminal-panel-title {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--coden-muted);
+}
+
+.terminal-panel-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.65;
+}
+
+.terminal-tui {
+  display: grid;
+  gap: 1rem;
+}
+
+.terminal-tui-grid {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.terminal-tui-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.8rem;
+  border: 1px solid var(--coden-border);
+  background: color-mix(in srgb, var(--coden-surface-strong) 82%, transparent);
+}
+
+.terminal-tui-label,
+.terminal-tui-value,
+.terminal-tui-input {
+  font-family: var(--coden-font-mono);
+}
+
+.terminal-tui-label,
+.terminal-tui-input {
+  color: var(--coden-muted);
+}
+
+.terminal-tui-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.8rem;
+  border: 1px solid var(--coden-border);
+  background: color-mix(in srgb, var(--coden-surface-strong) 82%, transparent);
+}
+
+.terminal-tui-cursor {
+  color: var(--coden-accent);
+}
+
+.home-section {
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.home-section-heading {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.home-section h2,
+.feature-card h3,
+.step-card h3,
+.home-final-cta h2 {
+  margin: 0;
+}
+
+.feature-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.feature-card,
+.step-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.feature-card:nth-child(1),
+.feature-card:nth-child(4) {
+  grid-column: span 6;
+}
+
+.feature-card:nth-child(2),
+.feature-card:nth-child(5) {
+  grid-column: span 3;
+}
+
+.feature-card:nth-child(3),
+.feature-card:nth-child(6) {
+  grid-column: span 3;
+}
+
+.step-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.step-number {
+  color: var(--coden-accent);
+}
+
+.home-final-cta {
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.home-final-cta-command code {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.8rem 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid var(--coden-border);
+  background: color-mix(in srgb, var(--coden-surface-strong) 86%, transparent);
+}
+
+@media (max-width: 900px) {
+  .home-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .step-grid,
+  .terminal-tui-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-card {
+    grid-column: auto !important;
+  }
+}

@@ -1,0 +1,39 @@
+---
+import { routeFor } from "../../lib/routes";
+import { messages } from "../../i18n/messages";
+import { HOME_CONTENT } from "../../data/home";
+import { InstallCommand } from "./InstallCommand";
+import { TerminalDemo } from "./TerminalDemo";
+import type { Language } from "../../lib/site";
+
+interface Props {
+  language: Language;
+}
+
+const { language } = Astro.props;
+const currentMessages = messages[language];
+const content = HOME_CONTENT[language];
+---
+
+<section class="home-hero">
+  <div class="home-hero-copy">
+    <p class="home-hero-intro">{content.hero.intro}</p>
+    <h1>{content.hero.title}</h1>
+    <p class="home-hero-description">{content.hero.description}</p>
+
+    <div class="home-hero-actions">
+      <a class="home-button home-button--primary" href={routeFor(language, "docs")}>
+        {currentMessages.home.primaryAction}
+      </a>
+      <a class="home-button" href="https://github.com/TwinklerG/CodeN" rel="noreferrer noopener" target="_blank">
+        {currentMessages.home.secondaryAction}
+      </a>
+    </div>
+
+    <InstallCommand client:load language={language} />
+  </div>
+
+  <div class="home-hero-demo">
+    <TerminalDemo client:load language={language} />
+  </div>
+</section>

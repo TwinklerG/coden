@@ -9,9 +9,10 @@
     "docs:check": "bun run scripts/generate-docs.ts --check",
     "build": "bun run docs:check && astro build",
     "typecheck": "astro check",
-    "lint": "biome check .",
+    "lint": "biome check --config-path . .",
     "test": "vitest run",
-    "check": "bun run docs:check && bun run lint && bun run typecheck && bun run test && bun run build"
+    "check:built": "bun run scripts/check-built-site.ts",
+    "check": "bun run docs:check && bun run lint && bun run typecheck && bun run test && bun run build && bun run check:built"
   },
   "dependencies": {
     "@astrojs/mdx": "^7.0.8",

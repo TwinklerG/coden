@@ -30,9 +30,11 @@ describe("documentation scaffold", () => {
   it("renders a minimal localized MDX page", () => {
     const hooks = allDocEntries().find((entry) => entry.slug === "hooks/events");
     expect(hooks).toBeDefined();
-    expect(renderScaffold(hooks!, "zh")).toContain("title: Agent Hooks 事件");
-    expect(renderScaffold(hooks!, "zh")).toContain("本页面已建立文档结构");
-    expect(renderScaffold(hooks!, "en")).toContain(
+    if (!hooks) return;
+
+    expect(renderScaffold(hooks, "zh")).toContain("title: Agent Hooks 事件");
+    expect(renderScaffold(hooks, "zh")).toContain("本页面已建立文档结构");
+    expect(renderScaffold(hooks, "en")).toContain(
       "This page establishes the documentation structure",
     );
   });

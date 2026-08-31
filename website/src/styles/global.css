@@ -190,6 +190,30 @@ samp {
   gap: 0.5rem;
 }
 
+.site-mobile-menu {
+  display: none;
+}
+
+.site-mobile-menu summary {
+  min-height: 2.5rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--coden-border);
+  border-radius: 999px;
+  background: var(--coden-surface);
+  cursor: pointer;
+}
+
+.site-mobile-menu nav {
+  display: grid;
+  gap: 0.25rem;
+  padding-top: 0.5rem;
+}
+
+.site-mobile-menu a {
+  color: var(--coden-text);
+  text-decoration: none;
+}
+
 .site-theme-toggle {
   cursor: pointer;
 }
@@ -290,7 +314,14 @@ samp {
     align-items: flex-start;
   }
 
-  .site-nav,
+  .site-nav {
+    display: none;
+  }
+
+  .site-mobile-menu {
+    display: block;
+  }
+
   .site-actions,
   .site-footer-links,
   .docs-title-nav,
@@ -312,4 +343,30 @@ samp {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.site-brand-logo,
+.docs-title-logo {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 0.6rem;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--coden-accent) 18%, transparent);
+}
+
+[data-theme="dark"] .site-brand-logo,
+[data-theme="dark"] .docs-title-logo {
+  background: color-mix(in srgb, var(--coden-accent) 28%, transparent);
 }

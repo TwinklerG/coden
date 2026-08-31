@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_PATH, SITE_ORIGIN, SUPPORTED_LANGUAGES, isLanguage, withBase } from "../src/lib/site";
+import { BASE_PATH, isLanguage, SITE_ORIGIN, SUPPORTED_LANGUAGES, withBase } from "../src/lib/site";
 
 describe("site configuration", () => {
   it("uses the GitHub project Pages origin and base", () => {

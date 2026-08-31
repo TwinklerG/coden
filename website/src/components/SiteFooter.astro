@@ -1,6 +1,5 @@
 ---
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { messages } from "../i18n/messages";
 import { routeFor } from "../lib/routes";
 import type { Language } from "../lib/site";
@@ -11,7 +10,7 @@ interface Props {
 
 const { language } = Astro.props;
 const currentMessages = messages[language];
-const packageJson = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8")) as {
+const packageJson = JSON.parse(await readFile(new URL("../../../../package.json", import.meta.url), "utf8")) as {
   version?: string;
 };
 const version = packageJson.version ?? "0.0.0";

@@ -1,0 +1,28 @@
+---
+import { HOME_CONTENT } from "../../data/home";
+import type { Language } from "../../lib/site";
+
+interface Props {
+  language: Language;
+}
+
+const { language } = Astro.props;
+const { steps } = HOME_CONTENT[language];
+---
+
+<section class="home-section">
+  <div class="home-section-heading">
+    <p class="home-section-kicker">{language === "zh" ? "三步上手" : "Three steps"}</p>
+    <h2>{language === "zh" ? "很快就能开始" : "Get started quickly"}</h2>
+  </div>
+
+  <div class="step-grid">
+    {steps.map((step, index) => (
+      <article class="step-card">
+        <p class="step-number">0{index + 1}</p>
+        <h3>{step.title}</h3>
+        <p>{step.description}</p>
+      </article>
+    ))}
+  </div>
+</section>

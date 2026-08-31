@@ -1,19 +1,5 @@
 ---
-import ProductLayout from "../../layouts/ProductLayout.astro";
-import { messages } from "../../i18n/messages";
+import HomePage from "../../components/home/HomePage.astro";
 ---
 
-<ProductLayout
-  language="zh"
-  title={messages.zh.home.title}
-  description={messages.zh.home.description}
-  section="home"
->
-  <section class="home-shell">
-    <p class="home-eyebrow">{messages.zh.home.eyebrow}</p>
-    <h1>{messages.zh.home.title}</h1>
-    <p>{messages.zh.home.description}</p>
-    <p><code>{messages.zh.home.installCommand}</code></p>
-    <p>{messages.zh.home.placeholder}</p>
-  </section>
-</ProductLayout>
+<HomePage language="zh" />

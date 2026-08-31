@@ -34,6 +34,48 @@ export interface LocalizedMessages {
     primaryAction: string;
     secondaryAction: string;
     placeholder: string;
+    install: {
+      bunLabel: string;
+      npmLabel: string;
+      copy: string;
+      copied: string;
+      failed: string;
+      helper: string;
+    };
+    terminal: {
+      cliLabel: string;
+      tuiLabel: string;
+      modelLabel: string;
+      approvalLabel: string;
+      thinkingLabel: string;
+      sessionLabel: string;
+      providerLabel: string;
+      workspaceLabel: string;
+      phaseLabel: string;
+      inputLabel: string;
+    };
+    cta: {
+      docs: string;
+      plugins: string;
+    };
+  };
+  marketplace: {
+    title: string;
+    description: string;
+    searchPlaceholder: string;
+    loading: string;
+    noResults: string;
+    temporarilyUnavailable: string;
+    compatible: string;
+    incompatible: string;
+    install: string;
+    version: string;
+    downloads: string;
+    apiVersion: string;
+    homepage: string;
+    repository: string;
+    copy: string;
+    notice: string;
   };
   shell: {
     docsTitle: string;
@@ -82,6 +124,48 @@ export const messages = {
       primaryAction: "快速开始",
       secondaryAction: "查看 GitHub",
       placeholder: "本阶段仅提供网站骨架与导航占位。",
+      install: {
+        bunLabel: "Bun",
+        npmLabel: "npm",
+        copy: "复制命令",
+        copied: "已复制",
+        failed: "复制失败",
+        helper: "可直接复制安装命令。",
+      },
+      terminal: {
+        cliLabel: "CLI",
+        tuiLabel: "TUI",
+        modelLabel: "模型",
+        approvalLabel: "审批模式",
+        thinkingLabel: "思考等级",
+        sessionLabel: "会话ID",
+        providerLabel: "Provider",
+        workspaceLabel: "工作区",
+        phaseLabel: "阶段",
+        inputLabel: "输入框",
+      },
+      cta: {
+        docs: "查看文档",
+        plugins: "浏览插件市场",
+      },
+    },
+    marketplace: {
+      title: "插件市场",
+      description: "仅展示仓库显式收录的 npm 插件，并在浏览器中实时读取元数据。",
+      searchPlaceholder: "搜索插件",
+      loading: "加载中",
+      noResults: "没有匹配的插件",
+      temporarilyUnavailable: "暂时不可用",
+      compatible: "已验证兼容",
+      incompatible: "兼容性警告",
+      install: "安装",
+      version: "版本",
+      downloads: "近 30 天下载量",
+      apiVersion: "API 版本",
+      homepage: "主页",
+      repository: "仓库",
+      copy: "复制安装命令",
+      notice: "插件拥有完整用户进程权限，不是安全沙箱。",
     },
     shell: {
       docsTitle: "文档框架",
@@ -128,6 +212,49 @@ export const messages = {
       primaryAction: "Get started",
       secondaryAction: "View GitHub",
       placeholder: "This stage ships only the site shell and navigation scaffolding.",
+      install: {
+        bunLabel: "Bun",
+        npmLabel: "npm",
+        copy: "Copy command",
+        copied: "Copied",
+        failed: "Copy failed",
+        helper: "Copy the install command directly.",
+      },
+      terminal: {
+        cliLabel: "CLI",
+        tuiLabel: "TUI",
+        modelLabel: "Model",
+        approvalLabel: "Approval mode",
+        thinkingLabel: "Thinking level",
+        sessionLabel: "Session ID",
+        providerLabel: "Provider",
+        workspaceLabel: "Workspace",
+        phaseLabel: "Phase",
+        inputLabel: "Input",
+      },
+      cta: {
+        docs: "Read the docs",
+        plugins: "Browse plugins",
+      },
+    },
+    marketplace: {
+      title: "Plugin marketplace",
+      description:
+        "Shows only repo-approved npm plugins and reads metadata from the browser at runtime.",
+      searchPlaceholder: "Search plugins",
+      loading: "Loading",
+      noResults: "No matching plugins",
+      temporarilyUnavailable: "Temporarily unavailable",
+      compatible: "Verified compatible",
+      incompatible: "Compatibility warning",
+      install: "Install",
+      version: "Version",
+      downloads: "Last 30 days downloads",
+      apiVersion: "API version",
+      homepage: "Homepage",
+      repository: "Repository",
+      copy: "Copy install command",
+      notice: "Plugins have full process access and are not a security sandbox.",
     },
     shell: {
       docsTitle: "Documentation scaffold",
@@ -135,7 +262,8 @@ export const messages = {
       notFoundTitle: "Page not found",
       notFoundDescription: "The page you requested could not be found or has moved.",
       rootTitle: "Language entry",
-      rootDescription: "Choose Chinese or English; you will be redirected to the matching home page.",
+      rootDescription:
+        "Choose Chinese or English; you will be redirected to the matching home page.",
     },
   },
 } satisfies Record<"zh" | "en", LocalizedMessages>;

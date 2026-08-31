@@ -1,7 +1,7 @@
 ---
 import { alternateLanguagePath, routeFor, type ProductSection } from "../lib/routes";
 import { messages } from "../i18n/messages";
-import type { Language } from "../lib/site";
+import { withBase, type Language } from "../lib/site";
 
 interface Props {
   language: Language;
@@ -25,7 +25,7 @@ const links = [
 
 <header class="site-header">
   <a class="site-brand" href={routeFor(language, "home")} aria-label={currentMessages.brand}>
-    <span class="site-brand-mark" aria-hidden="true">◧</span>
+    <img class="site-brand-logo" src={withBase("/logo-placeholder.svg")} alt="" aria-hidden="true" width="24" height="24" />
     <span class="site-brand-name">{currentMessages.brand}</span>
   </a>
 
@@ -39,6 +39,20 @@ const links = [
       {currentMessages.nav.github}
     </a>
   </nav>
+
+  <details class="site-mobile-menu">
+    <summary>{currentMessages.nav.label}</summary>
+    <nav aria-label={currentMessages.nav.label}>
+      {links.map((link) => (
+        <a href={link.href} aria-current={link.current ? "page" : undefined}>
+          {link.label}
+        </a>
+      ))}
+      <a href="https://github.com/TwinklerG/CodeN" rel="noreferrer noopener" target="_blank">
+        {currentMessages.nav.github}
+      </a>
+    </nav>
+  </details>
 
   <div class="site-actions">
     <a

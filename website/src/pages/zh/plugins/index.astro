@@ -1,0 +1,17 @@
+---
+import ProductLayout from "../../../layouts/ProductLayout.astro";
+import { messages } from "../../../i18n/messages";
+import { PluginMarket } from "../../../components/plugins/PluginMarket";
+import "../../../styles/plugins.css";
+---
+
+<ProductLayout
+  language="zh"
+  title={messages.zh.marketplace.title}
+  description={messages.zh.marketplace.description}
+  section="plugins"
+>
+  <section class="plugin-page">
+    <PluginMarket client:load language="zh" />
+  </section>
+</ProductLayout>

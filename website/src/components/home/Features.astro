@@ -1,0 +1,28 @@
+---
+import { HOME_CONTENT } from "../../data/home";
+import type { Language } from "../../lib/site";
+
+interface Props {
+  language: Language;
+}
+
+const { language } = Astro.props;
+const { features } = HOME_CONTENT[language];
+---
+
+<section class="home-section">
+  <div class="home-section-heading">
+    <p class="home-section-kicker">{language === "zh" ? "核心能力" : "Core capabilities"}</p>
+    <h2>{language === "zh" ? "为日常编码工作而设计" : "Built for everyday coding work"}</h2>
+  </div>
+
+  <div class="feature-grid">
+    {features.map((feature) => (
+      <article class="feature-card">
+        <p class="feature-tag">{feature.tag}</p>
+        <h3>{feature.title}</h3>
+        <p>{feature.description}</p>
+      </article>
+    ))}
+  </div>
+</section>

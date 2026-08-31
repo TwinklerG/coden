@@ -1,7 +1,7 @@
 ---
 import { alternateLanguagePath, routeFor } from "../../lib/routes";
 import { messages } from "../../i18n/messages";
-import type { Language } from "../../lib/site";
+import { withBase, type Language } from "../../lib/site";
 
 const pathname = Astro.url.pathname;
 const language: Language = pathname.includes("/en/") ? "en" : "zh";
@@ -11,7 +11,7 @@ const alternateLanguage = language === "zh" ? "en" : "zh";
 
 <div class="docs-title-shell">
   <a class="docs-title-brand" href={routeFor(language, "home")}>
-    <span class="docs-title-mark" aria-hidden="true">◧</span>
+    <img class="docs-title-logo" src={withBase("/logo-placeholder.svg")} alt="" aria-hidden="true" width="24" height="24" />
     <span>{currentMessages.brand}</span>
   </a>
   <nav class="docs-title-nav" aria-label={currentMessages.nav.label}>

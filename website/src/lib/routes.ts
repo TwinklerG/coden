@@ -1,4 +1,4 @@
-import { BASE_PATH, SUPPORTED_LANGUAGES, type Language, withBase } from "./site";
+import { BASE_PATH, type Language, SUPPORTED_LANGUAGES, withBase } from "./site";
 
 export type ProductSection = "home" | "docs" | "plugins";
 
@@ -27,7 +27,10 @@ export function alternateLanguagePath(pathname: string, target: Language): strin
     return routeFor(target, "home");
   }
 
-  const segments = normalized.slice(BASE_PATH.length + 1).split("/").filter(Boolean);
+  const segments = normalized
+    .slice(BASE_PATH.length + 1)
+    .split("/")
+    .filter(Boolean);
   if (segments.length === 0 || !SUPPORTED_LANGUAGES.includes(segments[0] as Language)) {
     return routeFor(target, "home");
   }

@@ -1,6 +1,6 @@
 import path from "node:path";
-import { SUPPORTED_LANGUAGES, type Language } from "./site";
 import { DOC_GROUPS, type DocPage, allDocEntries as getAllDocEntries } from "../data/docs";
+import { type Language, SUPPORTED_LANGUAGES } from "./site";
 
 const NOTE_TITLE = {
   zh: "文档框架",
@@ -12,8 +12,8 @@ const NOTE_BODY = {
   en: "This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.",
 } as const;
 
-export { DOC_GROUPS };
 export type { DocGroup, DocPage } from "../data/docs";
+export { DOC_GROUPS };
 
 export function renderScaffold(entry: DocPage, language: Language): string {
   const localized = entry[language];
