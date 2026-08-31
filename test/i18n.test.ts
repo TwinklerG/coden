@@ -21,11 +21,11 @@ describe("i18n", () => {
     expect(DEFAULT_LANGUAGE).toBe("zh");
     expect(SUPPORTED_LANGUAGES).toEqual(["zh", "en"]);
     const i18n = new I18n();
-    expect(i18n.messages.cli.description).toContain("极简");
+    expect(i18n.messages.cli.description).toContain("可插拔工具插件");
     expect(i18n.messages.cli.tui).toContain("TUI");
     expect(i18n.messages.tui.phases.reviewing).toBe("审查中");
     i18n.setLanguage("en");
-    expect(i18n.messages.cli.description).toContain("minimal");
+    expect(i18n.messages.cli.description).toContain("pluggable tool plugins");
     expect(i18n.messages.cli.legacyCli).toContain("default");
     expect(i18n.messages.tui.phases.reviewing).toBe("reviewing");
   });

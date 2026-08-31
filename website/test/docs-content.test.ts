@@ -107,4 +107,30 @@ describe("documentation content", () => {
       }
     }
   });
+
+  it("locks source-backed positioning and runtime boundaries", async () => {
+    const zhIndex = await page("zh", "index");
+    const enIndex = await page("en", "index");
+    expect(zhIndex).toContain("以可插拔工具插件为特色的 Coding Agent");
+    expect(enIndex).toContain("hackable coding agent built around pluggable tool plugins");
+
+    const zhCli = await page("zh", "reference/cli");
+    const enCli = await page("en", "reference/cli");
+    expect(zhCli).toContain("默认 `coden` 进入 CLI/REPL");
+    expect(enCli).toContain("Plain `coden` enters the CLI/REPL");
+
+    const zhPlugins = await page("zh", "reference/plugins");
+    const enPlugins = await page("en", "reference/plugins");
+    for (const source of [zhPlugins, enPlugins]) {
+      expect(source).toContain("@twinklerg/coden/plugin");
+      expect(source).toContain("bun install");
+      expect(source).toContain(".js");
+      expect(source).toContain(".mjs");
+    }
+
+    const zhSecurity = await page("zh", "safety/security-boundaries");
+    const enSecurity = await page("en", "safety/security-boundaries");
+    expect(zhSecurity).toContain("不是通用沙箱");
+    expect(enSecurity).toContain("Not a general-purpose sandbox");
+  });
 });

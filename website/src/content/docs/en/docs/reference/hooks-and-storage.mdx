@@ -1,0 +1,256 @@
+---
+title: Hooks and Storage Reference
+description: Hook events, I/O, merge rules, and session records.
+sidebar:
+  order: 640
+---
+
+Hook protocol and session storage are both event-oriented but have different stability. Hook stdin/stdout is a user-facing integration contract; session JSONL is primarily CodeN’s own recovery format. You may inspect sessions, but do not treat internal record shapes as a third-party API without a version-migration strategy.
+
+## Agent Hooks Events
+
+### Event overview
+
+| Event | Timing | Controllable | Payload highlights |
+| --- | --- | --- | --- |
+| `SessionStart` | session startup or resume | no | `source: startup \| resume` |
+| `UserPromptSubmit` | after the user submits input | yes (block) | `prompt` |
+| `PreToolUse` | before a tool executes | yes | `toolName`, `callId`, `input`, `risk` |
+| `PermissionRequest` | before human authorization is needed | yes | `toolName`, `callId`, `input`, `risk`, `reason: policy \| hook` |
+| `PostToolUse` | after a tool succeeds | no | `toolName`, `input`, `result`, `durationMs` |
+| `PostToolUseFailure` | after a tool fails | no | `toolName`, `input`, `errorType`, `error`, `durationMs` |
+| `Notification` | when the user's attention is needed | no | `notificationType: permission_prompt \| attention_required`, `title`, `message` |
+| `Stop` | when the model stops calling tools | yes (demand more work) | `answer`, `toolsExecuted`, `stopHookActive` |
+| `SessionEnd` | when the session ends | no | `reason: completed \| failed \| cancelled \| eof \| quit` |
+
+### Control semantics
+
+- Controllable set: `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `Stop`.
+- Exit code `2` on a controllable event counts as an **explicit block** (`blocked`); blocks on `UserPromptSubmit` and `Stop` use `decision`/`reason` in `stdout` JSON, while `PreToolUse` and `PermissionRequest` use `permissionDecision`/`decision`.
+- Exit code `0` with empty stdout is a no-op; other failures (non-zero, timeout, output/input over limit, invalid JSON) count as hook failures with a warning and never block.
+
+### Relationships
+
+- `PreToolUse` runs before any permission decision; `PermissionRequest` runs only when the policy layer needs a human.
+- `Notification` fires for `permission_prompt` and `attention_required` (turn failure) scenarios.
+- A `Stop` block injects feedback asking the model to continue, still bounded by `maxSteps`; a repeated block sets `stopHookActive`.
+
+### Related references
+
+- [Matchers](/coden/en/docs/extend/skills-and-hooks/)
+- [Protocol](/coden/en/docs/reference/hooks-and-storage/)
+- [Decisions](/coden/en/docs/reference/hooks-and-storage/)
+- [Examples](/coden/en/docs/extend/skills-and-hooks/)
+
+## Protocol
+
+### Process conventions
+
+- Commands run through the system shell: POSIX `/bin/sh -c <command>`; Windows `cmd /d /s /c`.
+- The working directory is the CodeN workspace; the environment inherits the CodeN process plus:
+
+| Variable | Value |
+| --- | --- |
+| `CODEN_PROJECT_DIR` | workspace path |
+| `CODEN_SESSION_ID` | current session ID |
+| `CODEN_HOOK_EVENT` | event name |
+
+### stdin: one JSON object
+
+```json
+{
+  "schemaVersion": 1,
+  "hookEventName": "PreToolUse",
+  "sessionId": "…",
+  "turnId": "…",
+  "cwd": "/path/to/workspace",
+  "permissionMode": "manual",
+  "toolName": "bash",
+  "callId": "…",
+  "input": { "command": "git status" },
+  "risk": "modify"
+}
+```
+
+Common fields: `schemaVersion`, `hookEventName`, `sessionId`, optional `turnId`, `cwd`, `permissionMode`, followed by the event payload. The input limit is **1MB** (over limit counts as a failure).
+
+### stdout: one JSON object
+
+- Allowed top-level fields: `systemMessage` (all events); `Stop` additionally allows `decision` (`"block"` only) and `reason`; other events use `hookSpecificOutput` with per-event allowlists.
+- `systemMessage` must be a string, scrubbed of control characters, truncated to 2000 characters, and forwarded to the diagnostic sink (stdout/stderr).
+- `hookSpecificOutput.hookEventName` must match the event; unknown fields count as failures.
+- Output limit is **10KB** per stream (stdout and stderr independently); exceeding it terminates the process and marks `outputExceeded`.
+- Exit code `0` with empty stdout: no-op.
+
+### Output example
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow"
+  }
+}
+```
+
+### Exit-code semantics
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | success; stdout optional |
+| `2` | explicit block (controllable events only) |
+| other / timeout / output or input over limit | hook failure: warn and fail open, producing no decision |
+
+### Security notes
+
+- The event JSON is the only data channel: never interpolate event fields into shell command strings.
+- Commands should read JSON from stdin and emit valid JSON, avoiding injection and escaping issues.
+- Hook output is scrubbed of terminal control characters; do not rely on stdout to echo sensitive information.
+
+### Related references
+
+- [Decisions](/coden/en/docs/reference/hooks-and-storage/)
+- [Execution](/coden/en/docs/agent/failures-and-control-flow/)
+- [Examples](/coden/en/docs/extend/skills-and-hooks/)
+
+## Decisions
+
+### Decision entry points
+
+| Event | Decision field | Effect |
+| --- | --- | --- |
+| `PreToolUse` | `hookSpecificOutput.permissionDecision`: `allow`/`ask`/`deny` | predicates permission: `deny` rejects outright (`permission.hook_denied`); `ask` forces human; `allow` bypasses the policy layer |
+| `PermissionRequest` | `hookSpecificOutput.decision.behavior`: `allow`/`ask`/`deny` (optional `message`) | fires when the policy layer needs a human; can override the final decision |
+| `Stop` | top-level `decision: "block"` + `reason` | injects feedback asking the model to continue |
+| controllable event + exit code `2` | stderr as `blockReason` | equivalent to `deny`/block |
+
+### Full PreToolUse order
+
+1. `PreToolUse` hook decision (including `updatedInput` and `additionalContext`).
+2. After an input update, re-validate everything: schema (fails as `hook.invalid_updated_input`), structured file path, risk classification, and permissions.
+3. Policy layer (`manual`/`smart`/`auto`).
+4. When a human is needed, fire the `PermissionRequest` hook (`reason: "policy"`; `"hook"` when a hook requested human review).
+5. Human confirmation (inline in CLI/TUI).
+6. Execute the tool and fire `PostToolUse`/`PostToolUseFailure`.
+
+### Merge semantics
+
+Multiple hooks for the same event run **in parallel**, with results ordered by config `order`:
+
+- Permission decisions merge as `deny > ask > allow` (the most conservative wins).
+- Multiple `updatedInput` values conflict and are **all discarded** (`inputConflict`); no update applies.
+- Any `blocked` blocks the whole result.
+- Each `additionalContext` injects as a separate `[CodeN hook context: <event>]` message; the total is capped at 10KB.
+
+### Interaction with approval modes
+
+| Mode | Hook behavior |
+| --- | --- |
+| `manual` | `PreToolUse` decisions apply; policy asks a human; `PermissionRequest` can override |
+| `smart` | same; ordinary modifications first go through LLM review, and hook `deny` beats an LLM allow |
+| `auto` | `PreToolUse` still runs: `deny` applies; `ask` safely rejects (`permission.hook_requires_interaction`) |
+
+### Related references
+
+- [Agent Hooks Events](/coden/en/docs/extend/skills-and-hooks/)
+- [Protocol](/coden/en/docs/reference/hooks-and-storage/)
+- [Approval Modes](/coden/en/docs/safety/approval-modes/)
+- [Examples](/coden/en/docs/extend/skills-and-hooks/)
+
+## Execution
+
+### Execution model
+
+- All hooks matching the same event run **in parallel** (`Promise.all`), with results merged in config order.
+- Each hook is an independent system-shell child process (process group) with the workspace as its cwd.
+- The event payload arrives as JSON on stdin (1MB limit).
+
+### Timeouts
+
+| Parameter | Default | Range |
+| --- | --- | --- |
+| `timeout` (config) | 10 seconds | 1–600 seconds (integer) |
+
+- On timeout, `SIGTERM` goes to the process group; if it has not exited after 500ms, `SIGKILL` (Windows terminates the process directly).
+- Timeout result: `timedOut: true`, counted as a hook failure (never blocks).
+- On user cancellation (`Ctrl+C`) hooks cancel: `cancelled: true`, rethrown with the main-task abort.
+
+### Limits
+
+| Channel | Cap | Over-limit behavior |
+| --- | --- | --- |
+| stdin | 1MB | `inputExceeded`, counted as a failure |
+| stdout | 10KB | process terminated immediately, `outputExceeded` |
+| stderr | 10KB | same |
+
+### Failure semantics
+
+| Result | Handling |
+| --- | --- |
+| exit `0`, empty stdout | no-op (`hook.completed`) |
+| exit `0`, valid JSON | processed per protocol (decision/context/system message) |
+| exit `2` (controllable events) | explicit block |
+| non-zero, timeout, over limit, invalid JSON, illegal fields | `hook.failed`: diagnostic stderr (≤2000 chars, scrubbed) and fail open |
+
+Fail-open means: decision hooks that fail produce **no decision**, and permissions continue through the policy layer; unsafe scenarios are decided by that layer (a failed `PermissionRequest` never silently allows).
+
+### Visibility
+
+- Successful hooks show under `--verbose`; failures, blocks, and input conflicts always show.
+- Hook runtime events (`hook.started`/`completed`/`failed`/`blocked`) are written to the trace.
+- `systemMessage` output goes to the diagnostic sink (stderr).
+
+### Related references
+
+- [Protocol](/coden/en/docs/reference/hooks-and-storage/)
+- [Decisions](/coden/en/docs/reference/hooks-and-storage/)
+- [Trust and Security](/coden/en/docs/safety/security-boundaries/)
+
+## Sessions
+
+### Session identity and location
+
+- A session ID is a UUID referenced via `--resume <session-id>`; it must match `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`.
+- Files live under `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`: `<id>.jsonl` (session records) and `<id>.trace.jsonl` (runtime event trace).
+- Directories are `0700` and files `0600`; sessions and traces may contain reasoning content and sensitive input — do not share them without review.
+
+### Recorded content
+
+| Record type | Data |
+| --- | --- |
+| `session.created` | workspace and session ID |
+| `message` | every system/user/assistant/tool message |
+| `tool.call.updated` | hook-updated tool input |
+| `context.compacted` | compaction summary and source range |
+| `session.title` | explicit title |
+| `session.thinking` | thinking level (turn-start snapshot) |
+| `session.reset` | `/new` reset marker |
+
+The first non-hook user message becomes the session title automatically; after `/new`, the title is reset to the next first message.
+
+### Resuming
+
+```bash
+coden --resume                  # list sessions for the current workspace
+coden --resume <session-id>     # resume a specific session
+```
+
+- Resume rebuilds system messages (fresh system prompt, tool catalog, and skill name list), restores message history, the compaction summary and range, and the last saved thinking level.
+- Trailing unfinished tool calls are repaired as `runtime.interrupted: tool execution did not complete...` errors with a recorded warning.
+- Corrupt mid-file records raise a per-line error; only an **incomplete final line** is ignored with a warning.
+- Thinking-level resolution on resume: explicit `--thinking` > saved session value > user/project config > default; an explicit override is written back to the session.
+
+### Listing output
+
+```text
+<id>  <title>  (<N> messages, YYYY-MM-DD HH:MM)
+```
+
+- Sorted by last activity, newest first; untitled sessions show `(no title)`; trace files are excluded.
+- The listing carries no token usage or other account information.
+
+### Related references
+
+- [Session Storage](/coden/en/docs/agent/sessions/)
+- [CLI Reference](/coden/en/docs/reference/cli/)
+- [Context and Thinking Levels](/coden/en/docs/agent/compaction-and-thinking/)

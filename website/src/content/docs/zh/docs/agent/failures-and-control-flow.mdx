@@ -1,0 +1,118 @@
+---
+title: 失败与控制流
+description: 区分重试、取消、step limit 与 Stop Hook。
+sidebar:
+  order: 250
+---
+
+失败可能发生在 Provider 请求、上下文容量、Hook、权限或工具执行层。理解控制流的关键是区分：Provider 重试不会重复已经完成的工具；紧急压缩只处理上下文错误；取消通过信号传播；step limit 限制 model step；Stop Hook 则可以在模型准备结束时要求继续。
+
+## 执行与超时
+
+### 执行模型
+
+- 同一事件匹配到的全部 Hook **并行执行**（`Promise.all`），结果按配置顺序合并。
+- 每个 Hook 是独立的系统 shell 子进程（进程组），工作目录为工作区。
+- 事件负载以 JSON 通过 stdin 传入（上限 1MB）。
+
+### 超时
+
+| 参数 | 默认 | 范围 |
+| --- | --- | --- |
+| `timeout`（配置） | 10 秒 | 1–600 秒（整数） |
+
+- 超时后向进程组发送 `SIGTERM`，500ms 后仍未退出则 `SIGKILL`（Windows 直接结束进程）。
+- 超时结果：`timedOut: true`，计入 Hook 失败（不阻止）。
+- 用户取消（`Ctrl+C`）时 Hook 取消：`cancelled: true`，随主任务中止抛出。
+
+### 限额
+
+| 通道 | 上限 | 超出行为 |
+| --- | --- | --- |
+| stdin | 1MB | `inputExceeded`，视为失败 |
+| stdout | 10KB | 立即终止进程，`outputExceeded` |
+| stderr | 10KB | 同上 |
+
+### 失败语义
+
+| 结果 | 处理 |
+| --- | --- |
+| 退出码 `0`，无 stdout | 无操作（`hook.completed`） |
+| 退出码 `0`，合法 JSON | 按协议处理（决策/上下文/系统消息） |
+| 退出码 `2`（可控事件） | 明确阻止 |
+| 非零、超时、超限、非法 JSON、字段非法 | `hook.failed`：诊断 stderr（≤2000 字符，清洗控制字符）并 fail-open |
+
+fail-open 指：决策类 Hook 失败时**不产生决策**，权限继续走策略层；不安全的场景由策略层决定（`PermissionRequest` 失败不会静默允许）。
+
+### 可见性
+
+- 成功 Hook 在 `--verbose` 下显示；失败、阻止与输入冲突始终显示。
+- Hook 运行事件（`hook.started`/`completed`/`failed`/`blocked`）写入 trace。
+- `systemMessage` 输出到诊断输出（stderr）。
+
+### 相关参考
+
+- [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)
+- [决策与权限](/coden/zh/docs/reference/hooks-and-storage/)
+- [信任与安全](/coden/zh/docs/safety/security-boundaries/)
+
+## 常见错误
+
+### 启动与配置
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| `CODEN_OPENAI_API_KEY is required` | 未设置 Key（默认 Provider） | `export CODEN_OPENAI_API_KEY=...` 或配置 `env` 字段 |
+| `CODEN_ANTHROPIC_API_KEY is required` | `--provider anthropic` 但未设置 Key | 导出 `CODEN_ANTHROPIC_API_KEY` |
+| `Cannot read config ...` | 配置文件 JSON 无效 | 修复对应作用域的 `config.json` |
+| `language must be zh or en` | 配置/`--lang` 非法值 | 使用 `zh`/`en`；检查用户配置 |
+| `--tui and --cli are mutually exclusive` | 界面参数冲突 | 只保留一个界面选项 |
+| `--smart-approve and --auto are mutually exclusive` | 审批参数冲突 | 二选一 |
+| `--allow-outside-workspace requires --auto` | 单独使用该选项 | 与 `--auto` 组合 |
+| `print mode requires a prompt` | `-p` 未提供任务 | 添加 prompt 参数 |
+| `Anthropic enabled thinking requires maxOutputTokens greater than 1024` | `reservedOutputTokens <= 1024` 且启用思考 | 增大 `reservedOutputTokens` 或降低思考等级 |
+
+### 运行期
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| `runtime.step_limit`（`Maximum model steps (20) reached`） | 超过 `maxSteps` | 拆分任务或提高 `--max-steps` |
+| `context.exhausted` | 紧急压缩后仍超预算 | 用 `/new` 或新会话，减小单次任务范围 |
+| `permission.denied` | 权限被拒 | 换用更安全的操作或人工放行 |
+| `permission.outside_workspace_denied` | `--auto` 下访问工作区外 | 确有必要时使用 `--auto --allow-outside-workspace` |
+| `tool.timeout` | 工具未在 60 秒内完成（且未协作取消） | 缩短命令/工具逻辑；检查插件协作取消 |
+| `edit.no_match` / `edit.multiple_matches` | `oldText` 未找到或不唯一 | 精确复制待替换文本 |
+
+### 插件
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| `plugin.specifier_invalid` | specifier 不合法 | 使用 `npm:<package>` 或 `npm:<package>@<version-or-tag>` |
+| `plugin.install_busy` | 同作用域事务锁被占用 | 稍后重试（过期锁自动清理） |
+| `plugin.lock_missing` | 项目 `sync` 缺 `bun.lock` | 先 `plugin install` 或提交锁文件 |
+| `plugin.lock_outdated` | 锁文件与清单不一致 | 更新锁文件并提交 |
+| `plugin.manifest_invalid` | `plugins.json` 损坏 | 修复清单；必要时删除并重新安装 |
+| `plugin.metadata_missing` / `plugin.entry_invalid` / `plugin.api_unsupported` / `plugin.name_mismatch` | 包不符合作者协议 | 对照[插件作者协议](/coden/zh/docs/extend/plugin-authoring/)修正包 |
+| 插件加载失败、工具未注册 | 顶层代码/入口异常；Node 运行时加载 `.ts` 插件失败 | 查看 `coden plugin list`；用 Bun 运行或改用 npm 插件 |
+| `plugin restart required` | 运行中 npm 插件元数据变化 | 重启 CodeN |
+
+### Hook
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| 配置解析失败：`unsupported hook event`/`invalid matcher`/`timeout` 范围 | Hook 配置非法 | 对照 [匹配规则](/coden/zh/docs/extend/skills-and-hooks/) 与 [执行与超时](/coden/zh/docs/agent/failures-and-control-flow/) |
+| `X config exceeds 64 commands` | 单事件 Hook 超限 | 精简 Hook |
+| Hook 静默失效 | 非零退出、超时、输出超限、非法 JSON | `--verbose` 查看；检查脚本 stdin/stdout 协议 |
+
+### Skill 与运行时
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| Skill 未生效 | 目录名/frontmatter 不一致或文件非法 | `--verbose` 查看 `ignored ...` 原因；重启 |
+| 本地 `.ts` 插件在 Node 下不加载 | Node 不支持 `data:text/typescript` | 用 Bun 运行（或使用 npm 插件） |
+
+### 相关参考
+
+- [CLI 命令参考](/coden/zh/docs/reference/cli/)
+- [配置参考](/coden/zh/docs/reference/configuration/)
+- [FAQ](/coden/zh/docs/start/overview/)

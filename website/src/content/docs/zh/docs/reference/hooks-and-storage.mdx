@@ -1,0 +1,256 @@
+---
+title: Hook 与存储参考
+description: Hook 事件、I/O、合并规则与会话记录。
+sidebar:
+  order: 640
+---
+
+Hook 协议和会话存储都以事件为中心，但稳定性不同：Hook stdin/stdout 是面向用户的集成协议；会话 JSONL 主要是 CodeN 自身恢复格式。可以检查会话，却不应在没有版本迁移策略时把内部记录形状当成第三方 API。
+
+## Agent Hooks 事件
+
+### 事件总览
+
+| 事件 | 时机 | 可控制 | 负载要点 |
+| --- | --- | --- | --- |
+| `SessionStart` | 会话启动或恢复 | 否 | `source: startup \| resume` |
+| `UserPromptSubmit` | 用户提交输入后 | 是（阻止） | `prompt` |
+| `PreToolUse` | 工具执行前 | 是 | `toolName`、`callId`、`input`、`risk` |
+| `PermissionRequest` | 需要人工授权前 | 是 | `toolName`、`callId`、`input`、`risk`、`reason: policy \| hook` |
+| `PostToolUse` | 工具成功完成后 | 否 | `toolName`、`input`、`result`、`durationMs` |
+| `PostToolUseFailure` | 工具失败后 | 否 | `toolName`、`input`、`errorType`、`error`、`durationMs` |
+| `Notification` | 需要用户注意时 | 否 | `notificationType: permission_prompt \| attention_required`、`title`、`message` |
+| `Stop` | 模型停止调用工具时 | 是（要求继续） | `answer`、`toolsExecuted`、`stopHookActive` |
+| `SessionEnd` | 会话结束时 | 否 | `reason: completed \| failed \| cancelled \| eof \| quit` |
+
+### 控制语义
+
+- 可控事件集：`UserPromptSubmit`、`PreToolUse`、`PermissionRequest`、`Stop`。
+- 可控事件返回退出码 `2` 视为**明确阻止**（`blocked`）；`UserPromptSubmit` 与 `Stop` 的阻止以 `stdout` JSON 的 `decision`/`reason` 表达，`PreToolUse` 与 `PermissionRequest` 以 `permissionDecision`/`decision` 表达。
+- 退出码 `0` 且无 stdout 视为无操作；其余失败（非零、超时、输出超限、输入超限、非法 JSON）视为 Hook 失败并警告，不产生阻止。
+
+### 组合关系
+
+- `PreToolUse` 在任何权限判定之前执行；`PermissionRequest` 只在策略层要求人工时执行。
+- `Notification` 在 `permission_prompt` 与 `attention_required`（turn 失败）等场景触发。
+- `Stop` 的 `block` 会注入反馈要求模型继续，仍受 `maxSteps` 限制；再次 `block` 会标记 `stopHookActive`。
+
+### 相关参考
+
+- [匹配规则](/coden/zh/docs/extend/skills-and-hooks/)
+- [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)
+- [决策与权限](/coden/zh/docs/reference/hooks-and-storage/)
+- [示例](/coden/zh/docs/extend/skills-and-hooks/)
+
+## I/O 协议
+
+### 进程约定
+
+- 命令通过系统 shell 执行：POSIX `/bin/sh -c <command>`；Windows `cmd /d /s /c`。
+- 工作目录为 CodeN 工作区；环境继承 CodeN 进程，并追加：
+
+| 变量 | 值 |
+| --- | --- |
+| `CODEN_PROJECT_DIR` | 工作区路径 |
+| `CODEN_SESSION_ID` | 当前会话 ID |
+| `CODEN_HOOK_EVENT` | 事件名 |
+
+### stdin：一个 JSON 对象
+
+```json
+{
+  "schemaVersion": 1,
+  "hookEventName": "PreToolUse",
+  "sessionId": "…",
+  "turnId": "…",
+  "cwd": "/path/to/workspace",
+  "permissionMode": "manual",
+  "toolName": "bash",
+  "callId": "…",
+  "input": { "command": "git status" },
+  "risk": "modify"
+}
+```
+
+公共字段：`schemaVersion`、`hookEventName`、`sessionId`、可选 `turnId`、`cwd`、`permissionMode`，其后附加事件负载。输入上限 **1MB**（超出视为失败）。
+
+### stdout：单个 JSON 对象
+
+- 顶层允许字段：`systemMessage`（事件通用），`Stop` 额外允许 `decision`（仅 `"block"`）与 `reason`；其他事件的 `hookSpecificOutput` 按事件允许字段。
+- `systemMessage` 必须是字符串，清洗控制字符后截断到 2000 字符，转发到诊断输出（stdout/stderr）。
+- `hookSpecificOutput.hookEventName` 必须与事件一致；字段白名单校验，非法字段视为失败。
+- 输出上限 **10KB**（stdout 与 stderr 各自）；超过时终止进程并标记 `outputExceeded`。
+- 退出码 `0` 且无 stdout：无操作。
+
+### 输出示例
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow"
+  }
+}
+```
+
+### 退出码语义
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 成功；stdout 可选 |
+| `2` | 明确阻止（仅可控事件） |
+| 其他 / 超时 / 输出或输入超限 | Hook 失败：警告并 fail-open，不产生决策 |
+
+### 安全注意
+
+- 事件 JSON 是唯一数据通道：不要把事件字段拼接进 shell 命令字符串。
+- 命令应从 stdin 读取 JSON 并原样输出合法 JSON，避免注入与转义问题。
+- Hook 输出会清除终端控制字符；不要依赖 stdout 回显敏感信息。
+
+### 相关参考
+
+- [决策与权限](/coden/zh/docs/reference/hooks-and-storage/)
+- [执行与超时](/coden/zh/docs/agent/failures-and-control-flow/)
+- [示例](/coden/zh/docs/extend/skills-and-hooks/)
+
+## 决策与权限
+
+### 决策入口
+
+| 事件 | 决策字段 | 效果 |
+| --- | --- | --- |
+| `PreToolUse` | `hookSpecificOutput.permissionDecision`：`allow`/`ask`/`deny` | 预判权限：`deny` 直接拒绝（`permission.hook_denied`）；`ask` 强制人工；`allow` 跳过策略层 |
+| `PermissionRequest` | `hookSpecificOutput.decision.behavior`：`allow`/`ask`/`deny`（可带 `message`） | 在策略层要求人工时触发，可覆盖最终决定 |
+| `Stop` | 顶层 `decision: "block"` + `reason` | 注入反馈要求模型继续 |
+| 可控事件 + 退出码 `2` | stderr 作为 `blockReason` | 等同于 `deny`/阻止 |
+
+### PreToolUse 的完整顺序
+
+1. `PreToolUse` Hook 决策（含 `updatedInput` 与 `additionalContext`）。
+2. 输入更新后**重新校验**：schema（失败为 `hook.invalid_updated_input`）、结构化文件路径、风险分类、权限。
+3. 策略层（`manual`/`smart`/`auto`）。
+4. 需要人工时触发 `PermissionRequest` Hook（`reason: "policy"`；若 Hook 请求人工则为 `"hook"`）。
+5. 人工确认（CLI/TUI 内联）。
+6. 执行工具并触发 `PostToolUse`/`PostToolUseFailure`。
+
+### 合并语义
+
+同一事件的多个 Hook **并行执行**，结果按配置 `order` 排序：
+
+- 权限决策按 `deny > ask > allow` 合并（非 `deny` 的决策可能与 `allow` 覆盖，取最保守）。
+- 多个 `updatedInput` 冲突时**全部作废**（`inputConflict`），不应用任何更新。
+- 任一 `blocked` 即整体阻止。
+- 每个 `additionalContext` 注入为独立的 `[CodeN hook context: <event>]` 消息；总上限 10KB。
+
+### 与审批模式的交互
+
+| 模式 | Hook 行为 |
+| --- | --- |
+| `manual` | `PreToolUse` 决定生效；策略层人工确认；`PermissionRequest` 可覆盖 |
+| `smart` | 同上；普通修改先由 LLM 审查，Hook 的 `deny` 优先于 LLM 放行 |
+| `auto` | 仍执行 `PreToolUse`：`deny` 生效；`ask` 安全拒绝（`permission.hook_requires_interaction`） |
+
+### 相关参考
+
+- [Agent Hooks 事件](/coden/zh/docs/extend/skills-and-hooks/)
+- [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)
+- [审批模式](/coden/zh/docs/safety/approval-modes/)
+- [示例](/coden/zh/docs/extend/skills-and-hooks/)
+
+## 执行与超时
+
+### 执行模型
+
+- 同一事件匹配到的全部 Hook **并行执行**（`Promise.all`），结果按配置顺序合并。
+- 每个 Hook 是独立的系统 shell 子进程（进程组），工作目录为工作区。
+- 事件负载以 JSON 通过 stdin 传入（上限 1MB）。
+
+### 超时
+
+| 参数 | 默认 | 范围 |
+| --- | --- | --- |
+| `timeout`（配置） | 10 秒 | 1–600 秒（整数） |
+
+- 超时后向进程组发送 `SIGTERM`，500ms 后仍未退出则 `SIGKILL`（Windows 直接结束进程）。
+- 超时结果：`timedOut: true`，计入 Hook 失败（不阻止）。
+- 用户取消（`Ctrl+C`）时 Hook 取消：`cancelled: true`，随主任务中止抛出。
+
+### 限额
+
+| 通道 | 上限 | 超出行为 |
+| --- | --- | --- |
+| stdin | 1MB | `inputExceeded`，视为失败 |
+| stdout | 10KB | 立即终止进程，`outputExceeded` |
+| stderr | 10KB | 同上 |
+
+### 失败语义
+
+| 结果 | 处理 |
+| --- | --- |
+| 退出码 `0`，无 stdout | 无操作（`hook.completed`） |
+| 退出码 `0`，合法 JSON | 按协议处理（决策/上下文/系统消息） |
+| 退出码 `2`（可控事件） | 明确阻止 |
+| 非零、超时、超限、非法 JSON、字段非法 | `hook.failed`：诊断 stderr（≤2000 字符，清洗控制字符）并 fail-open |
+
+fail-open 指：决策类 Hook 失败时**不产生决策**，权限继续走策略层；不安全的场景由策略层决定（`PermissionRequest` 失败不会静默允许）。
+
+### 可见性
+
+- 成功 Hook 在 `--verbose` 下显示；失败、阻止与输入冲突始终显示。
+- Hook 运行事件（`hook.started`/`completed`/`failed`/`blocked`）写入 trace。
+- `systemMessage` 输出到诊断输出（stderr）。
+
+### 相关参考
+
+- [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)
+- [决策与权限](/coden/zh/docs/reference/hooks-and-storage/)
+- [信任与安全](/coden/zh/docs/safety/security-boundaries/)
+
+## 会话
+
+### 会话标识与位置
+
+- 会话 ID 是 UUID，通过 `--resume <session-id>` 引用；格式限制为 `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`。
+- 文件位于 `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`：`<id>.jsonl`（会话记录）与 `<id>.trace.jsonl`（运行事件 trace）。
+- 目录 `0700`、文件 `0600`；会话与 trace 可能包含推理内容与敏感输入，不要未经审查地分享。
+
+### 记录内容
+
+| 记录类型 | 数据 |
+| --- | --- |
+| `session.created` | 工作区与会话 ID |
+| `message` | 每条 system/user/assistant/tool 消息 |
+| `tool.call.updated` | Hook 更新后的工具输入 |
+| `context.compacted` | 压缩摘要与源范围 |
+| `session.title` | 显式标题 |
+| `session.thinking` | 思考等级（turn 起始快照）|
+| `session.reset` | `/new` 重置标记 |
+
+首条非 hook 用户消息自动成为会话标题；`/new` 之后标题重新取首条消息。
+
+### 恢复（resume）
+
+```bash
+coden --resume                  # list sessions for the current workspace
+coden --resume <session-id>     # resume a specific session
+```
+
+- 恢复时重新构建系统消息（最新系统提示、工具目录与 Skill 名称列表），恢复消息历史、压缩摘要与压缩范围、最后保存的思考等级。
+- 尾部未完成的工具调用会补齐为 `runtime.interrupted: tool execution did not complete...` 错误并记录警告。
+- 恢复的会话文件行损坏时抛出逐行错误；仅当**最后一行**不完整时忽略并警告。
+- 恢复时的思考等级解析顺序：显式 `--thinking` > 会话保存值 > 用户/项目配置 > 默认；显式覆盖会写回会话。
+
+### 列表输出
+
+```text
+<id>  <title>  (<N> messages, YYYY-MM-DD HH:MM)
+```
+
+- 按最后活动时间倒序；无标题的会话显示 `(no title)`；trace 文件不列入。
+- 列表输出不含 token 用量或其他账户信息。
+
+### 相关参考
+
+- [会话存储](/coden/zh/docs/agent/sessions/)
+- [CLI 命令参考](/coden/zh/docs/reference/cli/)
+- [上下文与思考等级](/coden/zh/docs/agent/compaction-and-thinking/)

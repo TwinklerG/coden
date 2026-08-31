@@ -1,0 +1,356 @@
+---
+title: Skills 与 Hooks
+description: 区分渐进披露的方法知识与确定性生命周期控制。
+sidebar:
+  order: 360
+---
+
+Skill 与 Hook 都能改变行为，却处在不同信任层。Skill 是按需进入模型上下文的说明，效果依赖模型遵循；Hook 是 CodeN 在事件边界启动的命令进程，可以阻止或修正部分流程。Skill 不是强制策略，Hook 也不是沙箱。
+
+## 创建 Skill
+
+### 最小结构
+
+```text
+<workspace>/skills/pdf-processing/
+└── SKILL.md
+```
+
+`SKILL.md` 内容：
+
+```markdown
+---
+name: pdf-processing
+description: Use when reading or modifying PDF documents.
+---
+
+# PDF workflow
+
+Read the relevant files before changing them.
+```
+
+`name` 必须与目录名一致；`description` 描述**何时触发**，供 Agent 在启动上下文里匹配任务。
+
+### frontmatter 字段
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `name` | 是 | 小写字母/数字/连字符，1–64 字符 |
+| `description` | 是 | 非空，≤1024 字符 |
+| `license` | 否 | 许可证信息 |
+| `compatibility` | 否 | 兼容性声明 |
+| `metadata` | 否 | 任意对象 |
+| `allowed-tools` | 否 | 工具允许列表 |
+
+### 渐进披露建议
+
+- 正文按需展开：先给最小工作流，细节放 `references/`、`scripts/` 等资源，由 Agent 在激活后用普通工具读取。
+- 正文使用明确的步骤与规则，避免只有背景叙述。
+- 资源文件跟随 Skill 目录；路径以 Skill 根目录为基准（`activate_skill` 会返回根目录）。
+- 可复用仓库自带 Skill 作为模板：`skills/coden-tool-plugin-development/`。
+
+### 放置到仓库
+
+| 目录 | 用途 |
+| --- | --- |
+| `<workspace>/skills/<name>/` | 仓库随附、随仓库分发 |
+| `<workspace>/.agents/skills/<name>/` | 本地安装，不随仓库分发 |
+| `~/.agents/skills/<name>/` | 用户全局 |
+
+### 相关参考
+
+- [发现规则](/coden/zh/docs/extend/choose-an-extension/)
+- [安装与调试](/coden/zh/docs/extend/skills-and-hooks/)
+- [Agent Skills 规范](https://agentskills.io/specification)
+
+## 安装与调试
+
+### 安装
+
+| 目标 | 方式 |
+| --- | --- |
+| 用户全局 | 放置到 `~/.agents/skills/<name>/SKILL.md` |
+| 项目本地 | 放置到 `<workspace>/.agents/skills/<name>/SKILL.md` |
+| 仓库随附 | 放置到 `<workspace>/skills/<name>/SKILL.md` 并提交 |
+| 从仓库安装指定 Skill | `npx skills add TwinklerG/CodeN --skill coden-tool-plugin-development` |
+
+### 验证
+
+```bash
+coden --verbose
+```
+
+启动后执行 `/skills` 列出当前生效的 Skill（名称、描述、`project`/`user` 来源）。`--verbose` 显示被跳过条目的原因：
+
+```text
+ignored project skill <path>: <reason>
+```
+
+### 常见失败原因
+
+| 现象 | 原因 |
+| --- | --- |
+| Skill 未列出 | 目录名与 frontmatter `name` 不一致；或放在了非扫描位置 |
+| `description` 无效 | 空值或超过 1024 字符 |
+| YAML 解析失败 | frontmatter 格式错误（必须以 `---` 开头/结尾） |
+| 目录被跳过 | `SKILL.md` 缺失、不是普通文件、超过 1MB，或符号链接逃逸扫描根目录 |
+| 修改不生效 | Skill 只在启动时发现，修改后需重启 |
+
+### 调试顺序
+
+1. `coden --verbose` 启动，检查 `ignored ... skill` 行。
+2. 用 `/skills` 确认名称与来源。
+3. 检查目录名、frontmatter、文件大小与真实路径（`realpath`）。
+4. 激活测试：`coden -p "use the <name> skill for the task"`，观察模型是否调用 `activate_skill`。
+
+### 相关参考
+
+- [发现规则](/coden/zh/docs/extend/choose-an-extension/)
+- [创建 Skill](/coden/zh/docs/extend/skills-and-hooks/)
+- [工具与风险等级](/coden/zh/docs/agent/tools-and-context/)
+
+## 匹配规则
+
+### 语法
+
+- `matcher` 是正则字符串（`new RegExp(matcherSource)`），在配置解析时编译；无 `matcher` 或 `"*"` 匹配全部。
+- 非法正则导致配置解析失败（启动报错）。
+- 即使匹配目标为空，也按 `"*"` 处理（例如 `Stop` 没有 matcher）。
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "bash|edit|write",
+      "hooks": [{
+        "type": "command",
+        "command": "echo matched"
+      }]
+    }]
+  }
+}
+```
+
+### 可匹配事件与目标
+
+| 事件 | 匹配目标 |
+| --- | --- |
+| `PreToolUse` | `toolName` |
+| `PermissionRequest` | `toolName` |
+| `PostToolUse` | `toolName` |
+| `PostToolUseFailure` | `toolName` |
+| `SessionStart` | `source`（`startup`/`resume`） |
+| `Notification` | `notificationType`（`permission_prompt`/`attention_required`） |
+| `UserPromptSubmit`、`Stop`、`SessionEnd` | 不接受 matcher（配置含 matcher 会报错） |
+
+### 匹配语义
+
+- matcher 只接受字符串；配置为其他类型的 matcher 报错。
+- 正则测试的是目标字符串（如 `bash` 工具名），不是完整输入。
+- 同一事件可配置多个 group；全部 Hook 按配置顺序并行执行（见 [执行与超时](/coden/zh/docs/agent/failures-and-control-flow/)）。
+- 同一事件最多 64 条命令（用户级 + 项目级合并后计数）。
+
+### 相关参考
+
+- [Agent Hooks 事件](/coden/zh/docs/extend/skills-and-hooks/)
+- [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)
+- [执行与超时](/coden/zh/docs/agent/failures-and-control-flow/)
+
+## I/O 协议
+
+### 进程约定
+
+- 命令通过系统 shell 执行：POSIX `/bin/sh -c <command>`；Windows `cmd /d /s /c`。
+- 工作目录为 CodeN 工作区；环境继承 CodeN 进程，并追加：
+
+| 变量 | 值 |
+| --- | --- |
+| `CODEN_PROJECT_DIR` | 工作区路径 |
+| `CODEN_SESSION_ID` | 当前会话 ID |
+| `CODEN_HOOK_EVENT` | 事件名 |
+
+### stdin：一个 JSON 对象
+
+```json
+{
+  "schemaVersion": 1,
+  "hookEventName": "PreToolUse",
+  "sessionId": "…",
+  "turnId": "…",
+  "cwd": "/path/to/workspace",
+  "permissionMode": "manual",
+  "toolName": "bash",
+  "callId": "…",
+  "input": { "command": "git status" },
+  "risk": "modify"
+}
+```
+
+公共字段：`schemaVersion`、`hookEventName`、`sessionId`、可选 `turnId`、`cwd`、`permissionMode`，其后附加事件负载。输入上限 **1MB**（超出视为失败）。
+
+### stdout：单个 JSON 对象
+
+- 顶层允许字段：`systemMessage`（事件通用），`Stop` 额外允许 `decision`（仅 `"block"`）与 `reason`；其他事件的 `hookSpecificOutput` 按事件允许字段。
+- `systemMessage` 必须是字符串，清洗控制字符后截断到 2000 字符，转发到诊断输出（stdout/stderr）。
+- `hookSpecificOutput.hookEventName` 必须与事件一致；字段白名单校验，非法字段视为失败。
+- 输出上限 **10KB**（stdout 与 stderr 各自）；超过时终止进程并标记 `outputExceeded`。
+- 退出码 `0` 且无 stdout：无操作。
+
+### 输出示例
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow"
+  }
+}
+```
+
+### 退出码语义
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 成功；stdout 可选 |
+| `2` | 明确阻止（仅可控事件） |
+| 其他 / 超时 / 输出或输入超限 | Hook 失败：警告并 fail-open，不产生决策 |
+
+### 安全注意
+
+- 事件 JSON 是唯一数据通道：不要把事件字段拼接进 shell 命令字符串。
+- 命令应从 stdin 读取 JSON 并原样输出合法 JSON，避免注入与转义问题。
+- Hook 输出会清除终端控制字符；不要依赖 stdout 回显敏感信息。
+
+### 相关参考
+
+- [决策与权限](/coden/zh/docs/reference/hooks-and-storage/)
+- [执行与超时](/coden/zh/docs/agent/failures-and-control-flow/)
+- [示例](/coden/zh/docs/extend/skills-and-hooks/)
+
+## 决策与权限
+
+### 决策入口
+
+| 事件 | 决策字段 | 效果 |
+| --- | --- | --- |
+| `PreToolUse` | `hookSpecificOutput.permissionDecision`：`allow`/`ask`/`deny` | 预判权限：`deny` 直接拒绝（`permission.hook_denied`）；`ask` 强制人工；`allow` 跳过策略层 |
+| `PermissionRequest` | `hookSpecificOutput.decision.behavior`：`allow`/`ask`/`deny`（可带 `message`） | 在策略层要求人工时触发，可覆盖最终决定 |
+| `Stop` | 顶层 `decision: "block"` + `reason` | 注入反馈要求模型继续 |
+| 可控事件 + 退出码 `2` | stderr 作为 `blockReason` | 等同于 `deny`/阻止 |
+
+### PreToolUse 的完整顺序
+
+1. `PreToolUse` Hook 决策（含 `updatedInput` 与 `additionalContext`）。
+2. 输入更新后**重新校验**：schema（失败为 `hook.invalid_updated_input`）、结构化文件路径、风险分类、权限。
+3. 策略层（`manual`/`smart`/`auto`）。
+4. 需要人工时触发 `PermissionRequest` Hook（`reason: "policy"`；若 Hook 请求人工则为 `"hook"`）。
+5. 人工确认（CLI/TUI 内联）。
+6. 执行工具并触发 `PostToolUse`/`PostToolUseFailure`。
+
+### 合并语义
+
+同一事件的多个 Hook **并行执行**，结果按配置 `order` 排序：
+
+- 权限决策按 `deny > ask > allow` 合并（非 `deny` 的决策可能与 `allow` 覆盖，取最保守）。
+- 多个 `updatedInput` 冲突时**全部作废**（`inputConflict`），不应用任何更新。
+- 任一 `blocked` 即整体阻止。
+- 每个 `additionalContext` 注入为独立的 `[CodeN hook context: <event>]` 消息；总上限 10KB。
+
+### 与审批模式的交互
+
+| 模式 | Hook 行为 |
+| --- | --- |
+| `manual` | `PreToolUse` 决定生效；策略层人工确认；`PermissionRequest` 可覆盖 |
+| `smart` | 同上；普通修改先由 LLM 审查，Hook 的 `deny` 优先于 LLM 放行 |
+| `auto` | 仍执行 `PreToolUse`：`deny` 生效；`ask` 安全拒绝（`permission.hook_requires_interaction`） |
+
+### 相关参考
+
+- [Agent Hooks 事件](/coden/zh/docs/extend/skills-and-hooks/)
+- [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)
+- [审批模式](/coden/zh/docs/safety/approval-modes/)
+- [示例](/coden/zh/docs/extend/skills-and-hooks/)
+
+## 示例
+
+### macOS 授权通知
+
+`PermissionRequest` 事件在需要人工授权时触发。以下配置在等待授权时发送系统通知（macOS）：
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [{
+      "matcher": "bash|edit|write",
+      "hooks": [{
+        "type": "command",
+        "command": "osascript -e 'display notification \"CodeN 正在等待授权\" with title \"CodeN\"'; afplay /System/Library/Sounds/Glass.aiff",
+        "timeout": 5
+      }]
+    }]
+  }
+}
+```
+
+### PreToolUse 批准脚本（Node）
+
+从 stdin 读取 JSON 并输出 `allow` 决策；解析失败时不输出决策（fail-open 到策略层）。
+
+```js
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (input += chunk));
+process.stdin.on("end", () => {
+  JSON.parse(input);
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" }
+  }));
+});
+```
+
+对应配置：
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "bash",
+      "hooks": [{
+        "type": "command",
+        "command": "node /path/to/approve.js"
+      }]
+    }]
+  }
+}
+```
+
+### Stop 要求继续
+
+模型停止时若 `decision: "block"`，会把 `reason` 注入对话要求模型继续（仍受 `maxSteps` 限制）：
+
+```json
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "echo '{\"decision\":\"block\",\"reason\":\"tests have not been run yet\"}'"
+      }]
+    }]
+  }
+}
+```
+
+### 读取会话变量
+
+Hook 环境提供 `CODEN_PROJECT_DIR`、`CODEN_SESSION_ID`、`CODEN_HOOK_EVENT`：
+
+```bash
+echo "project=$CODEN_PROJECT_DIR session=$CODEN_SESSION_ID event=$CODEN_HOOK_EVENT"
+```
+
+### 相关参考
+
+- [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)
+- [决策与权限](/coden/zh/docs/reference/hooks-and-storage/)
+- [匹配规则](/coden/zh/docs/extend/skills-and-hooks/)

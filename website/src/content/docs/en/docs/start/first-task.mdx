@@ -1,0 +1,119 @@
+---
+title: Complete a First Task
+description: Complete and verify work with the default CLI, explicit TUI, or print mode.
+sidebar:
+  order: 140
+---
+
+The point of a first task is not attractive prose; it is verifying the complete loop: CodeN inspects the workspace, the model proposes tool calls, permission policy intervenes, tools return results, the model continues from those results, and you verify the final state with tests or a diff. The default interface is the continuous-output CLI; the TUI requires explicit `--tui`.
+
+## Launch the CLI / TUI
+
+### The three interface modes
+
+| Mode | Trigger | Characteristics |
+| --- | --- | --- |
+| CLI/REPL | default, or `--cli` | Streaming output; interactive multiline input; startup banner |
+| Full-screen TUI | explicit `--tui` | Ink full-screen UI; transient activity enters the transcript; single-task serial execution |
+| print | `-p` / `--print` | Plain text, pipe-friendly; exits after a single turn |
+
+### Selection rules
+
+- With no interface flag, CodeN always enters CLI/REPL, TTY or not.
+- `--tui` requires stdin and stdout to both be TTYs, raw mode to be available, and `TERM != dumb`; otherwise it falls back to the CLI with a warning instead of failing.
+- `-p/--print` requires a prompt; for example `coden -p --auto "Implement the feature and run tests"`.
+- Combining `--tui` with `--cli` or with `--print` fails argument parsing; combining `--cli` with `--print` does not fail, and print wins.
+- `NO_COLOR` disables color only and does not affect interface-mode selection.
+
+### Input in CLI sessions
+
+- With no initial prompt, the multiline editor is used when supported: Enter submits and a single trailing `\` inserts a newline.
+- `Ctrl+D` (empty input) exits; `Ctrl+C` cancels the current task rather than exiting.
+- The startup banner shows version, workspace hash, model, approval mode, thinking level, and session ID, followed by a `Task > ` prompt.
+
+### TUI behavior highlights
+
+- The input area is enclosed by two full-width horizontal rules; Enter submits and Shift+Enter or a trailing `\` inserts a newline.
+- `Ctrl+P`/`Ctrl+N` browse input history; `PageUp`/`PageDown` and the mouse wheel scroll the transcript, and `End` returns to the latest content.
+- While running, `Ctrl+C` cancels the current task; while idle, `Ctrl+C` or `Ctrl+D` with empty input exits.
+- Tool authorization, workspace trust, and plugin confirmations appear as inline transcript requests instead of dialogs; the input area stays visible but disabled while waiting.
+- The TUI runs one task at a time and does not queue input while running.
+
+### Launch examples
+
+```bash
+coden                                     # CLI/REPL (default)
+coden --tui                               # explicit full-screen TUI
+coden --cli                               # explicit CLI/REPL
+coden -p "Reply with exactly: coden-ok"   # print single-turn output
+coden --tui "fix the failing tests in this project"
+```
+
+### Related references
+
+- [CLI / REPL](/coden/en/docs/reference/cli/)
+- [Full-screen TUI](/coden/en/docs/reference/cli/)
+- [Print Mode](/coden/en/docs/reference/cli/)
+- [CLI Options](/coden/en/docs/reference/cli/)
+
+## Complete Your First Task
+
+### Prerequisites
+
+- Node.js 22+ (or run from source with Bun).
+- A configured provider credential (see [Configure Your First Provider](/coden/en/docs/start/provider-and-model/)).
+- Enter the target project directory; the current working directory is CodeN's workspace.
+
+### Shortest flow
+
+```bash
+cd /path/to/project
+coden "run the test suite and fix the first failure"
+```
+
+### What to observe
+
+| Phase | Behavior |
+| --- | --- |
+| Startup | Reads configuration, discovers skills, loads plugins; prints the startup banner (version, workspace hash, model, approval mode, thinking level) |
+| Authorization | The default approval mode is `manual`: `read` is auto-allowed; `write`/`edit` show a summarized input and ask for confirmation |
+| Choices | `y` allows once; dangerous operations offer only `y/N`; ordinary modifications accept `s` to allow for the session (`allow_session`) |
+| Tool calls | `bash` runs with the workspace as its cwd; output is bounded (default 30000 characters) and truncated |
+| Completion | When the model stops calling tools, the turn ends; a task started with a prompt in the CLI exits when done |
+
+The prompt inside a session is `Task > ` and the first user message becomes the session title. The workspace hash and data directories are derived from the workspace path (`workspaceHash`).
+
+### Common variants
+
+```bash
+coden --auto "run the test suite and fix the first failure"   # skip permission prompts (ordinary operations only)
+coden --smart-approve "run the test suite and fix the first failure"  # LLM review for ordinary modifications
+coden -p --auto "run the test suite and fix the first failure"        # single-turn plain-text output
+coden --tui "run the test suite and fix the first failure"            # run in the full-screen TUI
+coden --resume              # list sessions for the current workspace
+coden --resume <session-id> # resume a specific session
+```
+
+### Verification and inspection
+
+```bash
+git status           # inspect the change scope
+git diff --stat      # inspect the change size
+coden --resume       # session list: title, message count, last activity
+```
+
+### Boundaries and failure modes
+
+- **Permission denial**: returns `permission.denied: <tool> was not authorized` (or `permission.outside_workspace_denied`); the model receives the error and adjusts. `--auto` does not change the `deny`/`ask` semantics of `PreToolUse` hooks.
+- **Step limit**: the default `maxSteps` is 20; hitting it throws `runtime.step_limit` (`Maximum model steps (20) reached`) after the model exhausts its steps.
+- **Outside-workspace access**: `read`/`write`/`edit` are classified by the real path after symlink resolution; outside paths are requested as modification operations by default and denied outright under `--auto`.
+- **Cancellation**: `Ctrl+C` cancels the current task in the CLI; in the TUI, `Ctrl+C` cancels while running and exits while idle. Interrupted tool calls are repaired with `runtime.interrupted` error markers on session resume.
+- **Sessions and cost**: every effective task creates a session file and counts toward provider usage; keep task scope explicit and verifiable.
+
+### Related references
+
+- [Approval Modes](/coden/en/docs/safety/approval-modes/)
+- [Tools and Risk Levels](/coden/en/docs/agent/tools-and-context/)
+- [Sessions](/coden/en/docs/agent/sessions/)
+- [Slash Commands](/coden/en/docs/reference/cli/)
+- [Smart Approval](/coden/en/docs/safety/approval-modes/)

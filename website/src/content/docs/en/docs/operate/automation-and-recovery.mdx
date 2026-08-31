@@ -1,0 +1,176 @@
+---
+title: Automation and Recovery
+description: Run in scripts and CI, and diagnose sessions, traces, and common failures.
+sidebar:
+  order: 530
+---
+
+Automation should prefer print mode, an explicit approval policy, and inspectable exit status. Recovery relies on local sessions rather than replaying shell processes. In CI without interactive input, any path that requires human confirmation should be treated as a configuration error, not a pending task.
+
+## Automation
+
+### Non-interactive runs
+
+```bash
+coden -p --auto --lang en "run the tests and fix the first failure"
+```
+
+- `-p/--print`: single turn, plain text, pipe-friendly; stdout carries model output and tool summaries.
+- `--auto`: skips in-workspace tool confirmations; errors and warnings go to stderr.
+- Exit codes: `0` completed; `1` execution failure; `2` configuration error (missing API key, invalid flags, invalid config JSON).
+- Missing keys fail immediately: good for fast CI failure.
+
+### CI example
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+export CODEN_OPENAI_API_KEY="${OPENAI_API_KEY}"
+export CODEN_MODEL="${CODEN_MODEL:-gpt-5-mini}"
+
+coden -p --auto --lang en "run the test suite and fix the first failure"
+
+git diff --exit-code -- . ':!dist'        # ensure no unexpected changes
+coden --resume                              # print this workspace's sessions
+```
+
+`--max-steps` bounds the budget for unattended runs; `NO_COLOR=1` disables color output (without changing the interface mode).
+
+### Session orchestration
+
+```bash
+coden -p --auto "run the test suite" | tee /tmp/run-1.txt
+coden -p --auto --resume "$(coden --resume | head -1 | cut -d' ' -f1)" "fix the first failure"
+```
+
+- Resuming continues the same context (the system prompt and tool catalog are rebuilt).
+- `coden --resume` lists as `<id>  <title>  (<N> messages, YYYY-MM-DD HH:MM)`.
+- Sharing a session across tasks reduces context rebuilds; use one `-p` call per task.
+
+### Gate mode
+
+- Use a `Stop` hook outputting `{"decision":"block","reason":"…"}` to keep the model working until tests pass (bounded by `maxSteps`).
+- Use `PreToolUse` with `permissionDecision: "deny"` to forbid specific tools (for example `matcher: "git"`).
+- `--verbose` emits more runtime detail for log auditing.
+
+### Limits
+
+- Every call consumes provider quota; set `--max-steps` before unattended use.
+- `-p` requires a prompt; without one it fails.
+- Operations needing human confirmation (dangerous commands, outside-workspace paths, uncertain `--smart-approve` items) fail under `--auto` instead of waiting.
+
+### Related references
+
+- [Print Mode](/coden/en/docs/reference/cli/)
+- [CLI Options](/coden/en/docs/reference/cli/)
+- [Sessions](/coden/en/docs/agent/sessions/)
+- [Stop examples](/coden/en/docs/extend/skills-and-hooks/)
+
+## Troubleshooting
+
+### Startup and configuration
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `CODEN_OPENAI_API_KEY is required` | no key set (default provider) | `export CODEN_OPENAI_API_KEY=...` or config `env` |
+| `CODEN_ANTHROPIC_API_KEY is required` | `--provider anthropic` without a key | export `CODEN_ANTHROPIC_API_KEY` |
+| `Cannot read config ...` | invalid JSON in a config file | fix the matching scope's `config.json` |
+| `language must be zh or en` | illegal `--lang`/config value | use `zh`/`en`; check the user config |
+| `--tui and --cli are mutually exclusive` | conflicting interface flags | keep one interface flag |
+| `--smart-approve and --auto are mutually exclusive` | conflicting approval flags | keep one |
+| `--allow-outside-workspace requires --auto` | the flag used alone | combine with `--auto` |
+| `print mode requires a prompt` | `-p` without a task | add a prompt argument |
+| `Anthropic enabled thinking requires maxOutputTokens greater than 1024` | `reservedOutputTokens <= 1024` with thinking enabled | raise `reservedOutputTokens` or lower the thinking level |
+
+### Runtime
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `runtime.step_limit` (`Maximum model steps (20) reached`) | exceeded `maxSteps` | split the task or raise `--max-steps` |
+| `context.exhausted` | still over budget after emergency compaction | `/new` or a fresh session; narrow the task |
+| `permission.denied` | permission refused | use a safer operation or approve manually |
+| `permission.outside_workspace_denied` | outside access under `--auto` | use `--auto --allow-outside-workspace` when truly needed |
+| `tool.timeout` | tool not finished in 60s (without cooperative cancel) | shorten the command/tool logic; check plugin cancellation |
+| `edit.no_match` / `edit.multiple_matches` | `oldText` absent or not unique | copy the exact text to replace |
+
+### Plugins
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `plugin.specifier_invalid` | bad specifier | use `npm:<package>` or `npm:<package>@<version-or-tag>` |
+| `plugin.install_busy` | scope transaction lock busy | retry later (stale locks auto-clean) |
+| `plugin.lock_missing` | project `sync` without `bun.lock` | `plugin install` first or commit the lock |
+| `plugin.lock_outdated` | lock file out of sync with the manifest | update and commit the lock |
+| `plugin.manifest_invalid` | corrupted `plugins.json` | repair the manifest; reinstall if necessary |
+| `plugin.metadata_missing` / `plugin.entry_invalid` / `plugin.api_unsupported` / `plugin.name_mismatch` | package violates the author protocol | fix the package per the [Author Protocol](/coden/en/docs/extend/plugin-authoring/) |
+| plugin load failure, tools missing | top-level/entry exception; loading `.ts` under Node | check `coden plugin list`; run with Bun or use an npm plugin |
+| `plugin restart required` | npm plugin metadata changed at runtime | restart CodeN |
+
+### Hooks
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| config parse failure: `unsupported hook event`/`invalid matcher`/`timeout` range | illegal hook config | see [Matchers](/coden/en/docs/extend/skills-and-hooks/) and [Execution](/coden/en/docs/agent/failures-and-control-flow/) |
+| `X config exceeds 64 commands` | too many hooks for one event | trim the hook list |
+| hook silently ineffective | non-zero exit, timeout, output over limit, invalid JSON | `--verbose`; check the stdin/stdout protocol |
+
+### Skills and runtime
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| skill not active | directory/frontmatter mismatch or illegal file | `--verbose` for `ignored ...` reasons; restart |
+| local `.ts` plugin not loading under Node | Node lacks `data:text/typescript` support | run with Bun (or use an npm plugin) |
+
+### Related references
+
+- [CLI Reference](/coden/en/docs/reference/cli/)
+- [Configuration Reference](/coden/en/docs/reference/configuration/)
+- [FAQ](/coden/en/docs/start/overview/)
+
+## Session Storage
+
+### Location
+
+```text
+$XDG_DATA_HOME/coden/sessions/<workspace-hash>/
+├── <session-id>.jsonl          # session records
+└── <session-id>.trace.jsonl    # runtime event trace
+```
+
+- Default `~/.local/share/coden`; `XDG_DATA_HOME` relocates everything.
+- Directories are `0700` and files `0600`; sessions are partitioned by workspace hash (the same path shares a directory across processes).
+- Session IDs are UUIDs matching `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`.
+
+### JSONL records
+
+One record per line:
+
+```json
+{"version":1,"id":"…","timestamp":"2026-08-31T12:00:00.000Z","type":"message","data":{"role":"user","content":"…"}}
+```
+
+Record types and resume semantics are covered in [Sessions](/coden/en/docs/agent/sessions/). Immutable during recovery: message structure checks (`isMessage`), and tool-call update uniqueness (`tool.call.updated` must match exactly one assistant `toolCalls`).
+
+### Resume validation
+
+- Parsed line by line; an invalid non-final record throws (with the line number), and only an **incomplete final line** is ignored with a warning.
+- Trailing unfinished tool calls are repaired automatically: `runtime.interrupted: tool execution did not complete before the previous process exited`.
+- After a successful recover the store is created, and later messages append to the same file.
+
+### Backup and cleanup
+
+| Operation | Conclusion |
+| --- | --- |
+| backup | copy `<id>.jsonl` and `<id>.trace.jsonl`; preserve permissions (`0600`) |
+| delete | removing both files clears the session; there are no other indexes |
+| migrate | after changing `XDG_DATA_HOME`, all sessions/traces/global plugins follow the new directory |
+
+### Sensitivity
+
+Session files may contain model reasoning, `redacted-thinking`, signatures, user input, and code fragments. Do not commit, share, or distribute them without review; keep local private permissions.
+
+### Related references
+
+- [Sessions](/coden/en/docs/agent/sessions/)
+- [Data Security](/coden/en/docs/safety/security-boundaries/)
+- [CLI Reference](/coden/en/docs/reference/cli/)

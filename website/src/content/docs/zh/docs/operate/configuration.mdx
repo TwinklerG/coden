@@ -1,0 +1,159 @@
+---
+title: 配置模型
+description: 理解配置作用域、优先级、合并与校验。
+sidebar:
+  order: 510
+---
+
+配置不是单个文件，而是具有优先级和特殊合并规则的输入集合。CLI 与真实环境变量表达本次运行意图，项目配置表达仓库约定，用户配置表达个人默认。读取每个字段时必须同时考虑作用域、是否可由项目覆盖，以及错误值是被拒绝还是回退。
+
+## 配置优先级
+
+### 覆盖顺序（从高到低）
+
+| 层级 | 来源 |
+| --- | --- |
+| 1 | CLI 参数（`--provider`、`--model`、`--max-steps`、`--thinking`、`--lang`、`--plugin`） |
+| 2 | `CODEN_*` 环境变量（`CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`CODEN_THINKING_LEVEL`） |
+| 3 | `<workspace>/.coden/config.json`（项目级） |
+| 4 | `~/.config/coden/config.json`（用户级；`XDG_CONFIG_HOME` 可覆盖） |
+| 5 | 内置默认值 |
+
+### 特例与合并规则
+
+| 字段 | 规则 |
+| --- | --- |
+| `language` | 用户专属偏好：只从用户级配置读取，项目级同名字段被**忽略**；`--lang` 优先级最高但仅影响当前进程；`/lang` 原子写回用户配置 |
+| `plugins` | **拼接**而非覆盖：用户级 → 项目级 → CLI `--plugin`，按此顺序生效 |
+| `env` | 两级合并后**逐键注入**进程环境；项目级逐键覆盖用户级；**不覆盖** shell 中已导出的同名变量（shell 导出 > 配置 env） |
+| `hooks` | 合并为有序列表：用户级 Hook 在前、项目级 Hook 在后；同一事件最多 64 条 |
+
+其余字段（`provider`、`model`、`approvalModel`、`approvalStrictness`、`maxSteps`、`contextWindow`、`reservedOutputTokens`、`safetyMargin`、`thinkingLevel`）为简单覆盖：高优先级层的值完全替换低优先级层。
+
+### 配置读取时机
+
+- 配置只在进程启动时读取一次；修改后需重启（`/reload` 只重新加载插件，不重读配置）。
+- 任一层 JSON 无效（语法、类型、非法值）都会导致启动失败：`Cannot read config ...`，退出码 2。
+- 会话列表（`coden --resume` 不带 ID）也会加载配置并执行上述校验。
+
+### 环境变量错误
+
+`CODEN_PROVIDER`、`CODEN_MODEL`、`CODEN_MAX_STEPS`、`CODEN_THINKING_LEVEL` 的非法值在加载时抛错，不会静默降级。
+
+### 相关参考
+
+- [用户级与项目级配置](/coden/zh/docs/operate/configuration/)
+- [环境变量](/coden/zh/docs/operate/configuration/)
+- [字段参考](/coden/zh/docs/reference/configuration/)
+- [CLI 选项](/coden/zh/docs/reference/cli/)
+
+## 用户级与项目级配置
+
+### 作用域对照
+
+| 作用域 | 路径 | 归属 |
+| --- | --- | --- |
+| 用户级 | `~/.config/coden/config.json`（`$XDG_CONFIG_HOME/coden/config.json`） | 当前用户，所有项目共享 |
+| 项目级 | `<workspace>/.coden/config.json` | 单个项目；`.gitignore` 忽略该文件，默认不入库 |
+
+数据目录独立于配置：`$XDG_DATA_HOME/coden/`（默认 `~/.local/share/coden/`），存放会话与全局插件，不属于项目仓库。
+
+### 项目级文件布局
+
+```text
+.coden/
+├── config.json          # project config (gitignored)
+├── plugins.json         # npm plugin manifest (recommended to commit)
+├── plugin-runtime/      # plugin runtime; package.json generated from the manifest, node_modules not committed
+└── plugins/*.ts         # local TypeScript plugins (gitignored)
+```
+
+### 合并行为
+
+| 行为 | 说明 |
+| --- | --- |
+| 项目覆盖用户 | 除 `language`（用户专属）外，项目级字段覆盖同名字段 |
+| `plugins` 拼接 | 用户级 + 项目级 + CLI，按顺序生效 |
+| `env` 合并 | 项目级逐键覆盖用户级；不覆盖 shell 已导出变量 |
+| `hooks` 合并 | 用户级在前、项目级在后，统一编号 |
+
+### 项目级配置示例
+
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-20250514",
+  "maxSteps": 40,
+  "thinkingLevel": "medium"
+}
+```
+
+### 信任差异
+
+- 项目级 Hook 与项目 npm 插件首次使用需要**显式信任工作区**（按真实路径记录到 `~/.config/coden/trusted-workspaces.json`）。
+- 用户级 Hook 与全局插件视为用户主动安装，不在每次启动时重复确认。
+- `--auto` 不会跳过项目级信任。
+
+### 相关参考
+
+- [配置优先级](/coden/zh/docs/operate/configuration/)
+- [字段参考](/coden/zh/docs/reference/configuration/)
+- [工作区](/coden/zh/docs/safety/workspace-and-trust/)
+- [信任与安全边界](/coden/zh/docs/safety/security-boundaries/)
+
+## 环境变量
+
+### 配置类环境变量
+
+| 变量 | 取值 | 作用 |
+| --- | --- | --- |
+| `CODEN_PROVIDER` | `openai` \| `anthropic` | 覆盖 Provider |
+| `CODEN_MODEL` | 模型标识符 | 覆盖模型 |
+| `CODEN_MAX_STEPS` | 正整数 | 覆盖最大步骤数 |
+| `CODEN_THINKING_LEVEL` | `default` \| `off` \| `minimal` \| `low` \| `medium` \| `high` | 覆盖思考等级 |
+
+### 凭据类环境变量
+
+| 变量 | 作用 |
+| --- | --- |
+| `CODEN_OPENAI_API_KEY` | OpenAI Provider 的 API Key（必需） |
+| `CODEN_ANTHROPIC_API_KEY` | Anthropic Provider 的 API Key（必需） |
+| `CODEN_OPENAI_BASE_URL` | OpenAI 兼容端点的 Base URL（可选） |
+
+凭据变量由 Provider 构造时直接读取；缺失时启动失败（`..._API_KEY is required`，退出码 2）。
+
+### 路径类环境变量
+
+| 变量 | 作用 | 默认 |
+| --- | --- | --- |
+| `XDG_CONFIG_HOME` | 配置根目录（`<root>/coden/config.json`、`trusted-workspaces.json`） | `~/.config` |
+| `XDG_DATA_HOME` | 数据根目录（`<root>/coden/sessions/`、`<root>/coden/plugins/`） | `~/.local/share` |
+
+### 配置文件 env 字段注入
+
+用户级与项目级配置的 `env` 字段会在配置加载时注入进程环境：
+
+- 两级合并：项目级逐键覆盖用户级。
+- **不覆盖** shell 中已导出的同名变量：`CLI > 环境变量 > 配置 env`。
+- 只接受字符串值；非字符串值导致配置加载失败。
+- 注入在 Provider 创建之前完成，因此 `env` 字段可以承载 API Key。
+
+```json
+{
+  "env": {
+    "CODEN_OPENAI_API_KEY": "sk-...",
+    "CODEN_MODEL": "gpt-5-mini"
+  }
+}
+```
+
+### Hook 子进程额外变量
+
+Hook 命令执行时还提供 `CODEN_PROJECT_DIR`、`CODEN_SESSION_ID`、`CODEN_HOOK_EVENT`（见 [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)）。
+
+### 相关参考
+
+- [配置优先级](/coden/zh/docs/operate/configuration/)
+- [OpenAI 配置](/coden/zh/docs/operate/providers/)
+- [Anthropic 配置](/coden/zh/docs/operate/providers/)
+- [字段参考](/coden/zh/docs/reference/configuration/)

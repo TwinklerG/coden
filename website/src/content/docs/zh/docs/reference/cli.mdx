@@ -1,11 +1,221 @@
 ---
-title: CLI 命令参考
-description: coden 命令与 plugin 子命令的完整参考。
+title: CLI 参考
+description: 命令、参数、斜杠命令与退出码。
 sidebar:
-  order: 910
+  order: 610
 ---
 
-## 主命令
+本页是精确查找入口。默认 `coden` 进入 CLI/REPL；`--tui` 显式请求全屏界面并在能力不足时降级；`-p/--print` 单轮输出后退出。参数互斥和斜杠命令副作用以当前命令定义为准。
+
+## CLI / REPL
+
+### 启动
+
+```bash
+coden                 # interactive REPL
+coden "your task"     # run one task and exit
+coden --cli "your task"
+```
+
+无 interface 选项时始终进入 CLI/REPL，与终端类型无关。启动横幅依次显示版本、工作区哈希、模型、审批模式、思考等级与当前会话 ID。
+
+### 输入
+
+| 输入 | 行为 |
+| --- | --- |
+| 普通文本 | 作为任务提交 |
+| 行尾单个 `\` | 插入换行继续输入（回退输入流；支持多行编辑器时 Enter 直接提交） |
+| `Ctrl+C` | 取消当前任务（信号中止请求与工具），不退出 |
+| `Ctrl+D`（空输入） | 退出 |
+| `/` 开头的命令 | 由 [斜杠命令](/coden/zh/docs/reference/cli/) 处理 |
+
+### 输出
+
+- 模型回答与工具活动以连续流渲染：工具开始/完成及耗时、Provider 重试、思考时长、token 汇总。
+- `--verbose` 显示更多运行状态（包括 Skill 发现失败原因）。
+- 工具授权请求内联打印：风险级别、工具名、输入预览、`[y]es / [s]ession / [N]o`（危险操作仅 `[y]es / [N]o`）。
+- `NO_COLOR` 关闭颜色；终端宽度用于对齐授权提示。
+
+### 任务生命周期
+
+- 带 prompt 启动：执行一个 turn 后进程退出；退出码 `0` 表示成功完成。
+- 不带 prompt 启动：进入 REPL 循环直到 `/quit`、`Ctrl+D` 或失败。
+- 会话结束（`completed`/`failed`/`cancelled`/`eof`/`quit`）触发 `SessionEnd` Hook 与 trace flush。
+
+### 相关参考
+
+- [斜杠命令](/coden/zh/docs/reference/cli/)
+- [print 模式](/coden/zh/docs/reference/cli/)
+- [全屏 TUI](/coden/zh/docs/reference/cli/)
+- [常用命令行参数](/coden/zh/docs/reference/cli/)
+
+## 全屏 TUI
+
+### 启动与降级
+
+```bash
+coden --tui "your task"
+coden --tui
+```
+
+`--tui` 要求 stdin/stdout 均为 TTY、支持 raw mode 且 `TERM != dumb`。任一条件不满足时降级为 CLI 并显示警告（不报错）；TUI 初始化异常同样降级。`--tui` 不能与 `--cli` 或 `--print` 同时出现。
+
+### 界面布局
+
+- 内容区保持 CLI 风格：瞬时思考、工具活动进入 transcript 流，跟随当前对话位置。
+- 输入区由上下两条贯穿全宽的水平线包围；下方依次显示 provider/model、工作区、授权模式、阶段、上下文占用状态。
+- 等待交互（授权、信任、插件确认）时输入区可见但禁用，请求内联显示在 transcript 中，不弹窗。
+- 请求、可用选项与最终选择永久保留在当前 transcript。
+
+### 快捷键
+
+| 按键 | 行为 |
+| --- | --- |
+| `Enter` | 提交输入 |
+| `Shift+Enter` / 行尾 `\` | 插入换行 |
+| `Ctrl+P` / `Ctrl+N` | 浏览输入历史 |
+| `PageUp` / `PageDown`、滚轮 | 浏览 transcript |
+| `End` | 回到最新内容 |
+| 运行中 `Ctrl+C` | 取消当前任务 |
+| 空闲时 `Ctrl+C` | 触发退出流程（确认后退出） |
+| 空输入 `Ctrl+D` | 退出 |
+| `Esc` | 拒绝当前内联授权请求 |
+
+### 执行模型
+
+- 单任务串行：运行中不排队输入，提交后输入保持禁用直至完成或取消。
+- 相同的斜杠命令集合可用（`/help`、`/skills`、`/session`、`/sessions`、`/compact`、`/reload`、`/new`、`/lang`、`/thinking`、`/quit`）。
+- 通过 Kitty 键盘协议做转义序列消歧；`Ctrl+C` 不直接终止进程（自定义处理）。
+
+### 相关参考
+
+- [CLI / REPL](/coden/zh/docs/reference/cli/)
+- [print 模式](/coden/zh/docs/reference/cli/)
+- [斜杠命令](/coden/zh/docs/reference/cli/)
+- [常用命令行参数](/coden/zh/docs/reference/cli/)
+
+## print 模式
+
+### 触发与约束
+
+```bash
+coden -p "Reply with exactly: coden-ok"
+coden -p --auto "run the tests and report the results"
+```
+
+- `-p/--print` 必须携带 prompt：print 模式下无 prompt 会直接报错（`print mode requires a prompt`）。
+- 单轮运行后退出：适合脚本、CI 与管道。
+- 输出为纯文本流；`--auto` 配合跳过工作区内工具确认。
+- 与 `--tui` 互斥；与 `--cli` 同时出现时 `print` 优先（不报错）。
+
+### 与非交互环境的组合
+
+| 场景 | 命令 |
+| --- | --- |
+| 单轮输出 | `coden -p --auto "your task"` |
+| 指定 Provider 与模型 | `coden -p --provider anthropic --model claude-sonnet-4-20250514 "your task"` |
+| 恢复会话后继续 | `coden -p --auto --resume <session-id> "continue"` |
+| 英文界面 | `coden -p --lang en "your task"` |
+
+### 注意
+
+- print 模式不改变权限语义：工作区外 `read`/`write`/`edit` 在 `--auto` 下仍返回 `permission.outside_workspace_denied`。
+- 非 TTY 环境不隐式启用 print；界面模式只由参数决定。
+- 退出码：配置错误为 `2`，执行失败为 `1`，正常完成为 `0`。
+
+### 相关参考
+
+- [CLI / REPL](/coden/zh/docs/reference/cli/)
+- [全屏 TUI](/coden/zh/docs/reference/cli/)
+- [自动化](/coden/zh/docs/operate/automation-and-recovery/)
+- [常用命令行参数](/coden/zh/docs/reference/cli/)
+
+## 斜杠命令
+
+### 命令列表
+
+| 命令 | 行为 |
+| --- | --- |
+| `/help` | 列出全部命令 |
+| `/skills` | 列出当前生效的 Skill（名称、描述、project/user 来源），不调用模型 |
+| `/session` | 输出当前会话 ID |
+| `/sessions` | 列出当前工作区的全部会话（按最后活动倒序） |
+| `/compact` | 立即压缩上下文（手动触发自动压缩流程，结果持久化） |
+| `/reload` | 重新加载本地 TypeScript 插件与 npm 插件注册表，输出加载/失败/工具摘要 |
+| `/new` | 在当前会话内开始新对话（保留 system 消息，清除摘要与历史） |
+| `/lang` | 列出 `zh`、`en` 与当前语言 |
+| `/lang <zh\|en>` | 切换语言；以 `0600` 原子写入用户配置并立即生效 |
+| `/thinking` | 列出思考等级、当前值与有效映射 |
+| `/thinking <level>` | 切换等级并持久化到当前会话 |
+| `/quit` | 退出 |
+
+### 解析规则
+
+- 命令必须独占一行：包含换行的输入（如 `多行输入\n/help`）按普通消息处理。
+- 严格匹配命令名：`/help` 前导/尾随空白会被 trim 后识别；未知前缀按普通任务提交。
+- 无效参数不会终止会话：`/lang xx`、`/thinking xx` 输出错误与可用列表，继续交互。
+
+### 副作用说明
+
+- `/lang` 只接受 `zh`/`en`；写入的是**用户级**配置文件，保留其他字段。
+- `/thinking` 只影响当前进程与当前会话，不写用户/项目配置文件。
+- `/reload` 只保证重新读取本地 `.ts` 插件（npm 包变更需要重启 CodeN）。
+- `/new` 不改变思考等级；会话授权集合（`s` 授权）绑定当前进程，不会因 `/new` 清除。
+
+### 相关参考
+
+- [CLI / REPL](/coden/zh/docs/reference/cli/)
+- [全屏 TUI](/coden/zh/docs/reference/cli/)
+- [语言与思考等级](/coden/zh/docs/agent/compaction-and-thinking/)
+- [CLI 命令参考](/coden/zh/docs/reference/cli/)
+
+## 常用命令行参数
+
+### 选项总表
+
+| 选项 | 默认 | 说明 |
+| --- | --- | --- |
+| `<prompt>` | — | 要执行的任务；省略时进入 REPL |
+| `-p, --print` | `false` | 非交互输出模式；需提供 prompt；单轮后退出 |
+| `--tui` | `false` | 显式启动全屏 TUI；不满足 TTY/raw mode/`TERM` 条件时降级 CLI 并警告 |
+| `--cli` | `false` | 显式使用 CLI 界面（默认模式） |
+| `--provider <openai\|anthropic>` | `openai` | 模型 Provider |
+| `--model <model-id>` | `gpt-5-mini` | 模型标识符 |
+| `--resume [session-id]` | — | 带 ID 恢复会话；省略 ID 列出当前工作区会话 |
+| `--auto` | `false` | 跳过工具权限确认（仅工作区内普通操作） |
+| `--smart-approve` | `false` | 普通修改由 LLM 审查，不确定转人工 |
+| `--allow-outside-workspace` | `false` | 与 `--auto` 一起允许工作区外读写路径 |
+| `--verbose` | `false` | 显示详细运行状态 |
+| `--max-steps <n>` | `20` | 最大模型步骤数（正整数） |
+| `--thinking <level>` | 配置值/`default` | 思考等级：`default`/`off`/`minimal`/`low`/`medium`/`high` |
+| `--plugin <path>` | `[]` | 附加本地 TypeScript 插件或目录，可重复 |
+| `--lang <zh\|en>` | 配置值/`zh` | 界面与 Agent 语言，仅覆盖当前进程 |
+| `-V, --version` | — | 输出版本（0.1.9） |
+| `-h, --help` | — | 输出帮助 |
+
+### 校验与互斥
+
+- `--tui` 与 `--cli`、`--tui` 与 `--print` 互斥，同时传入报参数错误；`--cli` 与 `--print` 可共存且 `print` 优先。
+- `--smart-approve` 与 `--auto` 互斥（配置错误，退出码 2）。
+- `--allow-outside-workspace` 必须与 `--auto` 同时使用。
+- `--provider` 仅接受 `openai`/`anthropic`；`--max-steps` 必须为正整数；`--thinking` 仅接受六档等级。
+- `--resume` 与 `--auto` 等审批选项可组合（恢复后沿用当前命令行设置）。
+- 无效环境变量（如 `CODEN_THINKING_LEVEL=bad`）在配置加载阶段报错，退出码 2。
+
+### 参数优先级
+
+CLI 参数 > `CODEN_*` 环境变量 > 项目配置 > 用户配置 > 默认值（`--lang` 例外：仅用户配置路径 + `--lang` 覆盖）。
+
+### 相关参考
+
+- [配置优先级](/coden/zh/docs/operate/configuration/)
+- [CLI / REPL](/coden/zh/docs/reference/cli/)
+- [print 模式](/coden/zh/docs/reference/cli/)
+- [CLI 命令参考](/coden/zh/docs/reference/cli/)
+
+## CLI 命令参考
+
+### 主命令
 
 ```text
 coden [prompt] [options]
@@ -31,7 +241,7 @@ coden [prompt] [options]
 | `-V, --version` | 版本 |
 | `-h, --help` | 帮助 |
 
-## plugin 子命令
+### plugin 子命令
 
 ```text
 coden plugin install <npm:package[@version]> [--global] [--allow-scripts] [--yes]
@@ -47,7 +257,7 @@ coden plugin sync [--global] [--allow-scripts] [--yes]
 | `--allow-scripts` | 允许 npm 生命周期脚本（警告 + 二次确认） |
 | `--yes` | 跳过确认（不自动启用脚本） |
 
-## 退出码
+### 退出码
 
 | 码 | 含义 |
 | --- | --- |
@@ -55,7 +265,7 @@ coden plugin sync [--global] [--allow-scripts] [--yes]
 | `1` | 执行失败（运行期错误） |
 | `2` | 配置/启动错误（缺 API Key、非法参数、配置 JSON 无效、插件命令失败） |
 
-## 示例
+### 示例
 
 ```bash
 coden --resume                          # list sessions of the current workspace
@@ -64,9 +274,9 @@ coden -p --auto "run the tests"         # CI single-turn output
 coden plugin install npm:coden-msb      # install an npm plugin
 ```
 
-## 相关参考
+### 相关参考
 
-- [常用命令行参数](/coden/zh/docs/interfaces/cli-options/)
-- [npm 插件安装和管理](/coden/zh/docs/plugins/npm-management/)
-- [斜杠命令](/coden/zh/docs/interfaces/slash-commands/)
-- [常见错误](/coden/zh/docs/reference/troubleshooting/)
+- [常用命令行参数](/coden/zh/docs/reference/cli/)
+- [npm 插件安装和管理](/coden/zh/docs/extend/npm-plugins/)
+- [斜杠命令](/coden/zh/docs/reference/cli/)
+- [常见错误](/coden/zh/docs/operate/automation-and-recovery/)

@@ -1,0 +1,132 @@
+---
+title: 安装与运行时
+description: 安装、升级并区分 Node 与 Bun 的能力。
+sidebar:
+  order: 120
+---
+
+安装 CodeN 时必须区分“启动 CLI”和“使用全部扩展能力”。发布包是 Node.js 22+ 可执行的构建产物；但本地 TypeScript 插件依赖 Bun 的 TypeScript 加载能力，npm 插件安装与同步也会调用 `bun install`。因此 Node 能运行核心 Agent，不等于 Node 覆盖全部插件工作流。
+
+## 安装要求
+
+### 运行时：二选一
+
+| 用途 | 运行时 | 版本 |
+| --- | --- | --- |
+| 运行发布的 CLI（npm 包 bin） | Node.js | `>=22` |
+| 从源码运行 / 开发 | Bun | `>=1.1.0` |
+
+发布产物是构建后的单文件 Node CLI（`dist/index.js`，已 minify），运行时需要 Node.js 22+，不需要 Bun。Bun 仅用于仓库开发：依赖安装、脚本和 TypeScript 插件运行。仓库源码只使用标准 Web/Node.js API。
+
+从源码开发需要额外安装 [Just](https://github.com/casey/just)（命令运行器）：
+
+```bash
+bun install
+just check
+```
+
+### 运行时能力矩阵
+
+本地 TypeScript 插件与 npm 插件的安装依赖 Bun 的内部加载与包管理能力；Node 运行时只覆盖主体功能：
+
+| 能力 | Node.js 22+ | Bun 1.1+ |
+| --- | --- | --- |
+| Agent 循环、内置工具、Hooks、会话 | 完整支持 | 完整支持 |
+| npm 插件：加载已安装的 JS 入口 | 完整支持 | 完整支持 |
+| npm 插件：`plugin install/sync`（内部调用 `bun install`） | **不支持**（需要 Bun 在 PATH） | 完整支持 |
+| 本地 TypeScript 插件（`*.ts` 文件） | **不支持**（跳过并记为失败） | 完整支持 |
+
+原因：本地 `.ts` 插件通过 `data:text/typescript` URL 在进程内导入，Node 会返回 `ERR_UNKNOWN_MODULE_FORMAT`；npm 插件安装固定使用 `bun install --registry https://registry.npmjs.org`。插件校验失败只影响该插件，不会阻止其他功能。
+
+### 终端要求
+
+- **CLI/REPL（默认）**：任意终端可用；非 TTY 环境同样可以运行（例如管道、CI）。
+- **全屏 TUI（`--tui`）**：stdin 与 stdout 都必须是 TTY、支持 raw mode，且 `TERM` 不等于 `dumb`。不满足时显式 `--tui` 降级为 CLI 并显示警告，不会失败。
+- **print 模式（`-p`）**：无需 TTY，输出纯文本、可管道化。
+- `NO_COLOR` 只关闭颜色，不影响界面模式选择。
+
+### 网络要求
+
+- 安装 CodeN 或其 npm 插件需要访问 `https://registry.npmjs.org`（插件安装固定使用该 registry，不支持私有 Registry、Git、URL 或本地目录源）。
+- 运行时需要访问所选 Model Provider 的 API（OpenAI 默认端点，或 `CODEN_OPENAI_BASE_URL` 指定的兼容端点）。
+
+### 凭据要求
+
+- OpenAI：`CODEN_OPENAI_API_KEY`
+- Anthropic：`CODEN_ANTHROPIC_API_KEY`
+
+两个 Key 未设置时启动会立即失败并显示对应的 `..._API_KEY is required` 错误。Shell 中导出的同名环境变量优先级高于配置文件 `env` 字段。
+
+### 验证环境
+
+```bash
+node --version            # Node.js >= 22
+coden --version           # 0.1.9
+coden --help
+```
+
+### 相关参考
+
+- [安装 CodeN](/coden/zh/docs/start/install/)
+- [配置第一个 Provider](/coden/zh/docs/start/provider-and-model/)
+- [CLI 命令参考](/coden/zh/docs/reference/cli/)
+
+## 安装 CodeN
+
+### 全局安装
+
+使用 Bun 或 npm 安装发布后的 CLI：
+
+```bash
+bun add -g @twinklerg/coden
+# or
+npm install -g @twinklerg/coden
+```
+
+### 验证安装
+
+```bash
+coden --version   # 0.1.9
+coden --help
+```
+
+`coden --help` 列出全部选项与子命令，包括 `--tui`、`--cli`、`-p/--print`、`--provider`、`--model`、`--resume`、`--auto`、`--smart-approve`、`--allow-outside-workspace`、`--verbose`、`--max-steps`、`--thinking`、可重复的 `--plugin`、`--lang` 和 `--version`。
+
+### 升级与卸载
+
+```bash
+bun update -g @twinklerg/coden
+# or
+npm install -g @twinklerg/coden@latest
+
+bun remove -g @twinklerg/coden
+# or
+npm uninstall -g @twinklerg/coden
+```
+
+### 发布产物说明
+
+- bin 入口是 `dist/index.js`：minify 后的单文件 Node CLI，运行时需要 Node.js 22+，不需要 Bun。
+- npm 包只暴露 `@twinklerg/coden/plugin` 一条子路径，供插件作者在构建时获得类型；主入口 `"."` 未公开，`import "@twinklerg/coden"` 会被拒绝。
+- 未设置 Provider API Key 时，启动即失败并退出码 2，属于配置错误而不是运行错误。
+- 插件依赖 Bun：本地 TypeScript 插件（`*.ts` 文件）需要 Bun 运行时；npm 插件的安装与同步内部调用 `bun install`。详见 [运行时能力矩阵](/coden/zh/docs/start/install/)。
+
+### 从源码运行（开发）
+
+```bash
+git clone <repository-url>
+cd coden
+bun install
+just check
+just build
+just run "your task"
+```
+
+仓库开发命令：`just build` 构建 CLI 与插件契约；`just test` 运行离线测试；`just check` 运行 lint、类型检查与完整离线测试；`just publish-dry-run` 预演 npm 发布内容而不上传。
+
+### 相关参考
+
+- [安装要求](/coden/zh/docs/start/install/)
+- [配置第一个 Provider](/coden/zh/docs/start/provider-and-model/)
+- [CLI 命令参考](/coden/zh/docs/reference/cli/)
+- [常见错误](/coden/zh/docs/operate/automation-and-recovery/)

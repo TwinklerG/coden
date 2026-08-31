@@ -15,26 +15,23 @@ describe("documentation metadata and scaffolds", () => {
 
   it("contains the approved top-level groups", () => {
     expect(DOC_GROUPS.map((group) => group.slug)).toEqual([
-      "getting-started",
-      "concepts",
-      "interfaces",
-      "configuration",
-      "skills",
-      "plugins",
-      "hooks",
-      "advanced",
+      "start",
+      "agent",
+      "extend",
+      "safety",
+      "operate",
       "reference",
     ]);
   });
 
   it("renders a minimal localized MDX page", () => {
-    const hooks = allDocEntries().find((entry) => entry.slug === "hooks/events");
-    expect(hooks).toBeDefined();
-    if (!hooks) return;
+    const extensions = allDocEntries().find((entry) => entry.slug === "extend/choose-an-extension");
+    expect(extensions).toBeDefined();
+    if (!extensions) return;
 
-    expect(renderScaffold(hooks, "zh")).toContain("title: Agent Hooks 事件");
-    expect(renderScaffold(hooks, "zh")).toContain("本页面已建立文档结构");
-    expect(renderScaffold(hooks, "en")).toContain(
+    expect(renderScaffold(extensions, "zh")).toContain("title: 选择扩展机制");
+    expect(renderScaffold(extensions, "zh")).toContain("本页面已建立文档结构");
+    expect(renderScaffold(extensions, "en")).toContain(
       "This page establishes the documentation structure",
     );
   });

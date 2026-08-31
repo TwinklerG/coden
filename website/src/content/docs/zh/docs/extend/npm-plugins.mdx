@@ -1,0 +1,104 @@
+---
+title: npm 插件
+description: 管理 npm 插件的作用域、事务、信任与缓存。
+sidebar:
+  order: 340
+---
+
+npm 插件把工具契约与可复现依赖管理结合起来。项目作用域记录 manifest 与锁文件，全局作用域属于用户；安装事务尽量避免半写入状态，生命周期脚本默认关闭，但入口校验仍会真实导入并执行包代码。
+
+## npm 插件安装和管理
+
+### 安装
+
+```bash
+coden plugin install npm:@scope/coden-plugin-example
+coden plugin install npm:@scope/coden-plugin-example@^2 --global
+coden plugin remove @scope/coden-plugin-example
+coden plugin list
+coden plugin sync
+```
+
+- 默认安装到**项目级**；`--global` 安装到当前用户全局。
+- specifier 仅接受 `npm:<package>` 或 `npm:<package>@<version-or-tag>`；固定使用 `https://registry.npmjs.org`，不支持私有 Registry、Git、URL 或本地目录源。
+- 安装会执行校验导入：入口被真实导入，顶层代码以当前用户权限运行。
+- 安装/删除/升级后必须重启 CodeN 生效；`/reload` 只重读本地 `.ts` 插件。
+
+### 项目文件
+
+```text
+<workspace>/.coden/plugins.json              # manifest (commit)
+<workspace>/.coden/plugin-runtime/.gitignore # excludes node_modules (commit)
+<workspace>/.coden/plugin-runtime/bun.lock   # locked dependencies (commit)
+```
+
+`plugin-runtime/package.json` 由 `plugins.json` 确定性生成，`node_modules/` 不提交。全局插件位于 `$XDG_DATA_HOME/coden/plugins/`（默认 `~/.local/share/coden/plugins/`），不属于项目仓库。
+
+### 同步
+
+```bash
+coden plugin sync
+coden plugin sync --global
+```
+
+- 项目级 `sync` 要求 `plugin-runtime/bun.lock` 存在，否则报 `plugin.lock_missing`。
+- 同步以 `--frozen-lockfile` 运行 `bun install`：锁文件过期报 `plugin.lock_outdated`，需更新并提交锁文件。
+- 同步会重建运行时并重新校验全部插件入口。
+
+### 生命周期脚本
+
+| 行为 | 说明 |
+| --- | --- |
+| 默认禁用 | 等价于 `bun install --ignore-scripts`；`preinstall`/`install`/`postinstall` 不运行 |
+| `--allow-scripts` | 允许当前包与传递依赖以用户权限运行脚本；会先输出警告并再次确认 |
+| `--yes` | 只跳过确认提示，**不会**自动启用脚本 |
+
+### 列表与遮蔽
+
+`coden plugin list` 输出项目与全局两组：包名、安装版本、请求版本、工具数。同一包名同时存在于两级时，项目版本显示为已遮蔽（`shadowed by project`），全局版本不生效。
+
+### 事务与并发
+
+- 安装/同步/删除以事务方式提交（manifest + runtime 备份、崩溃后自动恢复）。
+- 同一作用域一次只能有一个事务；并发操作报 `plugin.install_busy`（残留的过期锁会自动清理）。
+
+### 运行时要求
+
+npm 插件的**加载**只要求入口是构建后的 `.js`/`.mjs`（Node 或 Bun 都可）；**安装与同步**内部调用 `bun install`，需要 PATH 上有 Bun。
+
+### 相关参考
+
+- [本地 TypeScript 插件](/coden/zh/docs/extend/local-plugins/)
+- [插件作者协议](/coden/zh/docs/extend/plugin-authoring/)
+- [信任与安全边界](/coden/zh/docs/safety/security-boundaries/)
+- [插件市场](/coden/zh/docs/extend/npm-plugins/)
+
+## 插件市场
+
+### 市场入口
+
+- [插件市场（中文）](/coden/zh/plugins/)
+- [Plugin marketplace (English)](/coden/en/plugins/)
+
+市场页面列出经 CodeN 目录认证的 npm 插件（含名称、版本、描述与兼容状态），支持按包名与描述过滤。市场数据来自 npm registry 实时快照；每个插件卡片展示包名、版本、描述、工具信息与安装命令。
+
+### 安装市场中的插件
+
+```bash
+coden plugin install npm:coden-modern-unix
+coden plugin install npm:coden-msb
+```
+
+安装后重启 CodeN 生效；`coden plugin list` 确认工具注册（见 [npm 插件安装和管理](/coden/zh/docs/extend/npm-plugins/)）。项目级清单 `plugins.json` 与锁文件会写入 `.coden/`，建议提交到版本控制。
+
+安装时若包不满足作者协议（元数据缺失、`apiVersion` 不支持等），安装会失败并给出对应错误码；可对照 [插件作者协议](/coden/zh/docs/extend/plugin-authoring/) 与 [常见错误](/coden/zh/docs/operate/automation-and-recovery/) 排查。
+
+### 提交新插件
+
+插件作者将自己的 npm 包托管到公开仓库即可被浏览；包必须满足 [插件作者协议](/coden/zh/docs/extend/plugin-authoring/)。目录收录条件以市场页展示为准。
+
+### 相关参考
+
+- [npm 插件安装和管理](/coden/zh/docs/extend/npm-plugins/)
+- [插件作者协议](/coden/zh/docs/extend/plugin-authoring/)
+- [信任与安全边界](/coden/zh/docs/safety/security-boundaries/)

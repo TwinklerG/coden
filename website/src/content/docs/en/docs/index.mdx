@@ -1,11 +1,15 @@
 ---
-title: CodeN Docs
-description: What CodeN is, the shortest path to a first task, and the documentation map.
+title: CodeN Documentation
+description: Understand and shape a coding agent built around pluggable tool plugins.
 sidebar:
   order: 0
 ---
 
-CodeN (Code NJU) is a minimal coding agent implemented independently in TypeScript. It drives the model's native tool calling to read, modify, and execute commands locally; it does not depend on an agent framework or server-side code execution.
+CodeN is a hackable coding agent built around pluggable tool plugins. Its core execution path stays small and inspectable: the model sees tool contracts and decides when to call them; CodeN validates, authorizes, executes, records, and returns results to the next model request. “Hackable” means that you can observe and reshape this path, not that the product relies on a marketing persona.
+
+These docs are for readers who want to understand an agent rather than merely copy commands. Build a model of the runtime and its security boundaries first, then choose Plugins, Skills, Hooks, or project instructions to extend it; use the protocol reference for exact fields. Every behavioral claim is grounded in the current source, tests, and published artifact.
+
+CodeN (Code NJU) is a hackable coding agent built around pluggable tool plugins. It drives provider-native tool calling to read, modify, and execute commands locally; its small, inspectable core does not depend on an agent framework or server-side code execution.
 
 ## Shortest path to a first task
 
@@ -21,11 +25,11 @@ Install, configure, and finish a first task in three commands. CodeN starts in t
 
 | Step | Task | Page |
 | --- | --- | --- |
-| 1 | Confirm the runtime environment | [Requirements](/coden/en/docs/getting-started/requirements/) |
-| 2 | Install CodeN | [Install CodeN](/coden/en/docs/getting-started/installation/) |
-| 3 | Configure your first provider | [Configure Your First Provider](/coden/en/docs/getting-started/provider/) |
-| 4 | Understand the interface modes | [Launch the CLI / TUI](/coden/en/docs/getting-started/interfaces/) |
-| 5 | Complete your first task | [Complete Your First Task](/coden/en/docs/getting-started/first-task/) |
+| 1 | Confirm the runtime environment | [Requirements](/coden/en/docs/start/install/) |
+| 2 | Install CodeN | [Install CodeN](/coden/en/docs/start/install/) |
+| 3 | Configure your first provider | [Configure Your First Provider](/coden/en/docs/start/provider-and-model/) |
+| 4 | Understand the interface modes | [Launch the CLI / TUI](/coden/en/docs/start/first-task/) |
+| 5 | Complete your first task | [Complete Your First Task](/coden/en/docs/start/first-task/) |
 
 ## Documentation map
 
@@ -49,5 +53,5 @@ Install, configure, and finish a first task in three commands. CodeN starts in t
 
 - [CLI Reference](/coden/en/docs/reference/cli/)
 - [Configuration Reference](/coden/en/docs/reference/configuration/)
-- [Troubleshooting](/coden/en/docs/reference/troubleshooting/)
-- [Security Model](/coden/en/docs/reference/security-model/)
+- [Troubleshooting](/coden/en/docs/operate/automation-and-recovery/)
+- [Security Model](/coden/en/docs/safety/security-boundaries/)

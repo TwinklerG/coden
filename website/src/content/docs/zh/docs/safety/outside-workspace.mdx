@@ -1,0 +1,52 @@
+---
+title: 工作区外访问
+description: 区分结构化文件工具与 bash、插件的访问边界。
+sidebar:
+  order: 430
+---
+
+`--allow-outside-workspace` 是结构化文件工具的窄开关，不是全局文件系统策略。`bash`、插件和 Hook 本来就以用户进程权限运行，不能用这个选项限制。若任务需要强隔离，应在容器、虚拟机或受限账户中运行 CodeN。
+
+## 默认分类
+
+`read`/`write`/`edit` 的目标按**符号链接解析后的真实路径**分类（新文件按最近存在的真实父目录）：
+
+- 工作区内：`read` 自动允许；`write`/`edit` 按审批模式处理。
+- 工作区外：升级为 `modify`，默认逐次或会话授权（与普通修改一致）；`--auto` 下返回 `permission.outside_workspace_denied`。
+
+## 显式放开
+
+```bash
+coden --auto --allow-outside-workspace "your task"
+```
+
+- `--allow-outside-workspace` 必须与 `--auto` 同时使用（单独使用报配置错误）。
+- 只作用于 `read`/`write`/`edit` 三个结构化文件工具：允许访问工作区之外的任意可写路径。
+- 仍执行 `PreToolUse` 与权限策略；`dangerous` 风险不受该开关影响。
+
+## 符号链接与 TOCTOU
+
+- 分类基于 canonicalize（逐段解析符号链接，最多 32 层），不基于词法路径。
+- 操作执行前再次解析并比对（`revalidateStructuredFilePath`）：路径变化抛 `workspace.path_changed`。
+- 指向工作区外部的链接被判定为外部目标；`--allow-outside-workspace` 未开启时按外部路径处理。
+
+## 不受约束的部分
+
+- `bash` 以工作区为当前目录执行，但访问范围不受此开关限制；它拥有用户进程权限。
+- `activate_skill` 读取已发现并重新验证的 Skill 入口；Skill 附属资源（`references/` 等）用普通 `read` 时仍适用外部路径规则。
+- 用户级 Skill 位于 `~/.agents/skills/`（工作区外）：用普通 `read` 访问其资源时同样需要人工确认或 `--allow-outside-workspace`。
+
+## 失败模式
+
+| 场景 | 结果 |
+| --- | --- |
+| `--auto` 下访问外部 | `permission.outside_workspace_denied: rerun with --auto --allow-outside-workspace` |
+| 路径解析失败/逃逸 | `permission.workspace_denied`（含 `workspace.symlink_escape`/`workspace.outside`） |
+| 操作前路径变化 | `workspace.path_changed` |
+
+## 相关参考
+
+- [工作区](/coden/zh/docs/safety/workspace-and-trust/)
+- [工具与风险等级](/coden/zh/docs/agent/tools-and-context/)
+- [凭据与数据安全](/coden/zh/docs/safety/security-boundaries/)
+- [安全模型](/coden/zh/docs/safety/security-boundaries/)

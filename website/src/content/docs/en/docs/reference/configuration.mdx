@@ -1,18 +1,85 @@
 ---
 title: Configuration Reference
-description: Config entry points, the five-layer override order, and thinking/language settings summary.
+description: Complete fields, environment variables, defaults, and exceptions.
 sidebar:
-  order: 920
+  order: 620
 ---
 
-## Config file locations
+This page records current fields, defaults, and override rules. Configuration examples do not recommend committing secrets: an `env` object containing credentials belongs only in protected, ignored locations and remains subordinate to genuinely exported environment variables.
+
+## Configuration Reference
+
+### Complete example
+
+```json
+{
+  "language": "zh",
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "approvalModel": "gpt-5-mini",
+  "approvalStrictness": "medium",
+  "maxSteps": 20,
+  "contextWindow": 128000,
+  "reservedOutputTokens": 8192,
+  "safetyMargin": 4096,
+  "thinkingLevel": "default",
+  "plugins": [],
+  "env": {
+    "CODEN_OPENAI_API_KEY": "sk-..."
+  },
+  "hooks": {}
+}
+```
+
+### Field table
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `language` | `"zh"` \| `"en"` | `zh` | user scope only; ignored at project scope |
+| `provider` | `"openai"` \| `"anthropic"` | `openai` | model provider |
+| `model` | non-empty string | `gpt-5-mini` | model identifier |
+| `approvalModel` | non-empty string | falls back to `model` | Smart Approval review model |
+| `approvalStrictness` | `"soft"` \| `"medium"` \| `"hard"` | `medium` | review conservativeness |
+| `maxSteps` | positive integer | `20` | maximum model steps |
+| `contextWindow` | positive integer | `128000` | context window |
+| `reservedOutputTokens` | positive integer | `8192` | per-request output budget |
+| `safetyMargin` | non-negative integer | `4096` | input-budget safety margin |
+| `thinkingLevel` | one of six levels | `default` | thinking level |
+| `plugins` | string array | `[]` | additional local plugin paths/directories; three sources concatenated |
+| `env` | string map | `{}` | variables injected into the process environment |
+| `hooks` | event map | `{}` | hook config; user + project scopes merged |
+
+### Validation rules
+
+- `contextWindow`, `reservedOutputTokens`, and `safetyMargin` must be non-negative integers; the first two must be positive.
+- `contextWindow` must exceed `reservedOutputTokens + safetyMargin`.
+- `model` and `approvalModel` must be non-empty strings; `maxSteps` must be a positive integer.
+- `env` values must be strings; `plugins` elements must be strings.
+- `thinkingLevel` must be one of `default`/`off`/`minimal`/`low`/`medium`/`high`.
+- Anthropic with an enabled thinking level requires `reservedOutputTokens > 1024`.
+
+### Non-configurable field
+
+- `dataDir` (data directory) does not come from config: it is derived from `XDG_DATA_HOME`, defaulting to `~/.local/share/coden`.
+- Session IDs, workspace hashes, and interface modes are decided at runtime.
+
+### Related references
+
+- [Precedence](/coden/en/docs/operate/configuration/)
+- [User and Project Scopes](/coden/en/docs/operate/configuration/)
+- [Configuration Reference (README summary)](/coden/en/docs/reference/configuration/)
+- [Troubleshooting](/coden/en/docs/operate/automation-and-recovery/)
+
+## Configuration Reference
+
+### Config file locations
 
 | Scope | Path | Loaded |
 | --- | --- | --- |
 | user | `~/.config/coden/config.json` (overridable via `$XDG_CONFIG_HOME`) | at startup |
 | project | `<workspace>/.coden/config.json` | at startup (project overrides user, except `language`) |
 
-## Five-layer override (high → low)
+### Five-layer override (high → low)
 
 1. CLI flags
 2. `CODEN_*` environment variables
@@ -22,7 +89,7 @@ sidebar:
 
 Exceptions: `language` reads the user scope plus `--lang`; `plugins` concatenates three sources; `env` merges project-over-user without overwriting shell exports; `hooks` merge user-first.
 
-## Minimal config
+### Minimal config
 
 ```json
 {
@@ -34,26 +101,26 @@ Exceptions: `language` reads the user scope plus `--lang`; `plugins` concatenate
 }
 ```
 
-## Full fields
+### Full fields
 
-Types, defaults, and validation are in the [configuration field reference](/coden/en/docs/configuration/reference/). Behavior deep dives:
+Types, defaults, and validation are in the [configuration field reference](/coden/en/docs/reference/configuration/). Behavior deep dives:
 
 | Topic | Page |
 | --- | --- |
-| override order and merging | [Precedence](/coden/en/docs/configuration/precedence/) |
-| scopes and trust | [User and Project Scopes](/coden/en/docs/configuration/scopes/) |
-| environment variables and credentials | [Environment Variables](/coden/en/docs/configuration/environment/), [OpenAI Configuration](/coden/en/docs/configuration/openai/), [Anthropic Configuration](/coden/en/docs/configuration/anthropic/) |
-| language and thinking | [Language and Thinking Levels](/coden/en/docs/configuration/language-and-thinking/) |
-| data security | [Data Security](/coden/en/docs/configuration/data-security/) |
+| override order and merging | [Precedence](/coden/en/docs/operate/configuration/) |
+| scopes and trust | [User and Project Scopes](/coden/en/docs/operate/configuration/) |
+| environment variables and credentials | [Environment Variables](/coden/en/docs/operate/configuration/), [OpenAI Configuration](/coden/en/docs/operate/providers/), [Anthropic Configuration](/coden/en/docs/operate/providers/) |
+| language and thinking | [Language and Thinking Levels](/coden/en/docs/agent/compaction-and-thinking/) |
+| data security | [Data Security](/coden/en/docs/safety/security-boundaries/) |
 
-## Thinking-level notes
+### Thinking-level notes
 
 - Levels: `default` (sends no parameter), `off`, `minimal`, `low`, `medium`, `high`.
 - OpenAI maps to `reasoning_effort` (`off→minimal`); Anthropic maps to thinking budgets (1024 / 25% / 50% / 75%, requiring `reservedOutputTokens > 1024`).
 - Main-agent requests only; compaction and Smart Approval are unaffected.
 
-## Related references
+### Related references
 
-- [Reference](/coden/en/docs/configuration/reference/)
+- [Reference](/coden/en/docs/reference/configuration/)
 - [CLI Reference](/coden/en/docs/reference/cli/)
-- [Troubleshooting](/coden/en/docs/reference/troubleshooting/)
+- [Troubleshooting](/coden/en/docs/operate/automation-and-recovery/)

@@ -1,0 +1,104 @@
+---
+title: npm Plugins
+description: Manage npm plugin scopes, transactions, trust, and caching.
+sidebar:
+  order: 340
+---
+
+npm plugins combine tool contracts with reproducible dependency management. Project scope records a manifest and lockfile, while global scope belongs to the user. Installation transactions avoid partial state where possible. Lifecycle scripts are disabled by default, but entry validation still imports and executes package code.
+
+## npm Plugin Management
+
+### Install
+
+```bash
+coden plugin install npm:@scope/coden-plugin-example
+coden plugin install npm:@scope/coden-plugin-example@^2 --global
+coden plugin remove @scope/coden-plugin-example
+coden plugin list
+coden plugin sync
+```
+
+- Default scope is **project**; `--global` installs into the user-global scope.
+- Specifiers accept only `npm:<package>` or `npm:<package>@<version-or-tag>`; `https://registry.npmjs.org` is always used — private registries, Git, URLs, and local directory sources are unsupported.
+- Install validation imports the entry: top-level code runs with the current user's permissions.
+- Install/remove/upgrade require a CodeN restart; `/reload` re-reads local `.ts` plugins only.
+
+### Project files
+
+```text
+<workspace>/.coden/plugins.json              # manifest (commit)
+<workspace>/.coden/plugin-runtime/.gitignore # excludes node_modules (commit)
+<workspace>/.coden/plugin-runtime/bun.lock   # locked dependencies (commit)
+```
+
+`plugin-runtime/package.json` is generated deterministically from `plugins.json`; `node_modules/` is never committed. Global plugins live at `$XDG_DATA_HOME/coden/plugins/` (default `~/.local/share/coden/plugins/`) and are not part of the project repository.
+
+### Sync
+
+```bash
+coden plugin sync
+coden plugin sync --global
+```
+
+- Project `sync` requires `plugin-runtime/bun.lock` to exist, otherwise it reports `plugin.lock_missing`.
+- Sync runs `bun install` with `--frozen-lockfile`: an outdated lock file reports `plugin.lock_outdated`; update and commit the lock file.
+- Sync rebuilds the runtime and re-validates every plugin entry.
+
+### Lifecycle scripts
+
+| Behavior | Meaning |
+| --- | --- |
+| disabled by default | equivalent to `bun install --ignore-scripts`; `preinstall`/`install`/`postinstall` do not run |
+| `--allow-scripts` | lets this package and transitive deps run scripts with user permissions; prints a warning and asks again |
+| `--yes` | skips confirmations only, and never enables scripts on its own |
+
+### Listing and shadowing
+
+`coden plugin list` prints project and global sections: package name, installed version, requested version, tool count. When the same package exists in both scopes, the project row is marked as shadowed (`shadowed by project`) and the global version is inactive.
+
+### Transactions and concurrency
+
+- Install/sync/remove commit transactionally (manifest + runtime backups with crash recovery).
+- Only one transaction per scope at a time; concurrent operations report `plugin.install_busy` (stale locks are cleaned automatically).
+
+### Runtime requirement
+
+**Loading** npm plugins requires only a built `.js`/`.mjs` entry (Node or Bun); **install and sync** run `bun install` internally and need Bun on PATH.
+
+### Related references
+
+- [Local TypeScript Plugins](/coden/en/docs/extend/local-plugins/)
+- [Author Protocol](/coden/en/docs/extend/plugin-authoring/)
+- [Trust and Security Boundaries](/coden/en/docs/safety/security-boundaries/)
+- [Marketplace](/coden/en/docs/extend/npm-plugins/)
+
+## Marketplace
+
+### Marketplace entry
+
+- [插件市场（中文）](/coden/zh/plugins/)
+- [Plugin marketplace (English)](/coden/en/plugins/)
+
+The marketplace lists curated npm plugins for CodeN (name, version, description, and compatibility status) with filtering by package name and description. Data comes from live npm registry snapshots.
+
+### Installing a listed plugin
+
+```bash
+coden plugin install npm:coden-modern-unix
+coden plugin install npm:coden-msb
+```
+
+Restart CodeN after installing; `coden plugin list` confirms the registered tools (see [npm Plugin Management](/coden/en/docs/extend/npm-plugins/)).
+
+If a package violates the author protocol (missing metadata, unsupported `apiVersion`, etc.), installation fails with the matching error code; see the [Author Protocol](/coden/en/docs/extend/plugin-authoring/) and [Troubleshooting](/coden/en/docs/operate/automation-and-recovery/).
+
+### Submitting a plugin
+
+Authors can publish their npm package to a public registry to make it browsable; the package must satisfy the [Author Protocol](/coden/en/docs/extend/plugin-authoring/). Inclusion criteria are as shown on the marketplace page.
+
+### Related references
+
+- [npm Plugin Management](/coden/en/docs/extend/npm-plugins/)
+- [Author Protocol](/coden/en/docs/extend/plugin-authoring/)
+- [Trust and Security Boundaries](/coden/en/docs/safety/security-boundaries/)

@@ -4,150 +4,44 @@
 
 <!-- markdownlint-disable MD013 -->
 
-CodeN (Code NJU) is a minimal coding agent implemented independently in TypeScript. It uses providers' native tool calling to read and modify local files and run commands, without an agent framework or server-side code execution.
+**A hackable coding agent built around pluggable tool plugins.**
 
-## Installation and Usage
+CodeN (Code NJU) uses provider-native tool calling to read and modify files and run commands locally. Its agent core stays small and inspectable, so you can complete real coding work while understanding and shaping how model requests, tools, permissions, context, and sessions fit together.
 
-### Install from npm
+## Why CodeN is interesting
+
+- **Pluggable tools:** extend the model's action space with local TypeScript or npm plugins.
+- **Inspectable mechanics:** the agent loop, context compaction, approvals, and session recovery have explicit boundaries.
+- **Composable extension:** Plugins add actions, Skills supply method knowledge, and Hooks add deterministic lifecycle control.
+- **Local first:** code and tools run on your machine, without server-side code execution.
+
+## Start in 30 seconds
 
 ```bash
 bun add -g @twinklerg/coden     # or npm install -g @twinklerg/coden
-coden --version                 # 0.1.9
-coden --help
-```
-
-The published artifact is a minified, single-file Node CLI (`dist/index.js`). It requires **Node.js 22+**; Bun is not required at runtime.
-
-### Run from source
-
-Requirements: [Bun](https://bun.sh/) 1.1+ and [Just](https://github.com/casey/just).
-
-```bash
-bun install
-just check
-```
-
-The source uses only standard Web/Node.js APIs. Bun provides dependency management, scripts, and TypeScript plugin loading.
-
-### Examples
-
-```bash
 export CODEN_OPENAI_API_KEY=...
-coden                             # default full-screen TUI
-coden "fix the failing tests"    # submit in TUI and remain interactive
-coden --tui                       # explicitly start TUI
-coden --cli                       # use the legacy CLI/REPL
-coden -p --auto "implement the feature and run tests" # print once and exit
-coden --smart-approve "implement the feature and run tests"
-coden --lang en --help            # English for this process only
-coden --thinking high "analyze and fix this concurrency issue"
+coden "inspect this project, fix the failing tests, and verify the result"
+```
 
-export CODEN_THINKING_LEVEL=medium
-coden --resume <session-id>
+The published CLI requires **Node.js 22+**. Plain `coden` starts the continuous-output CLI/REPL. Use `coden --tui` to request the full-screen TUI explicitly, or `coden -p --auto "..."` for one-turn, pipeable execution.
 
+```bash
 export CODEN_ANTHROPIC_API_KEY=...
 coden --provider anthropic --model claude-sonnet-4-20250514
 
-coden --resume <session-id>
-coden --resume                  # list sessions for this workspace
+coden --smart-approve "refactor this module and run its tests"
+coden --resume                 # list sessions for this workspace
+coden --resume <session-id>    # resume one session
 ```
 
-On a capable TTY, `coden` defaults to the Ink full-screen TUI. `--tui` requests it explicitly and `--cli` selects the original continuous-output CLI. Non-TTY input/output, `TERM=dumb`, or unavailable raw mode automatically falls back to CLI; explicit TUI fallback prints a warning. `-p/--print` always remains plain, pipeable, and exits after one turn. `NO_COLOR` disables colors without disabling TUI.
+See [Get started](https://twinklerg.github.io/coden/en/docs/start/overview/) for installation, providers, interfaces, and runtime requirements.
 
-The TUI keeps CLI-like content with a transient activity row, fixed multiline input, and provider/model, workspace, approval, phase, and context status. Enter submits; Shift+Enter or one trailing `\` adds a newline. Use `PageUp`/`PageDown` or the mouse wheel to browse and `End` to follow the latest output. `Ctrl+C` cancels a running turn; empty `Ctrl+D` or idle `Ctrl+C` exits. Turns remain serial and input is not queued while running.
+## Shape the agent with tool plugins
 
-Tool permissions, workspace trust, and plugin confirmations appear inline in the transcript instead of dialogs. The task input remains visible but disabled while a choice is pending. Normal permission uses `y` to allow once, `s` to allow for the session, and `n`/`Esc` to deny; dangerous operations do not offer session approval. The request, available choices, and final answer remain in the current TUI transcript.
-
-Both interfaces support `/help`, `/skills`, `/session`, `/sessions`, `/compact`, `/reload`, `/new`, `/lang`, `/thinking`, and `/quit`. `/lang` lists `zh`, `en`, and the current language; `/lang en` or `/lang zh` atomically persists the preference and immediately changes the UI, system prompt, and built-in tool descriptions. `/thinking` lists the six levels, the current value, and the effective mapping; `/thinking <level>` switches while idle and persists the choice to the current session. The legacy CLI retains multiline editing, process-local history, and its startup banner.
-
-CodeN has a fixed Chinese default and does not inspect the operating-system locale. `--lang zh|en` overrides only the current process and never writes configuration. The UI, system prompt, and built-in tools share one language. An explicit request for another reply language may be followed for one task without changing UI or persistent preferences. Third-party plugin names, descriptions, output, and errors remain exactly as authored.
-
-Core options are `--tui`, `--cli`, `--lang`, `--provider`, `--model`, `-p/--print`, `--resume [session-id]`, `--smart-approve`, `--auto`, `--allow-outside-workspace`, `--verbose`, `--max-steps`, `--thinking <level>`, repeatable `--plugin`, and `--version`. `--tui` cannot be combined with `--cli` or `--print`.
-
-## Configuration
-
-Ordinary fields use this precedence: CLI > `CODEN_*` environment > `<workspace>/.coden/config.json` > `~/.config/coden/config.json` > defaults.
-
-```json
-{
-  "language": "en",
-  "provider": "openai",
-  "model": "gpt-5-mini",
-  "approvalModel": "gpt-5-mini",
-  "approvalStrictness": "medium",
-  "maxSteps": 20,
-  "contextWindow": 128000,
-  "reservedOutputTokens": 8192,
-  "safetyMargin": 4096,
-  "thinkingLevel": "default",
-  "plugins": [],
-  "env": {
-    "CODEN_OPENAI_API_KEY": "sk-..."
-  }
-}
-```
-
-`language` is a user-only preference read exclusively from `~/.config/coden/config.json`. A `language` field in project `.coden/config.json` is ignored and cannot override personal UI or Agent language. Only canonical `zh` and `en` are accepted. `--lang` has highest startup precedence but affects only this process. `/lang <zh|en>` preserves every other configuration field and atomically updates the user file with mode `0600`.
-
-Supported environment variables include `CODEN_PROVIDER`, `CODEN_MODEL`, `CODEN_MAX_STEPS`, `CODEN_THINKING_LEVEL`, `CODEN_OPENAI_API_KEY`, `CODEN_OPENAI_BASE_URL`, `CODEN_ANTHROPIC_API_KEY`, `XDG_CONFIG_HOME`, and `XDG_DATA_HOME`. There is no `CODEN_LANG`.
-
-User and project `env` objects declare environment variables, including secrets. Project values override user values, but neither overrides an already exported shell variable. Keep secrets in ignored `~/.config/coden/` or `.coden/`, never in committed/shared files.
-
-`approvalModel` uses the task provider and credentials, defaulting to `model`. `approvalStrictness` is `soft`, `medium`, or `hard` (default `medium`). Sessions and traces live under `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`, normally `~/.local/share/coden`. Directories and files keep `0700`/`0600` permissions. **Note**: session JSONL and traces may contain model reasoning, redacted-thinking, signatures, user text, and code fragments — sensitive data. Do not share or distribute them without review, and keep local private permissions.
-
-### Thinking level
-
-CodeN exposes a unified `default | off | minimal | low | medium | high` thinking level via `--thinking <level>`, `CODEN_THINKING_LEVEL`, the `thinkingLevel` config field, or the in-session `/thinking [level]` command. The default `default` sends no thinking parameters and preserves pre-upgrade behavior.
-
-- OpenAI maps to `reasoning_effort`: `off` maps to `minimal` and is displayed as `off→minimal` (OpenAI reasoning models have no uniform true-off value); `minimal`/`low`/`medium`/`high` map to the same names.
-- Anthropic maps to `thinking`: `off` sends `{ type: "disabled" }`; `minimal` uses 1024 tokens; `low`/`medium`/`high` use 25%/50%/75% of `reservedOutputTokens`, clamped to `[1024, reservedOutputTokens - 1]`. Thinking budgets stay inside `reservedOutputTokens`; higher levels reduce final text and tool-call capacity in the same output. Enabled thinking requires `reservedOutputTokens > 1024`.
-- CodeN keeps no model-capability allowlist and never silently removes a rejected parameter. Explicit non-default values are always sent; unsupported endpoints return a clear Provider error.
-- Thinking level applies only to main Agent requests; compaction and Smart Approval requests keep Provider defaults. Every step in a tool loop and every Provider retry uses the snapshot taken at turn start.
-- On resume, `--resume` uses the session's last saved level. Explicit `--thinking` wins over the saved value, environment, project config, and user config, and overwrites the session at startup. `/new` resets only the conversation, not the level; `/thinking` affects only the current process and session, never user or project config files.
-
-Anthropic extended thinking requires replaying thinking, redacted-thinking, and signature blocks verbatim on follow-up requests. CodeN stores them as `providerState` on assistant messages, persists them in the session, and replays them automatically across tool loops and resume; switching providers ignores non-matching provider state.
-
-## Agent Skills
-
-CodeN supports the progressive-disclosure [Agent Skills](https://agentskills.io/specification) layout and scans direct children of:
-
-```text
-~/.agents/skills/<skill-name>/SKILL.md
-<workspace>/skills/<skill-name>/SKILL.md
-<workspace>/.agents/skills/<skill-name>/SKILL.md
-```
-
-Later roots override earlier roots. Startup context includes only each valid Skill's author-provided name and description. When a task matches, the model calls `activate_skill` to load the full `SKILL.md` and absolute root. `/skills` lists effective names, descriptions, and `project`/`user` sources without invoking a model. Restart after changing Skill files. Invalid, oversized, or escaping symlink entries are skipped; `--verbose` shows why.
-
-This repository provides [`coden-tool-plugin-development`](skills/coden-tool-plugin-development/SKILL.md):
-
-```bash
-npx skills add TwinklerG/CodeN --skill coden-tool-plugin-development
-```
-
-## Tools and Permissions
-
-Built-ins are `read`, `write`, `edit`, `bash`, and read-only `activate_skill`. Structured file paths are classified by final real path, including nearest existing parents for new files, to prevent symlink bypasses.
-
-| Mode | Workspace `read`/`write`/`edit` | Outside-workspace `read`/`write`/`edit` |
-| --- | --- | --- |
-| Default interactive | `read` allowed; `write`/`edit` ask | ask once or for the session as modifications |
-| `--smart-approve` | `read` allowed; ordinary changes independently reviewed by an LLM, uncertainty goes to a human | always ask a human |
-| `--auto` | allowed | `permission.outside_workspace_denied` |
-| `--auto --allow-outside-workspace` | allowed | allowed |
-
-`--allow-outside-workspace` is valid only with `--auto` and controls only structured `read`, `write`, and `edit`. It permits arbitrary text-file changes outside the workspace and should be used only intentionally.
-
-**This is not a general sandbox.** `bash` and TypeScript plugins run with user-process permissions. Risk classification is an accidental-damage guard. Bash timeouts terminate the process group; in-process plugins must cooperate with `AbortSignal`.
-
-## Local TypeScript Plugins
-
-CodeN scans `~/.config/coden/plugins/*.ts`, `<workspace>/.coden/plugins/*.ts`, and paths supplied by `--plugin` or configuration. Project plugins always require first-use workspace trust, even with `--auto`. `/reload` content-hash reloads local plugins and atomically replaces the Registry.
-
-Plugins must be self-contained single files because CodeN loads source through a `data:text/typescript` URL for reliable Bun reloads. Relative imports cannot resolve; package imports can.
+A tool plugin adds a structured action to the tool set visible to the model. npm plugins target the public `@twinklerg/coden/plugin` contract:
 
 ```ts
-import type { ToolDefinition } from "../../src/core/types.js";
+import type { ToolDefinition } from "@twinklerg/coden/plugin";
 
 const tool: ToolDefinition = {
   name: "line_count",
@@ -164,57 +58,62 @@ const tool: ToolDefinition = {
     return { content: String(text.split("\n").length) };
   },
 };
+
 export default tool;
 ```
 
-Plugin text is not translated. Failures or duplicate names cannot replace built-ins or prevent other plugins from loading.
-
-## npm Plugins
-
-CodeN installs built npm plugins from public npmjs using `npm:<package>` or `npm:<package>@<version-or-tag>`:
-
 ```bash
 coden plugin install npm:@scope/coden-plugin-example
-coden plugin install npm:@scope/coden-plugin-example@^2 --global
 coden plugin list
 coden plugin sync
-coden plugin remove @scope/coden-plugin-example
 ```
 
-Project manifests/runtimes live under `<workspace>/.coden/`; global plugins live under `$XDG_DATA_HOME/coden/plugins/`. Project npm plugins require workspace trust; global plugins are treated as an explicit user installation.
+- **Local `.ts` plugins** optimize for experiments, require Bun, and currently must be self-contained single files.
+- **npm plugins** publish built ESM. Node or Bun can load them, but installation and synchronization invoke `bun install`.
+- Restart after installing or updating a plugin. `/reload` guarantees reload only for local TypeScript plugins.
 
-Lifecycle scripts are disabled by default. `--allow-scripts` permits the package and dependencies to run install scripts with full user permissions; `--yes` skips confirmation but does not enable scripts. Validation imports the entry, so top-level plugin code still runs with full user permissions. npm plugins are not sandboxed. Restart CodeN after npm plugin changes; `/reload` only guarantees local `.ts` reloads.
+Read the [tool plugin execution model](https://twinklerg.github.io/coden/en/docs/extend/tool-plugins/), [plugin authoring guide](https://twinklerg.github.io/coden/en/docs/extend/plugin-authoring/), and [plugin marketplace](https://twinklerg.github.io/coden/en/plugins/).
 
-Plugin packages publish built `.js`/`.mjs`, set `"type": "module"`, and declare:
+## Choose the right extension
 
-```json
-{
-  "name": "@scope/coden-plugin-example",
-  "version": "1.0.0",
-  "type": "module",
-  "files": ["dist"],
-  "coden": {
-    "apiVersion": 1,
-    "plugin": "./dist/index.js"
-  }
-}
-```
+| Goal | Mechanism | Layer changed |
+| --- | --- | --- |
+| Add an action the model can call | Tool Plugin | Agent action space |
+| Teach the model a specialized workflow | Skill | Agent method and context |
+| Run deterministic logic at lifecycle events | Hook | Runtime control and policy |
+| Supply durable project constraints | `AGENTS.md` | Startup context and behavior |
 
-Use `import type { CodeNPlugin, ToolDefinition } from "@twinklerg/coden/plugin"`. The `/plugin` subpath is the sole public contract. The package root is a CLI and is not a programmatic library. Published npm files contain the built CLI and generated plugin contract, not `src`.
+See [Choose an extension](https://twinklerg.github.io/coden/en/docs/extend/choose-an-extension/).
 
-## Development and Testing
+## Current boundaries
+
+- Providers: OpenAI and Anthropic; you choose the model ID.
+- Built-in tools: `read`, `write`, `edit`, and `bash`, plus `activate_skill` when a valid Skill exists.
+- Approval: manual, Smart Approval, and auto. These are approval policies, not sandbox levels.
+- Sessions: workspace-partitioned JSONL that restores conversation, thinking level, and provider state.
+- Interfaces: default CLI/REPL, explicit TUI, and one-turn print mode.
+- CodeN currently has no built-in subagents, MCP, plan mode, or general security sandbox.
+
+## Security
+
+**`bash`, tool plugins, and Hooks run with current user-process privileges. They are not a security sandbox.** Project plugins and Hooks require workspace trust, but trust prompts, tool `risk`, Smart Approval, and `--auto` cannot contain malicious code. Install and execute only code you are willing to run as the current account. Use a container, virtual machine, or restricted account when you need strong isolation.
+
+Sessions and traces can contain prompts, source code, tool inputs and outputs, and model reasoning. Keep them private and do not share them without review. Read [Security boundaries](https://twinklerg.github.io/coden/en/docs/safety/security-boundaries/).
+
+## Documentation and development
+
+- [English documentation](https://twinklerg.github.io/coden/en/docs/)
+- [中文文档](https://twinklerg.github.io/coden/zh/docs/)
+- [Plugin marketplace](https://twinklerg.github.io/coden/en/plugins/)
+- [Plugin protocol reference](https://twinklerg.github.io/coden/en/docs/reference/plugins/)
 
 ```bash
-just fmt
-just test
+git clone https://github.com/TwinklerG/CodeN.git
+cd CodeN
+bun install
 just check
+just website-check
 just build
-just publish-dry-run
-just publish
 ```
 
-Offline `ScriptedProvider` integration tests cover tool loops, denial, retry, switching, and resume. Live tests are opt-in:
-
-```bash
-CODEN_LIVE_TEST=1 CODEN_OPENAI_API_KEY=... bun run test
-```
+The repository uses Just as its command runner, Bun as its JS/TS toolchain, and Biome for linting and formatting. Source code avoids Bun-specific APIs. MIT License.

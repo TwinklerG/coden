@@ -1,0 +1,159 @@
+---
+title: Configuration Model
+description: Understand configuration scopes, precedence, merging, and validation.
+sidebar:
+  order: 510
+---
+
+Configuration is not one file; it is a set of inputs with precedence and special merge rules. CLI flags and exported environment express run intent, project configuration expresses repository conventions, and user configuration expresses personal defaults. For every field, consider scope, whether a project may override it, and whether invalid values are rejected or defaulted.
+
+## Precedence
+
+### Override order (highest first)
+
+| Layer | Source |
+| --- | --- |
+| 1 | CLI flags (`--provider`, `--model`, `--max-steps`, `--thinking`, `--lang`, `--plugin`) |
+| 2 | `CODEN_*` environment variables (`CODEN_PROVIDER`, `CODEN_MODEL`, `CODEN_MAX_STEPS`, `CODEN_THINKING_LEVEL`) |
+| 3 | `<workspace>/.coden/config.json` (project) |
+| 4 | `~/.config/coden/config.json` (user; overridable via `XDG_CONFIG_HOME`) |
+| 5 | built-in defaults |
+
+### Exceptions and merge rules
+
+| Field | Rule |
+| --- | --- |
+| `language` | a user-owned preference: read from the user config only, and the project-level field is **ignored**; `--lang` wins but affects only this process; `/lang` atomically writes back the user config |
+| `plugins` | **concatenated**, not overridden: user → project → CLI `--plugin` in that order of effect |
+| `env` | merged across scopes and injected **key by key**; project keys override user keys; an already-exported shell variable is **not** overwritten (shell export > config `env`) |
+| `hooks` | merged into an ordered list: user hooks first, project hooks after; at most 64 commands per event |
+
+The remaining fields (`provider`, `model`, `approvalModel`, `approvalStrictness`, `maxSteps`, `contextWindow`, `reservedOutputTokens`, `safetyMargin`, `thinkingLevel`) are simple overrides: the higher layer's value fully replaces the lower layer's.
+
+### When configuration is read
+
+- Configuration is read once at process startup; changes require a restart (`/reload` reloads plugins only, never config).
+- Invalid JSON at any layer (syntax, types, illegal values) fails startup with `Cannot read config ...` and exit code 2.
+- Session listing (`coden --resume` without an ID) also loads config and runs the same validation.
+
+### Environment-variable errors
+
+Illegal values for `CODEN_PROVIDER`, `CODEN_MODEL`, `CODEN_MAX_STEPS`, and `CODEN_THINKING_LEVEL` throw at load time instead of silently degrading.
+
+### Related references
+
+- [User and Project Scopes](/coden/en/docs/operate/configuration/)
+- [Environment Variables](/coden/en/docs/operate/configuration/)
+- [Reference](/coden/en/docs/reference/configuration/)
+- [CLI Options](/coden/en/docs/reference/cli/)
+
+## User and Project Scopes
+
+### Scope comparison
+
+| Scope | Path | Ownership |
+| --- | --- | --- |
+| user | `~/.config/coden/config.json` (`$XDG_CONFIG_HOME/coden/config.json`) | the current user; shared across projects |
+| project | `<workspace>/.coden/config.json` | a single project; ignored by `.gitignore` and not committed by default |
+
+The data directory is separate from config: `$XDG_DATA_HOME/coden/` (default `~/.local/share/coden/`) holds sessions and global plugins and is not part of the project repository.
+
+### Project file layout
+
+```text
+.coden/
+├── config.json          # project config (gitignored)
+├── plugins.json         # npm plugin manifest (recommended to commit)
+├── plugin-runtime/      # plugin runtime; package.json generated from the manifest, node_modules not committed
+└── plugins/*.ts         # local TypeScript plugins (gitignored)
+```
+
+### Merge behavior
+
+| Behavior | Meaning |
+| --- | --- |
+| project overrides user | except `language` (user-owned), the project-level field replaces the same-named field |
+| `plugins` concatenated | user + project + CLI, applied in that order |
+| `env` merged | project keys override user keys; shell-exported variables are not overwritten |
+| `hooks` merged | user hooks first, project hooks after, numbered consecutively |
+
+### Project config example
+
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-20250514",
+  "maxSteps": 40,
+  "thinkingLevel": "medium"
+}
+```
+
+### Trust differences
+
+- Project hooks and project npm plugins require **explicit workspace trust** on first use (the real path is recorded in `~/.config/coden/trusted-workspaces.json`).
+- User hooks and global plugins are treated as user-initiated installs and are not re-confirmed at every startup.
+- `--auto` never skips project-level trust.
+
+### Related references
+
+- [Precedence](/coden/en/docs/operate/configuration/)
+- [Reference](/coden/en/docs/reference/configuration/)
+- [Workspace](/coden/en/docs/safety/workspace-and-trust/)
+- [Trust and Security Boundaries](/coden/en/docs/safety/security-boundaries/)
+
+## Environment Variables
+
+### Configuration variables
+
+| Variable | Values | Effect |
+| --- | --- | --- |
+| `CODEN_PROVIDER` | `openai` \| `anthropic` | overrides the provider |
+| `CODEN_MODEL` | model identifier | overrides the model |
+| `CODEN_MAX_STEPS` | positive integer | overrides the maximum steps |
+| `CODEN_THINKING_LEVEL` | `default` \| `off` \| `minimal` \| `low` \| `medium` \| `high` | overrides the thinking level |
+
+### Credential variables
+
+| Variable | Effect |
+| --- | --- |
+| `CODEN_OPENAI_API_KEY` | API key for the OpenAI provider (required) |
+| `CODEN_ANTHROPIC_API_KEY` | API key for the Anthropic provider (required) |
+| `CODEN_OPENAI_BASE_URL` | base URL for an OpenAI-compatible endpoint (optional) |
+
+Credentials are read directly when the provider is constructed; a missing key fails startup (`..._API_KEY is required`, exit code 2).
+
+### Path variables
+
+| Variable | Effect | Default |
+| --- | --- | --- |
+| `XDG_CONFIG_HOME` | config root (`<root>/coden/config.json`, `trusted-workspaces.json`) | `~/.config` |
+| `XDG_DATA_HOME` | data root (`<root>/coden/sessions/`, `<root>/coden/plugins/`) | `~/.local/share` |
+
+### Config `env` field injection
+
+The `env` field in user or project config is injected into the process environment at config load:
+
+- Two scopes merge with project keys overriding user keys.
+- An already-exported shell variable is **not** overwritten: `CLI > environment > config env`.
+- Only string values are accepted; anything else fails config loading.
+- Injection happens before provider creation, so the `env` field can carry API keys.
+
+```json
+{
+  "env": {
+    "CODEN_OPENAI_API_KEY": "sk-...",
+    "CODEN_MODEL": "gpt-5-mini"
+  }
+}
+```
+
+### Additional hook subprocess variables
+
+Hook commands also receive `CODEN_PROJECT_DIR`, `CODEN_SESSION_ID`, and `CODEN_HOOK_EVENT` (see [Protocol](/coden/en/docs/reference/hooks-and-storage/)).
+
+### Related references
+
+- [Precedence](/coden/en/docs/operate/configuration/)
+- [OpenAI Configuration](/coden/en/docs/operate/providers/)
+- [Anthropic Configuration](/coden/en/docs/operate/providers/)
+- [Reference](/coden/en/docs/reference/configuration/)

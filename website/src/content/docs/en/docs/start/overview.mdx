@@ -1,0 +1,126 @@
+---
+title: Meet CodeN
+description: Understand CodeN's position, design choices, and explicit boundaries.
+sidebar:
+  order: 110
+---
+
+CodeN has a concrete boundary: it is a local terminal coding agent that connects directly to a model provider. Its core is neither a remote execution service nor a general agent framework; it connects provider-native tool calling to a local tool registry, permission policy, sessions, and extension mechanisms.
+
+The central design choice is malleability. A Plugin changes the actions available to the model, a Skill supplies method knowledge on demand, a Hook runs deterministic policy at lifecycle boundaries, and `AGENTS.md` supplies durable project instructions. They complement one another, but none turns untrusted code into a sandbox.
+
+## CodeN Docs
+
+CodeN (Code NJU) is a hackable coding agent built around pluggable tool plugins. It drives provider-native tool calling to read, modify, and execute commands locally; its small, inspectable core does not depend on an agent framework or server-side code execution.
+
+### Shortest path to a first task
+
+```bash
+bun add -g @twinklerg/coden      # or npm install -g @twinklerg/coden
+export CODEN_OPENAI_API_KEY=...  # or CODEN_ANTHROPIC_API_KEY
+coden "fix the failing tests in this project"
+```
+
+Install, configure, and finish a first task in three commands. CodeN starts in the CLI/REPL by default and treats the working directory as its workspace.
+
+### Workflow
+
+| Step | Task | Page |
+| --- | --- | --- |
+| 1 | Confirm the runtime environment | [Requirements](/coden/en/docs/start/install/) |
+| 2 | Install CodeN | [Install CodeN](/coden/en/docs/start/install/) |
+| 3 | Configure your first provider | [Configure Your First Provider](/coden/en/docs/start/provider-and-model/) |
+| 4 | Understand the interface modes | [Launch the CLI / TUI](/coden/en/docs/start/first-task/) |
+| 5 | Complete your first task | [Complete Your First Task](/coden/en/docs/start/first-task/) |
+
+### Documentation map
+
+- **Core Concepts**: agent loop, workspace, tools and risk levels, approval modes, sessions, context and thinking levels.
+- **Interfaces**: CLI/REPL, full-screen TUI, print mode, slash commands, CLI options.
+- **Configuration**: precedence, scopes, environment variables, OpenAI/Anthropic setup, language and thinking levels, field reference, credential and data security.
+- **Skills**: discovery, creating a skill, installation and debugging.
+- **Plugins**: local TypeScript plugins, npm plugin management, author protocol, trust and security boundaries, marketplace.
+- **Agent Hooks**: events, matchers, I/O protocol, decisions and permissions, execution and timeouts, trust and security, examples.
+- **Advanced**: Smart Approval, outside-workspace access, session storage, custom base URL, automation.
+- **Reference**: CLI reference, configuration reference, troubleshooting, FAQ, security model.
+
+### Boundaries to keep in mind
+
+- Every command, configuration key, and behavior in these docs is verified against the current source code.
+- CodeN does not read the system locale; the default interface language is Chinese.
+- `bash` and plugins run with the current user's process permissions. This is not a general-purpose sandbox; risk classification is a heuristic guard against mistakes.
+- Session JSONL and trace files may contain sensitive content; do not share them without review.
+
+### Related references
+
+- [CLI Reference](/coden/en/docs/reference/cli/)
+- [Configuration Reference](/coden/en/docs/reference/configuration/)
+- [Troubleshooting](/coden/en/docs/operate/automation-and-recovery/)
+- [Security Model](/coden/en/docs/safety/security-boundaries/)
+
+## FAQ
+
+### What is CodeN?
+
+A hackable coding agent implemented independently in TypeScript and built around pluggable tool plugins: it drives provider-native tool calling to read, modify, and execute locally, without an agent framework or server-side code execution.
+
+### Node or Bun?
+
+| Scenario | Requirement |
+| --- | --- |
+| run the published CLI | Node.js 22+ |
+| local TypeScript plugins (`*.ts`) | Bun (cannot load under Node) |
+| npm plugin install/sync | `bun` on PATH |
+| develop from source | Bun 1.1+ and Just |
+
+### Which models are supported?
+
+Two providers, `openai` and `anthropic`, with model IDs set explicitly (default `gpt-5-mini`). CodeN maintains no model capability allowlist and sends parameters as-is. See [Configure Your First Provider](/coden/en/docs/start/provider-and-model/).
+
+### Are custom endpoints supported?
+
+OpenAI-compatible endpoints via `CODEN_OPENAI_BASE_URL`. Anthropic always uses the official endpoint. See [Custom Base URL](/coden/en/docs/operate/providers/).
+
+### Where are sessions stored?
+
+`$XDG_DATA_HOME/coden/sessions/<workspace-hash>/` (default `~/.local/share/coden`). File permissions are `0700`/`0600`; contents include model output and reasoning and are sensitive. See [Session Storage](/coden/en/docs/agent/sessions/).
+
+### How do I control usage?
+
+- `-p --auto` for single-turn, CI-friendly runs.
+- `--max-steps` bounds steps (default 20).
+- `--resume <id>` restores context instead of rebuilding it.
+- Thinking levels affect budget allocation (Anthropic budgets count inside `reservedOutputTokens`).
+
+### Can plugins do dangerous things?
+
+Plugins and `bash` run with the current user's process permissions and are **not a sandbox**. Guards: project plugins require workspace trust; npm lifecycle scripts are disabled by default; dangerous-command detection; `--auto` never skips trust confirmation. See [Plugin Trust and Security](/coden/en/docs/safety/security-boundaries/).
+
+### Are private npm registries supported?
+
+No. npm plugins always use `https://registry.npmjs.org`, and specifiers accept only `npm:<package>[@version]`; private registries, Git, URLs, and local directory sources are unsupported.
+
+### How do I resume an interrupted task?
+
+Restart and run `coden --resume <session-id>`; interrupted tool calls are repaired as `runtime.interrupted` errors so the model can continue.
+
+### How do I contribute?
+
+```bash
+git clone <repository-url>
+cd coden
+bun install
+just check
+```
+
+`just build` builds the CLI and plugin contract; `just publish-dry-run` previews the npm publish contents.
+
+### Are the commands in these docs verified?
+
+Yes. Every command, default, and behavior is checked against the current source, tests, and the built artifact; unverifiable claims do not appear.
+
+### Related references
+
+- [Troubleshooting](/coden/en/docs/operate/automation-and-recovery/)
+- [CLI Reference](/coden/en/docs/reference/cli/)
+- [Security Model](/coden/en/docs/safety/security-boundaries/)

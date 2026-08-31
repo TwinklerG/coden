@@ -1,0 +1,95 @@
+---
+title: Choose an Extension
+description: Choose precisely among Plugins, Skills, Hooks, and AGENTS.md.
+sidebar:
+  order: 310
+---
+
+Do not turn every customization into a plugin. Use a Tool Plugin for a new action, a Skill for a method the model should follow, a Hook for predictable policy at a fixed event, and `AGENTS.md` for durable project-wide constraints. The wrong choice mixes knowledge, permission, and executable code in one layer.
+
+| Goal | Mechanism | Layer changed | Executes code |
+| --- | --- | --- | --- |
+| Add an action the model can call | Tool Plugin | Agent action space | Yes, inside the main process |
+| Teach the model a specialized workflow | Skill | Agent method and context | Not by itself; its guidance may request tools |
+| Run deterministic logic at lifecycle events | Hook | Runtime control and policy | Yes, as a command subprocess |
+| Supply durable project constraints | `AGENTS.md` | Startup context and behavior | No, prompt context only |
+
+Before choosing, ask whether the requirement is a new action, method knowledge, enforced event policy, or durable project guidance. Only the first category should default to a tool plugin.
+
+## Discovery
+
+### Scan locations (once at startup)
+
+```text
+~/.agents/skills/<skill-name>/SKILL.md     # user
+<workspace>/skills/<skill-name>/SKILL.md   # project (bundled)
+<workspace>/.agents/skills/<skill-name>/SKILL.md  # project (local)
+```
+
+Direct subdirectories are scanned in that order; each candidate must be `<skill-name>/SKILL.md`.
+
+### Override order
+
+Same-named skills override in user → bundled → local order, so locally installed project skills win. `skills/` is for repository-bundled, publicly distributable skills; `.agents/skills/` is for locally installed project skills.
+
+### Format validation
+
+| Rule | Requirement |
+| --- | --- |
+| frontmatter | must start with a parseable YAML frontmatter block |
+| `name` | `^[a-z0-9][a-z0-9-]{0,63}$` and must match the directory name |
+| `description` | non-empty string, ≤ 1024 characters |
+| size | `SKILL.md` ≤ 1MB |
+| paths | no symlink escape from the scan root; must be a regular file |
+
+Optional frontmatter fields: `license`, `compatibility`, `metadata`, `allowed-tools`.
+
+Invalid entries are skipped; `--verbose` prints each failure reason (scope, path, reason). A failure affects neither other skills nor startup.
+
+### Context injection
+
+- The startup context (system prompt) contains only each active skill's **name and description** (`formatSkillCatalog`).
+- When a task matches, the model calls `activate_skill` to load the full instructions and the skill's absolute root; resources such as `references/` and `scripts/` are read with ordinary tools as needed.
+- With no active skill, `activate_skill` returns `skill.not_found`.
+- Skills are discovered at startup only: file changes require a CodeN restart.
+
+### Related references
+
+- [Create a Skill](/coden/en/docs/extend/skills-and-hooks/)
+- [Install and Debug](/coden/en/docs/extend/skills-and-hooks/)
+- [Slash Commands](/coden/en/docs/reference/cli/)
+
+## Agent Hooks Events
+
+### Event overview
+
+| Event | Timing | Controllable | Payload highlights |
+| --- | --- | --- | --- |
+| `SessionStart` | session startup or resume | no | `source: startup \| resume` |
+| `UserPromptSubmit` | after the user submits input | yes (block) | `prompt` |
+| `PreToolUse` | before a tool executes | yes | `toolName`, `callId`, `input`, `risk` |
+| `PermissionRequest` | before human authorization is needed | yes | `toolName`, `callId`, `input`, `risk`, `reason: policy \| hook` |
+| `PostToolUse` | after a tool succeeds | no | `toolName`, `input`, `result`, `durationMs` |
+| `PostToolUseFailure` | after a tool fails | no | `toolName`, `input`, `errorType`, `error`, `durationMs` |
+| `Notification` | when the user's attention is needed | no | `notificationType: permission_prompt \| attention_required`, `title`, `message` |
+| `Stop` | when the model stops calling tools | yes (demand more work) | `answer`, `toolsExecuted`, `stopHookActive` |
+| `SessionEnd` | when the session ends | no | `reason: completed \| failed \| cancelled \| eof \| quit` |
+
+### Control semantics
+
+- Controllable set: `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `Stop`.
+- Exit code `2` on a controllable event counts as an **explicit block** (`blocked`); blocks on `UserPromptSubmit` and `Stop` use `decision`/`reason` in `stdout` JSON, while `PreToolUse` and `PermissionRequest` use `permissionDecision`/`decision`.
+- Exit code `0` with empty stdout is a no-op; other failures (non-zero, timeout, output/input over limit, invalid JSON) count as hook failures with a warning and never block.
+
+### Relationships
+
+- `PreToolUse` runs before any permission decision; `PermissionRequest` runs only when the policy layer needs a human.
+- `Notification` fires for `permission_prompt` and `attention_required` (turn failure) scenarios.
+- A `Stop` block injects feedback asking the model to continue, still bounded by `maxSteps`; a repeated block sets `stopHookActive`.
+
+### Related references
+
+- [Matchers](/coden/en/docs/extend/skills-and-hooks/)
+- [Protocol](/coden/en/docs/reference/hooks-and-storage/)
+- [Decisions](/coden/en/docs/reference/hooks-and-storage/)
+- [Examples](/coden/en/docs/extend/skills-and-hooks/)

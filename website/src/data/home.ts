@@ -33,20 +33,21 @@ export interface HomeContent {
 export const HOME_CONTENT: Record<Language, HomeContent> = {
   zh: {
     hero: {
-      intro: "本地优先 · 模型原生 Tool Calling",
+      intro: "可插拔工具插件 · 模型原生 Tool Calling",
       title: "CodeN",
-      description: "在本地工作区中安装、审查、编辑和验证代码，保留完整的审批和会话控制。",
+      description:
+        "一个有意思的 Coding Agent：核心小而透明，可在本地工作区中观察并塑造完整工具循环。",
     },
     features: [
       {
-        tag: "Local-first",
-        title: "直接操作工作区",
-        description: "围绕当前仓库读写文件，而不是绕一层抽象任务面板。",
+        tag: "Plugins",
+        title: "扩展 Agent 的行动空间",
+        description: "用本地 TypeScript 或 npm 工具插件，把专业能力直接加入模型可调用的工具集。",
       },
       {
-        tag: "Approval",
-        title: "明确的风险控制",
-        description: "使用 manual、smart 和 auto 审批模式把权限边界说清楚。",
+        tag: "Agent loop",
+        title: "看清每一次工具循环",
+        description: "理解模型请求、Schema 校验、审批、执行、结果回传与上下文演进。",
       },
       {
         tag: "Interfaces",
@@ -54,9 +55,9 @@ export const HOME_CONTENT: Record<Language, HomeContent> = {
         description: "同一套 Agent 能切换命令行、全屏终端和纯输出模式。",
       },
       {
-        tag: "Skills",
-        title: "Skills 与插件",
-        description: "通过本地 Skill 与 npm 插件扩展工作流，而不是引入后台服务。",
+        tag: "Composable",
+        title: "Plugins、Skills 与 Hooks",
+        description: "分别扩展行动、方法知识和确定性生命周期控制，不把不同信任层混在一起。",
       },
       {
         tag: "Sessions",
@@ -114,23 +115,23 @@ export const HOME_CONTENT: Record<Language, HomeContent> = {
   },
   en: {
     hero: {
-      intro: "Local-first · model-native tool calling",
+      intro: "Pluggable tool plugins · model-native tool calling",
       title: "CodeN",
       description:
-        "Install, inspect, edit, and verify code inside the local workspace with clear approval and session control.",
+        "A hackable coding agent with a small, inspectable core for observing and shaping complete tool loops in a local workspace.",
     },
     features: [
       {
-        tag: "Local-first",
-        title: "Operate on the workspace directly",
+        tag: "Plugins",
+        title: "Extend the agent's action space",
         description:
-          "Read and write files in the current repo without a separate task layer in the middle.",
+          "Add specialized capabilities directly to the model's tool set with local TypeScript or npm tool plugins.",
       },
       {
-        tag: "Approval",
-        title: "Explicit risk control",
+        tag: "Agent loop",
+        title: "Inspect every tool loop",
         description:
-          "Use manual, smart, and auto approval modes to keep permission boundaries visible.",
+          "Understand model requests, schema validation, approval, execution, result replay, and context evolution.",
       },
       {
         tag: "Interfaces",
@@ -139,10 +140,10 @@ export const HOME_CONTENT: Record<Language, HomeContent> = {
           "Switch the same agent between command line, full-screen terminal, and output-only modes.",
       },
       {
-        tag: "Skills",
-        title: "Skills and plugins",
+        tag: "Composable",
+        title: "Plugins, Skills, and Hooks",
         description:
-          "Extend workflows with local skills and npm plugins instead of backend services.",
+          "Extend actions, method knowledge, and deterministic lifecycle control without mixing trust layers.",
       },
       {
         tag: "Sessions",

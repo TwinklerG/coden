@@ -118,12 +118,12 @@ export const messages = {
     },
     home: {
       eyebrow: "CodeN",
-      title: "极简、本地优先的 Coding Agent",
-      description: "在本地工作区中用模型原生 Tool Calling 完成真实编码任务。",
+      title: "一个有意思的 Coding Agent",
+      description: "以可插拔工具插件为特色，在本地工作区中理解、运行并塑造 Agent。",
       installCommand: "bun add -g @twinklerg/coden",
       primaryAction: "快速开始",
       secondaryAction: "查看 GitHub",
-      placeholder: "本阶段仅提供网站骨架与导航占位。",
+      placeholder: "从透明的 Agent 循环开始，用 Plugins、Skills 与 Hooks 塑造自己的工作流。",
       install: {
         bunLabel: "Bun",
         npmLabel: "npm",
@@ -168,7 +168,7 @@ export const messages = {
       notice: "插件拥有完整用户进程权限，不是安全沙箱。",
     },
     shell: {
-      docsTitle: "文档框架",
+      docsTitle: "CodeN 文档",
       pluginsTitle: "插件市场",
       notFoundTitle: "页面未找到",
       notFoundDescription: "您请求的页面不存在或已移动。",
@@ -206,12 +206,14 @@ export const messages = {
     },
     home: {
       eyebrow: "CodeN",
-      title: "A minimal, local-first coding agent",
-      description: "Use model-native tool calling to complete real coding tasks in your workspace.",
+      title: "A hackable coding agent",
+      description:
+        "Built around pluggable tool plugins for understanding, running, and shaping agents in your local workspace.",
       installCommand: "bun add -g @twinklerg/coden",
       primaryAction: "Get started",
       secondaryAction: "View GitHub",
-      placeholder: "This stage ships only the site shell and navigation scaffolding.",
+      placeholder:
+        "Start with an inspectable agent loop, then shape the workflow with Plugins, Skills, and Hooks.",
       install: {
         bunLabel: "Bun",
         npmLabel: "npm",
@@ -257,7 +259,7 @@ export const messages = {
       notice: "Plugins have full process access and are not a security sandbox.",
     },
     shell: {
-      docsTitle: "Documentation scaffold",
+      docsTitle: "CodeN documentation",
       pluginsTitle: "Plugin marketplace",
       notFoundTitle: "Page not found",
       notFoundDescription: "The page you requested could not be found or has moved.",

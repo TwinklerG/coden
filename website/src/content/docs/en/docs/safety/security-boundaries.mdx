@@ -1,0 +1,209 @@
+---
+title: Security Boundaries
+description: Understand credentials, process privileges, cooperative cancellation, and the lack of a general sandbox.
+sidebar:
+  order: 440
+---
+
+CodeN’s safety mechanisms primarily reduce accidents and require explicit consent; they do not contain malicious code that already has execution authority. Model requests, sessions, and traces can contain source and reasoning; plugins and Hooks can read environment variables; and `bash` can launch arbitrary processes. The first professional rule is to trust only code you are willing to execute as the current account.
+
+## Security Model
+
+### Layers at a glance
+
+| Layer | Mechanism |
+| --- | --- |
+| human confirmation | tool authorization (`manual`/`smart`), workspace trust, plugin confirmation |
+| automated policy | risk levels (`read`/`modify`/`dangerous`), `--auto` skips confirmations |
+| LLM review | Smart Approval reviews ordinary modifications independently (fail closed) |
+| hook control | `PreToolUse`/`PermissionRequest`/`Stop` decisions (`deny > ask > allow`) |
+| path constraints | structured file tools classified by real path + TOCTOU revalidation |
+| output constraints | bounded output, control-character scrubbing, secret redaction, prompt-injection boundary |
+| data constraints | `0700`/`0600` sessions and traces; no automatic upload |
+
+### Trust inventory
+
+- Project plugins (local `.ts` and npm) and project hooks require **workspace trust**: one explicit confirmation by real path (`trusted-workspaces.json`).
+- User-scope plugins/hooks count as user-initiated installs and are not re-confirmed.
+- `--auto` never skips trust; `--yes` affects plugin commands only.
+- Every trust decision uses the real path; symlink aliases cannot bypass it.
+
+### Permission model
+
+| Permission | Default | `--smart-approve` | `--auto` |
+| --- | --- | --- | --- |
+| `read` | allow | allow | allow |
+| `modify` (in-workspace) | human | LLM review → human on uncertainty | allow |
+| `dangerous` | human (no session grant) | human | allow (hook `deny` applies) |
+| outside-workspace `read`/`write`/`edit` | handled as modification (human) | human | deny (unless `--allow-outside-workspace`) |
+
+### No-sandbox statement
+
+- `bash`, plugins, and hooks run with the **current user's process permissions**: files, network, environment variables, and subprocesses are reachable.
+- Risk levels affect confirmation flow only and provide no process isolation.
+- npm plugin install validation imports the entry: top-level code executes with user permissions (lifecycle scripts disabled by default).
+- Plugins depend on Bun: local `.ts` plugins cannot load under a Node runtime (not a security boundary).
+
+### Data boundaries
+
+- Sessions and traces: local `0700`/`0600`; may contain reasoning content, signatures, and input; never uploaded automatically.
+- Provider calls: messages, tool definitions, and tool results go to the configured provider (endpoint decided by `CODEN_OPENAI_BASE_URL`).
+- Error redaction: environment variable values (≥8 chars) are replaced with `[redacted]`; hook output is scrubbed of control characters.
+
+### Known limitations
+
+1. No dedicated sandbox; no network isolation.
+2. Dangerous-command detection is a regex heuristic and can be bypassed (a guard, not a security boundary).
+3. LLM approval is not a sandbox and depends on the reviewing model's judgment.
+4. Plugin authors declare their own `risk`; a `dangerous` declaration only affects confirmation.
+5. `--allow-outside-workspace` permits modifying arbitrary paths outside the workspace; use only when clearly needed.
+
+### Threat-model highlights
+
+- **Supply chain**: plugins/hooks are trusted code execution; trust confirmation is the only gate — review packages and scripts before installing.
+- **Prompt injection**: file content enters context as data; the system prompt states that ordinary project content cannot elevate to instructions; hook payloads are marked untrusted.
+- **Local attackers**: session files hold sensitive content with `0600`; mind shared machines and backups.
+- **Mistakes**: dangerous-command detection, input previews during authorization, and `edit` uniqueness checks are guards against accidents.
+
+### Related references
+
+- [Data Security](/coden/en/docs/safety/security-boundaries/)
+- [Plugin Trust and Security Boundaries](/coden/en/docs/safety/security-boundaries/)
+- [Trust and Security](/coden/en/docs/safety/security-boundaries/)
+- [Outside Workspace Access](/coden/en/docs/safety/outside-workspace/)
+
+## Data Security
+
+### Secret management
+
+| Location | Meaning |
+| --- | --- |
+| shell export (preferred) | `export CODEN_OPENAI_API_KEY=...` before startup; highest precedence |
+| user config `env` | `~/.config/coden/config.json`; the project-level file works the same; never overwrites an exported shell variable |
+| forbidden | directories that get committed/shared/distributed; CodeN does not read `.env` automatically |
+
+The `env` injection runs before provider creation, so either config scope can carry keys. Project-level `.coden/config.json` is ignored by `.gitignore`, but prefer the user config to avoid keys being copied to teammates.
+
+### Sessions and traces
+
+- Location: `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`; permissions are `0700` for directories and `0600` for files.
+- Content: full message history (including model output), Anthropic extended-thinking `thinking`/`redacted-thinking`/signatures, tool call inputs and results, compaction summaries, and the runtime event trace.
+- Sensitivity: these files are sensitive — they may include source fragments, environment context, and reasoning; do not commit, share, or distribute them without review.
+- Resume (`--resume`) reads only the local data directory and makes no network calls.
+
+### Permission boundaries
+
+- **Not a general-purpose sandbox**: `bash` and plugins (local/npm) run with the current user's process permissions and can access files, network, environment variables, and subprocesses.
+- Built-in structured file tools (`read`/`write`/`edit`) are confined to the workspace by real path (or explicitly widened by `--auto --allow-outside-workspace`).
+- Risk levels (`read`/`modify`/`dangerous`) affect only the authorization flow, not process isolation.
+- npm plugin installs disable lifecycle scripts by default, but install validation imports the plugin entry — top-level code executes with the current user's permissions.
+
+### Logging and error handling
+
+- Environment variable values in provider error messages are redacted (length ≥ 8 is replaced with `[redacted]`).
+- Hook output is scrubbed of terminal control characters (`sanitizeTerminalText`).
+- Workspace trust records store the **real path** so symlink aliases cannot bypass confirmation.
+
+### Minimal-exposure recommendations
+
+1. Keep keys in the user config or shell exports only.
+2. Before first use of project hooks/plugins, confirm the workspace content is trustworthy.
+3. When running unattended with `--auto`, confirm the task scope and the `maxSteps` ceiling first.
+4. Avoid `--allow-outside-workspace` in sensitive repositories.
+
+### Related references
+
+- [Security Model](/coden/en/docs/safety/security-boundaries/)
+- [Trust and Security Boundaries](/coden/en/docs/safety/security-boundaries/)
+- [Trust and Security](/coden/en/docs/safety/security-boundaries/)
+- [Outside Workspace Access](/coden/en/docs/safety/outside-workspace/)
+
+## Trust and Security
+
+### Configuration locations
+
+- User scope: `~/.config/coden/config.json` (or `$XDG_CONFIG_HOME/coden/config.json`).
+- Project scope: `<workspace>/.coden/config.json` (ignored by `.gitignore`; not committed by default).
+
+User hooks always run before project hooks; changes require a restart.
+
+### Trust model
+
+- Project hooks and project plugins share **workspace trust**: explicit confirmation by the workspace real path (`trusted-workspaces.json`, `0600`).
+- Untrusted project hooks are excluded from execution (user hooks still run), while configured project hooks remain the source of the trust prompt.
+- No mode — `manual`, `smart`, or `auto` — implicitly trusts project code; `--auto` skips tool confirmations only.
+
+### Permission boundaries
+
+- **Hooks are not a sandbox**: they inherit the CodeN process environment (including API keys) and can access files, network, the full prompt, tool arguments, and results; they can modify the workspace or run arbitrary subprocesses.
+- Commands run through the system shell in the workspace with the current user's permissions.
+- A hook reads the event JSON on stdin — including input and tool-call content; do not echo sensitive data in hook output.
+
+### Terminal-injection protection
+
+- Hook stderr and `systemMessage` are scrubbed of control characters (`sanitizeTerminalText`) and truncated before output.
+- Decision reasons and block reasons are scrubbed and truncated too (500 characters).
+- Never interpolate event fields into shell strings: data flows only through stdin JSON.
+
+### Defensive guidance
+
+1. Review command content before merging project hooks; prefer scripts that parse JSON on stdin.
+2. Keep personal/team hooks in the user config; keep only repo-distributable content in the project config.
+3. Do not use `eval`, `bash -c "$(…)"`, or similar patterns that treat event data as code.
+4. Set a sensible `timeout` (default 10 seconds) so hooks cannot hang indefinitely.
+5. Confirm workspace content before trusting project hooks in sensitive repositories.
+
+### Related references
+
+- [Configuration](/coden/en/docs/operate/configuration/)
+- [Protocol](/coden/en/docs/reference/hooks-and-storage/)
+- [Execution](/coden/en/docs/agent/failures-and-control-flow/)
+- [Data Security](/coden/en/docs/safety/security-boundaries/)
+
+## Trust and Security Boundaries
+
+### Trust model
+
+| Type | Trust trigger |
+| --- | --- |
+| project local plugins (`.coden/plugins/*.ts`, `--plugin` directories) | human workspace confirmation on first load |
+| project npm plugins | recorded after `plugin install`/`plugin sync` confirmation; skipped and flagged at startup when untrusted |
+| user local plugins | no confirmation (the current user installed them) |
+| global npm plugins | no startup confirmation (user-initiated install) |
+
+Confirmation accepts only `y` (`--yes` affects plugin commands only, never workspace trust). Trust records store the workspace **real path** (`trusted-workspaces.json`, `0600`); symlink aliases cannot bypass it.
+
+### Permission boundaries
+
+- **Plugins are not a sandbox**: they run inside the CodeN main process with full user process permissions, reaching files, network, environment variables, and subprocesses.
+- Tool `risk` affects call confirmations only and provides no process isolation.
+- Install validation imports the plugin entry: even with lifecycle scripts disabled, top-level code and static dependencies run with the current user's permissions.
+- Local `.ts` plugins load through a `data:` URL and cannot load under a Node runtime (see the [Runtime capability matrix](/coden/en/docs/start/install/)).
+
+### Lifecycle scripts
+
+| Option | Behavior |
+| --- | --- |
+| default | `--ignore-scripts`; lifecycle scripts do not run |
+| `--allow-scripts` | this package and its transitive deps run `preinstall`/`install`/`postinstall` with user permissions; warns and confirms again first |
+
+### Paths and validation
+
+- npm entries must resolve inside the package directory and pass safe realpath resolution (`withinBoundary` + `safeRealpath`).
+- Local plugin directory trust is based on the real path; directories/files pass authenticity checks.
+- Schema compile failures, tool name collisions, and invalid exports skip that plugin only, leaving other plugins and built-ins unaffected.
+
+### Integration guidance
+
+1. Install from trusted sources only; review what ships (`npm pack --dry-run`, lock-file diffs).
+2. Keep lifecycle scripts disabled by default; enable `--allow-scripts` explicitly and inspect the dependency tree when needed.
+3. Commit the plugin manifest and `bun.lock`; never commit `node_modules`.
+4. In sensitive repositories, confirm workspace content before trusting project plugins/hooks.
+5. Do not leave untrusted plugins in the global scope (global plugins are not re-confirmed).
+
+### Related references
+
+- [Local TypeScript Plugins](/coden/en/docs/extend/local-plugins/)
+- [npm Plugin Management](/coden/en/docs/extend/npm-plugins/)
+- [Trust and Security](/coden/en/docs/safety/security-boundaries/)
+- [Security Model](/coden/en/docs/safety/security-boundaries/)

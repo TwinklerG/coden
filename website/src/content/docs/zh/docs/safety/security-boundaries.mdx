@@ -1,0 +1,209 @@
+---
+title: 安全边界
+description: 理解凭据、进程权限、取消协作与无通用沙箱。
+sidebar:
+  order: 440
+---
+
+CodeN 的安全机制主要防止误操作并要求明确同意，而不是对抗已获执行权限的恶意代码。模型请求、会话和 trace 可能包含源码与推理；插件和 Hook 可能读取环境变量；`bash` 可以启动任意子进程。专业使用的第一原则是只信任你愿意以当前账户执行的代码。
+
+## 安全模型
+
+### 分层概览
+
+| 层 | 机制 |
+| --- | --- |
+| 人机确认 | 工具授权（`manual`/`smart`）、工作区信任、插件确认 |
+| 自动化策略 | 风险等级（`read`/`modify`/`dangerous`）、`--auto` 跳过确认 |
+| LLM 审查 | Smart Approval 独立审查普通修改（失败关闭） |
+| Hook 控制 | `PreToolUse`/`PermissionRequest`/`Stop` 决策（`deny > ask > allow`） |
+| 路径约束 | 结构化文件工具按真实路径分类 + TOCTOU 复验 |
+| 输出约束 | 有界输出、控制字符清洗、密钥脱敏、提示词注入边界 |
+| 数据约束 | `0700`/`0600` 会话与 trace；不自动上传 |
+
+### 信任清单
+
+- 项目插件（本地 `.ts` 与 npm）与项目 Hook 需要**工作区信任**：按真实路径显式确认一次（`trusted-workspaces.json`）。
+- 用户级插件/Hook 视为用户主动安装，不重复确认。
+- `--auto` 不跳过信任；`--yes` 只影响插件命令。
+- 所有信任判定使用真实路径，符号链接别名不绕过。
+
+### 权限模型
+
+| 权限 | 默认 | `--smart-approve` | `--auto` |
+| --- | --- | --- | --- |
+| `read` | 允许 | 允许 | 允许 |
+| `modify`（工作区内） | 人工 | LLM 审查 → 不确定人工 | 允许 |
+| `dangerous` | 人工（无会话授权） | 人工 | 允许（Hook `deny` 生效） |
+| 工作区外 `read`/`write`/`edit` | 按修改处理（人工） | 人工 | 拒绝（除非 `--allow-outside-workspace`） |
+
+### 非沙箱声明
+
+- `bash`、插件与 Hook 以**当前用户进程权限**运行：可访问文件、网络、环境变量与子进程。
+- 风险等级只影响确认流程，不提供进程隔离。
+- npm 插件安装校验会导入入口：顶层代码以当前用户权限执行（生命周期脚本默认禁用）。
+- 插件依赖 Bun：本地 `.ts` 插件在 Node 运行时无法加载（不构成安全边界）。
+
+### 数据边界
+
+- 会话与 trace：本地 `0700`/`0600`；可能包含推理内容、签名与输入；不自动上传。
+- Provider 调用：消息、工具定义与工具结果发送到所配置的 Provider（端点由 `CODEN_OPENAI_BASE_URL` 决定）。
+- 错误脱敏：环境变量值（≥8 字符）替换为 `[redacted]`；Hook 输出清洗控制字符。
+
+### 已知限制
+
+1. 没有独立沙箱；不隔离网络访问。
+2. 危险命令识别是正则启发式，可被绕过（护栏而非安全边界）。
+3. LLM 审批不是沙箱，且依赖审查模型的判断。
+4. 插件作者可以声明任意 `risk`；`dangerous` 声明只影响确认。
+5. `--allow-outside-workspace` 允许修改工作区之外任意路径，仅在明确需要时使用。
+
+### 威胁模型要点
+
+- **供应链**：插件/Hook 属于受信代码执行；信任确认是唯一门槛 → 安装前审查包与脚本。
+- **提示注入**：文件内容作为上下文进入模型；系统提示明确普通项目内容不能提升为指令；Hook payload 标记不可信。
+- **本地攻击者**：会话文件包含敏感内容，权限 `0600`；共享机器/备份时注意。
+- **误操作**：危险命令识别、输入预览（授权时显示）、`edit` 唯一性校验都是防误操作的护栏。
+
+### 相关参考
+
+- [凭据与数据安全](/coden/zh/docs/safety/security-boundaries/)
+- [插件信任与安全边界](/coden/zh/docs/safety/security-boundaries/)
+- [Agent Hooks 信任与安全](/coden/zh/docs/safety/security-boundaries/)
+- [工作区外访问](/coden/zh/docs/safety/outside-workspace/)
+
+## 凭据与数据安全
+
+### 密钥管理
+
+| 位置 | 说明 |
+| --- | --- |
+| shell 导出（优先） | `export CODEN_OPENAI_API_KEY=...` 后启动；优先级最高 |
+| 用户配置 `env` | `~/.config/coden/config.json`；项目级同名文件同理；不覆盖 shell 已导出变量 |
+| 禁止 | 提交/共享/分发的目录；CodeN 不自动读取 `.env` |
+
+`env` 字段注入发生在 Provider 创建之前，因此两类配置都能承载 Key。项目级 `.coden/config.json` 已被 `.gitignore` 忽略，但密钥仍应优先放用户级配置，避免被团队成员复制。
+
+### 会话与 trace
+
+- 位置：`$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`；权限目录 `0700`、文件 `0600`。
+- 内容：完整消息历史（含模型输出），Anthropic 扩展思考的 `thinking`/`redacted-thinking`/签名，工具调用输入与结果，压缩摘要，运行事件 trace。
+- 敏感性：这些文件是敏感数据——可能包含源码片段、环境上下文与推理内容；不要未经审查地提交、分享或分发。
+- 恢复（`--resume`）只读取本机数据目录，不联网。
+
+### 权限边界
+
+- **不是通用沙箱**：`bash` 与插件（本地/npm）以当前用户进程权限运行，可访问文件、网络、环境变量与子进程。
+- 内置结构化文件工具（`read`/`write`/`edit`）按真实路径限制在工作区内（或 `--auto --allow-outside-workspace` 显式放开）。
+- 风险等级（`read`/`modify`/`dangerous`）只影响授权流程，不隔离进程权限。
+- npm 插件安装默认禁用生命周期脚本，但安装校验会导入插件入口——顶层代码会以当前用户权限执行。
+
+### 日志与错误处理
+
+- Provider 错误信息中的环境变量值会被脱敏（值长度 ≥ 8 时替换为 `[redacted]`）。
+- Hook 输出会清除终端控制字符（`sanitizeTerminalText`）。
+- 工作区信任记录保存的是**真实路径**，避免符号链接别名绕过确认。
+
+### 最小暴露建议
+
+1. Key 只放用户级配置或 shell 导出。
+2. 项目级 Hook/插件第一次使用前确认工作区内容可信。
+3. 用 `--auto` 做无人值守任务时，先确认任务范围、`maxSteps` 与步骤上限。
+4. 敏感仓库避免使用 `--allow-outside-workspace`。
+
+### 相关参考
+
+- [安全模型](/coden/zh/docs/safety/security-boundaries/)
+- [信任与安全边界](/coden/zh/docs/safety/security-boundaries/)
+- [Agent Hooks 信任与安全](/coden/zh/docs/safety/security-boundaries/)
+- [工作区外访问](/coden/zh/docs/safety/outside-workspace/)
+
+## 信任与安全
+
+### 配置位置
+
+- 用户级：`~/.config/coden/config.json`（或 `$XDG_CONFIG_HOME/coden/config.json`）。
+- 项目级：`<workspace>/.coden/config.json`（已被 `.gitignore` 忽略，默认不入库）。
+
+用户 Hook 总在项目 Hook 之前执行；修改后需重启。
+
+### 信任模型
+
+- 项目 Hook 与项目插件共用**工作区信任**：按工作区真实路径显式确认（`trusted-workspaces.json`，`0600`）。
+- 未信任的项目 Hook 会从运行中排除（仅执行用户级 Hook），但配置中的项目 Hook 仍会成为信任提示的来源。
+- `manual`/`smart`/`auto` 任一模式都不会隐式信任项目代码；`--auto` 只跳过工具确认。
+
+### 权限边界
+
+- **Hook 不是沙箱**：继承 CodeN 进程环境（包括 API Key），可访问文件、网络、完整提示词、工具参数与结果；可以修改工作区或运行任意子进程。
+- 命令以系统 shell 运行在工作区，拥有当前用户权限。
+- Hook 能读取 stdin 中的事件 JSON——包含输入与工具调用内容；不要在 Hook 输出中回显敏感数据。
+
+### 终端注入防护
+
+- Hook 的 stderr 与 `systemMessage` 经 `sanitizeTerminalText` 清洗控制字符（ANSI 转义等），截断后输出。
+- 决策原因与 blockReason 同样清洗并截断（500 字符）。
+- 不要把事件字段拼接到 shell 字符串：数据只通过 stdin JSON 传递。
+
+### 防御建议
+
+1. 项目 Hook 合入前审查命令内容；优先使用能在 stdin 上解析 JSON 的脚本。
+2. 个人/团队级 Hook 放用户级配置；项目级配置只放必须随仓库分发的内容。
+3. 不在 Hook 命令中使用 `eval`、`bash -c "$(…)"` 等将事件数据作为代码执行的写法。
+4. 为 Hook 设置合理的 `timeout`（默认 10 秒），避免长时间挂起。
+5. 敏感仓库在信任项目 Hook 前确认工作区内容。
+
+### 相关参考
+
+- [配置](/coden/zh/docs/operate/configuration/)
+- [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)
+- [执行与超时](/coden/zh/docs/agent/failures-and-control-flow/)
+- [凭据与数据安全](/coden/zh/docs/safety/security-boundaries/)
+
+## 信任与安全边界
+
+### 信任模型
+
+| 类型 | 触发信任 |
+| --- | --- |
+| 项目本地插件（`.coden/plugins/*.ts`、`--plugin` 目录） | 首次加载时人工确认工作区 |
+| 项目 npm 插件 | `plugin install`/`plugin sync` 确认后记录；启动时未信任则跳过并提示 |
+| 用户级本地插件 | 无确认（当前用户主动安装） |
+| 全局 npm 插件 | 无启动确认（用户主动安装） |
+
+确认只接受 `y`（`--yes` 只影响插件命令，不影响工作区信任）。信任记录保存工作区**真实路径**（`trusted-workspaces.json`，`0600`），符号链接别名不会绕过。
+
+### 权限边界
+
+- **插件不是沙箱**：在 CodeN 主进程内执行，拥有完整用户进程权限，可访问文件、网络、环境变量与子进程。
+- 工具 `risk` 只影响调用确认，不提供进程隔离。
+- 安装校验导入插件入口：即使禁用生命周期脚本，顶层代码与静态依赖也会以当前用户权限运行。
+- 本地 `.ts` 插件通过 `data:` URL 加载，无法被 Node 运行时加载（见 [运行时能力矩阵](/coden/zh/docs/start/install/)）。
+
+### 生命周期脚本
+
+| 选项 | 行为 |
+| --- | --- |
+| 默认 | `--ignore-scripts`，生命周期脚本不运行 |
+| `--allow-scripts` | 当前包与传递依赖以用户权限运行 `preinstall`/`install`/`postinstall`；先警告并再次确认 |
+
+### 路径与校验
+
+- npm 入口解析后必须位于包目录内，且是安全解析的真实路径（`withinBoundary` + `safeRealpath`）。
+- 本地插件目录的信任基于真实路径；目录/文件需通过真实性校验。
+- 工具 schema 编译失败、工具重名、导出非法都会跳过该插件，不影响其他插件与内置工具。
+
+### 集成建议
+
+1. 只安装可信来源的插件；审查发布内容（`npm pack --dry-run`、锁文件 diff）。
+2. 默认保持生命周期脚本禁用；确有需要时再显式 `--allow-scripts` 并检查依赖树。
+3. 项目插件清单与 `bun.lock` 提交版本控制，`node_modules` 不提交。
+4. 敏感仓库先确认工作区内容再信任项目插件/Hook。
+5. 不信任的插件不要保留在全局作用域（全局插件不重复确认）。
+
+### 相关参考
+
+- [本地 TypeScript 插件](/coden/zh/docs/extend/local-plugins/)
+- [npm 插件安装和管理](/coden/zh/docs/extend/npm-plugins/)
+- [Agent Hooks 信任与安全](/coden/zh/docs/safety/security-boundaries/)
+- [安全模型](/coden/zh/docs/safety/security-boundaries/)

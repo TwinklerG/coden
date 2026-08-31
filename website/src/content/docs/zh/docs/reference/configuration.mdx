@@ -1,18 +1,85 @@
 ---
 title: 配置参考
-description: 配置入口、五层覆盖与思考/语言设置的汇总参考。
+description: 完整字段、环境变量、默认值与例外。
 sidebar:
-  order: 920
+  order: 620
 ---
 
-## 配置文件位置
+本页记录当前字段、默认值和覆盖规则。配置示例不是推荐把密钥提交到仓库：包含凭据的 `env` 应只放在受保护且被忽略的位置，并由导出的真实环境变量优先覆盖。
+
+## 字段参考
+
+### 完整示例
+
+```json
+{
+  "language": "zh",
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "approvalModel": "gpt-5-mini",
+  "approvalStrictness": "medium",
+  "maxSteps": 20,
+  "contextWindow": 128000,
+  "reservedOutputTokens": 8192,
+  "safetyMargin": 4096,
+  "thinkingLevel": "default",
+  "plugins": [],
+  "env": {
+    "CODEN_OPENAI_API_KEY": "sk-..."
+  },
+  "hooks": {}
+}
+```
+
+### 字段表
+
+| 字段 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `language` | `"zh"` \| `"en"` | `zh` | 仅用户级；项目级忽略 |
+| `provider` | `"openai"` \| `"anthropic"` | `openai` | 模型 Provider |
+| `model` | 非空字符串 | `gpt-5-mini` | 模型标识符 |
+| `approvalModel` | 非空字符串 | 回退 `model` | Smart Approval 审查模型 |
+| `approvalStrictness` | `"soft"` \| `"medium"` \| `"hard"` | `medium` | 审查保守度 |
+| `maxSteps` | 正整数 | `20` | 最大模型步骤数 |
+| `contextWindow` | 正整数 | `128000` | 上下文窗口 |
+| `reservedOutputTokens` | 正整数 | `8192` | 每次请求输出预算 |
+| `safetyMargin` | 非负整数 | `4096` | 输入预算安全余量 |
+| `thinkingLevel` | 六档之一 | `default` | 思考等级 |
+| `plugins` | 字符串数组 | `[]` | 附加本地插件路径/目录；三来源拼接 |
+| `env` | 字符串映射 | `{}` | 注入进程环境的变量 |
+| `hooks` | 事件映射 | `{}` | Hook 配置；用户级 + 项目级合并 |
+
+### 校验规则
+
+- `contextWindow`、`reservedOutputTokens`、`safetyMargin` 必须是非负整数；前两者必须为正。
+- `contextWindow` 必须大于 `reservedOutputTokens + safetyMargin`。
+- `model`、`approvalModel` 必须是非空字符串；`maxSteps` 必须是正整数。
+- `env` 值必须是字符串；`plugins` 元素必须是字符串。
+- `thinkingLevel` 必须是 `default`/`off`/`minimal`/`low`/`medium`/`high` 之一。
+- Anthropic 启用已知思考时要求 `reservedOutputTokens > 1024`。
+
+### 不可配置字段
+
+- `dataDir`（数据目录）不来自配置文件：由 `XDG_DATA_HOME` 派生，默认 `~/.local/share/coden`。
+- 会话 ID、工作区哈希、界面模式等由运行时决定。
+
+### 相关参考
+
+- [配置优先级](/coden/zh/docs/operate/configuration/)
+- [用户级与项目级配置](/coden/zh/docs/operate/configuration/)
+- [配置参考（README 汇总）](/coden/zh/docs/reference/configuration/)
+- [常见错误](/coden/zh/docs/operate/automation-and-recovery/)
+
+## 配置参考
+
+### 配置文件位置
 
 | 作用域 | 路径 | 生效时机 |
 | --- | --- | --- |
 | 用户级 | `~/.config/coden/config.json`（`$XDG_CONFIG_HOME` 可覆盖） | 启动时读取 |
 | 项目级 | `<workspace>/.coden/config.json` | 启动时读取（项目级覆盖用户级；`language` 除外） |
 
-## 五层覆盖（高 → 低）
+### 五层覆盖（高 → 低）
 
 1. CLI 参数
 2. `CODEN_*` 环境变量
@@ -22,7 +89,7 @@ sidebar:
 
 特例：`language` 只读用户级 + `--lang`；`plugins` 三来源拼接；`env` 项目级逐键覆盖用户级且不覆盖 shell 导出；`hooks` 用户级在前合并。
 
-## 最小可用配置
+### 最小可用配置
 
 ```json
 {
@@ -34,26 +101,26 @@ sidebar:
 }
 ```
 
-## 完整字段
+### 完整字段
 
-字段类型、默认值与校验见[配置字段参考](/coden/zh/docs/configuration/reference/)。行为语义的详细展开：
+字段类型、默认值与校验见[配置字段参考](/coden/zh/docs/reference/configuration/)。行为语义的详细展开：
 
 | 主题 | 页面 |
 | --- | --- |
-| 覆盖顺序与合并 | [配置优先级](/coden/zh/docs/configuration/precedence/) |
-| 作用域与信任 | [用户级与项目级配置](/coden/zh/docs/configuration/scopes/) |
-| 环境变量与凭据 | [环境变量](/coden/zh/docs/configuration/environment/)、[OpenAI 配置](/coden/zh/docs/configuration/openai/)、[Anthropic 配置](/coden/zh/docs/configuration/anthropic/) |
-| 语言与思考 | [语言与思考等级](/coden/zh/docs/configuration/language-and-thinking/) |
-| 数据安全 | [凭据与数据安全](/coden/zh/docs/configuration/data-security/) |
+| 覆盖顺序与合并 | [配置优先级](/coden/zh/docs/operate/configuration/) |
+| 作用域与信任 | [用户级与项目级配置](/coden/zh/docs/operate/configuration/) |
+| 环境变量与凭据 | [环境变量](/coden/zh/docs/operate/configuration/)、[OpenAI 配置](/coden/zh/docs/operate/providers/)、[Anthropic 配置](/coden/zh/docs/operate/providers/) |
+| 语言与思考 | [语言与思考等级](/coden/zh/docs/agent/compaction-and-thinking/) |
+| 数据安全 | [凭据与数据安全](/coden/zh/docs/safety/security-boundaries/) |
 
-## 思考等级说明
+### 思考等级说明
 
 - 等级：`default`（不发送参数）、`off`、`minimal`、`low`、`medium`、`high`。
 - OpenAI 映射 `reasoning_effort`（`off→minimal`）；Anthropic 映射思考预算（1024 / 25% / 50% / 75%，要求 `reservedOutputTokens > 1024`）。
 - 只作用于主 Agent 请求；压缩与 Smart Approval 不受影响。
 
-## 相关参考
+### 相关参考
 
-- [字段参考](/coden/zh/docs/configuration/reference/)
+- [字段参考](/coden/zh/docs/reference/configuration/)
 - [CLI 命令参考](/coden/zh/docs/reference/cli/)
-- [常见错误](/coden/zh/docs/reference/troubleshooting/)
+- [常见错误](/coden/zh/docs/operate/automation-and-recovery/)

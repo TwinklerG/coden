@@ -1,0 +1,111 @@
+---
+title: Tools and Context
+description: Understand tool definitions, message history, and context budgets.
+sidebar:
+  order: 220
+---
+
+Tools define the agent’s action space; context defines the state on which the model can choose its next action. Tool descriptions and JSON Schemas enter the model request, while tool results become message history. Permission, risk, and path checks happen on the local execution side and must not be mistaken for a security capability of the model.
+
+## Tools and Risk Levels
+
+### Built-in tools
+
+| Tool | Risk | Input highlights | Key behavior |
+| --- | --- | --- | --- |
+| `read` | `read` | `path`, `offset` (default 1), `limit` (default 500, max 2000) | Reads UTF-8 text by 1-based line offset; output capped at 50000 chars with an omission notice; opens with `O_NOFOLLOW` |
+| `write` | `modify` | `path`, `content` | Creates or fully overwrites; file mode `0600`; creates parent directories |
+| `edit` | `modify` | `path`, `oldText`, `newText` | Replaces the **unique** matching block exactly; returns `edit.multiple_matches` when not unique and `edit.no_match` when absent |
+| `bash` | `modify` (can escalate to `dangerous`) | `command`, `timeout` (default 30000, range 100–60000), `maxOutput` (default 30000, range 1000–100000) | Runs `bash -lc` with the workspace as cwd; non-zero exit, timeout, or cancellation are errors; timeout kills the process group |
+| `activate_skill` | `read` | `name` | Loads the full instructions and root of a skill by name; unknown names return `skill.not_found`; reads only the discovered entry file after verifying its content is unchanged |
+
+Tools execute sequentially in the model's returned order; a single call times out after 60 seconds (cooperative cancellation only). All tool output is truncated to 50000 characters before re-entering context.
+
+### Risk levels and authorization
+
+| Level | Default interactive mode | `--smart-approve` | `--auto` |
+| --- | --- | --- | --- |
+| `read` | auto-allowed | auto-allowed | auto-allowed |
+| `modify` | human confirmation (`y`/`s`/`N`) | LLM review, escalating to human on uncertainty | auto-allowed |
+| `dangerous` | human confirmation (`y`/`N` only, no session grant) | human confirmation | auto-allowed (hook `deny` still applies) |
+
+### Dangerous-command detection (bash)
+
+These command fragments escalate `bash` risk to `dangerous`:
+
+```text
+rm -r / rm --recursive
+sudo
+git reset --hard
+git clean -f
+git push --force / --force-with-lease
+git checkout -- <path>
+git restore
+mkfs / fdisk / dd
+killall / pkill
+curl|sh or wget|sh
+path contains /etc /usr /bin /sbin
+```
+
+Risk classification is a heuristic guard against mistakes, not a security sandbox: `bash` and plugins run with the current user's process permissions.
+
+### Plugin tools
+
+- Tools registered by local or npm plugins use their declared `risk` field and join the same authorization flow.
+- Tool names must match `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`; name collisions (including with built-ins) skip the whole plugin.
+- Plugin tools share the same 60-second timeout and cooperative `AbortSignal` cancellation.
+
+### Related references
+
+- [Approval Modes](/coden/en/docs/safety/approval-modes/)
+- [Local TypeScript Plugins](/coden/en/docs/extend/local-plugins/)
+- [Author Protocol](/coden/en/docs/extend/plugin-authoring/)
+- [Security Model](/coden/en/docs/safety/security-boundaries/)
+
+## Context and Thinking Levels
+
+### Context budget
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `contextWindow` | `128000` | provider context window |
+| `reservedOutputTokens` | `8192` | `maxOutputTokens` of every request |
+| `safetyMargin` | `4096` | safety margin on the input budget |
+| input budget | `115712` | `contextWindow − reservedOutputTokens − safetyMargin` |
+
+Validation: all three must be non-negative integers; `contextWindow` and `reservedOutputTokens` must be positive; `contextWindow` must exceed `reservedOutputTokens + safetyMargin`. Estimation: text counts as `length / 3.5` rounded up, +6 per message, and tool definitions are estimated from their JSON — an estimator, not provider-exact billing.
+
+### Automatic compaction
+
+- When the estimate exceeds **80%** of the input budget: keep the 3 most recent message units and summarize the rest deterministically (tool lines 300 chars, others 500 chars, 6000-char total cap).
+- The same model then refines the summary (output capped at `min(2048, reservedOutputTokens)`); if refinement fails the deterministic summary is kept and the main task is unaffected.
+- On a provider 413 or context-length error, **emergency compaction** keeps only the last unit; if still over after one pass, `context.exhausted` is thrown.
+- The summary, source range, and refinement are persisted to the session; `/compact` triggers it manually; `/new` clears the summary.
+
+### Thinking levels
+
+Six unified levels: `default` (default; sends no parameter), `off`, `minimal`, `low`, `medium`, `high`.
+
+| Level | OpenAI (`reasoning_effort`) | Anthropic (thinking budget) |
+| --- | --- | --- |
+| `default` | not sent | not sent |
+| `off` | `minimal` (shown as `off→minimal`) | `{ type: "disabled" }` |
+| `minimal` | `minimal` | 1024 tokens |
+| `low` | `low` | 25% of `reservedOutputTokens` |
+| `medium` | `medium` | 50% |
+| `high` | `high` | 75% |
+
+Anthropic budgets clamp to `[1024, reservedOutputTokens − 1]`; enabling enabled thinking requires `reservedOutputTokens > 1024`. The budget counts inside `reservedOutputTokens`, so a higher level leaves fewer tokens for final text and tool calls in the same response.
+
+### Scope
+
+- Applies to main-agent requests only; context compaction and Smart Approval reviews keep provider defaults.
+- The level snapshot at turn start covers that turn's tool loop and retries.
+- Anthropic `thinking`/`redacted_thinking` and signature blocks persist as `providerState` and are replayed after tool calls and resume; mismatched provider state is ignored when switching providers.
+- Entry points: `--thinking <level>`, `CODEN_THINKING_LEVEL`, config `thinkingLevel`, REPL `/thinking [level]`.
+
+### Related references
+
+- [Language and Thinking Levels](/coden/en/docs/agent/compaction-and-thinking/)
+- [Configuration Reference](/coden/en/docs/reference/configuration/)
+- [Agent Loop](/coden/en/docs/agent/loop/)

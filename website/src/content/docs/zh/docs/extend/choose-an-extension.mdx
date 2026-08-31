@@ -1,0 +1,95 @@
+---
+title: 选择扩展机制
+description: 在 Plugin、Skill、Hook 与 AGENTS.md 之间作出准确选择。
+sidebar:
+  order: 310
+---
+
+不要把所有定制都做成插件。需要新动作时使用 Tool Plugin；需要模型按特定方法工作时使用 Skill；需要在固定事件上执行可预测策略时使用 Hook；需要整个项目持续提供约束时使用 `AGENTS.md`。选择错误会把知识、权限和可执行代码混在同一层。
+
+| 目标 | 机制 | 改变的层面 | 是否执行代码 |
+| --- | --- | --- | --- |
+| 给模型新增可调用能力 | Tool Plugin | Agent 的行动空间 | 是，主进程内执行 |
+| 教模型执行专业流程 | Skill | Agent 的方法与上下文 | Skill 本身否；说明可要求调用工具 |
+| 在生命周期事件中执行确定性逻辑 | Hook | 运行时控制与策略 | 是，命令子进程 |
+| 为项目提供长期约束 | `AGENTS.md` | 启动上下文与行为约定 | 否，只作为提示上下文 |
+
+选择机制前先问：需求是“新增动作”“提供知识”“强制事件策略”，还是“持续提供项目约束”？只有第一类应该首先选择工具插件。
+
+## 发现规则
+
+### 扫描位置（启动时一次）
+
+```text
+~/.agents/skills/<skill-name>/SKILL.md     # user
+<workspace>/skills/<skill-name>/SKILL.md   # project (bundled)
+<workspace>/.agents/skills/<skill-name>/SKILL.md  # project (local)
+```
+
+按上述顺序扫描**直接子目录**；每个候选项必须是 `<skill-name>/SKILL.md`。
+
+### 覆盖顺序
+
+同名 Skill 按 user → bundled → local 覆盖，因此本地安装的项目级 Skill 优先级最高。`skills/` 用于仓库随附、可公开分发的 Skill；`.agents/skills/` 用于本地安装的项目级 Skill。
+
+### 格式校验
+
+| 规则 | 要求 |
+| --- | --- |
+| frontmatter | 必须以 YAML frontmatter 开头且可解析 |
+| `name` | `^[a-z0-9][a-z0-9-]{0,63}$`，且与目录名一致 |
+| `description` | 非空字符串，≤ 1024 字符 |
+| 大小 | `SKILL.md` ≤ 1MB |
+| 路径 | 不允许符号链接逃逸扫描根目录；须为普通文件 |
+
+可选 frontmatter 字段：`license`、`compatibility`、`metadata`、`allowed-tools`。
+
+非法条目被跳过；`--verbose` 输出每个失败原因（作用域、路径、原因）。失败不会影响其他 Skill 或启动。
+
+### 上下文注入
+
+- 启动上下文（系统提示）只包含有效 Skill 的**名称与描述**（`formatSkillCatalog`）。
+- 任务匹配时模型调用 `activate_skill` 加载完整说明与 Skill 绝对根目录；`references/`、`scripts/` 等资源仍由 Agent 按需用普通工具读取。
+- 无有效 Skill 时 `activate_skill` 返回 `skill.not_found`。
+- Skill 仅在启动时发现：文件变更需重启 CodeN。
+
+### 相关参考
+
+- [创建 Skill](/coden/zh/docs/extend/skills-and-hooks/)
+- [安装与调试](/coden/zh/docs/extend/skills-and-hooks/)
+- [斜杠命令](/coden/zh/docs/reference/cli/)
+
+## Agent Hooks 事件
+
+### 事件总览
+
+| 事件 | 时机 | 可控制 | 负载要点 |
+| --- | --- | --- | --- |
+| `SessionStart` | 会话启动或恢复 | 否 | `source: startup \| resume` |
+| `UserPromptSubmit` | 用户提交输入后 | 是（阻止） | `prompt` |
+| `PreToolUse` | 工具执行前 | 是 | `toolName`、`callId`、`input`、`risk` |
+| `PermissionRequest` | 需要人工授权前 | 是 | `toolName`、`callId`、`input`、`risk`、`reason: policy \| hook` |
+| `PostToolUse` | 工具成功完成后 | 否 | `toolName`、`input`、`result`、`durationMs` |
+| `PostToolUseFailure` | 工具失败后 | 否 | `toolName`、`input`、`errorType`、`error`、`durationMs` |
+| `Notification` | 需要用户注意时 | 否 | `notificationType: permission_prompt \| attention_required`、`title`、`message` |
+| `Stop` | 模型停止调用工具时 | 是（要求继续） | `answer`、`toolsExecuted`、`stopHookActive` |
+| `SessionEnd` | 会话结束时 | 否 | `reason: completed \| failed \| cancelled \| eof \| quit` |
+
+### 控制语义
+
+- 可控事件集：`UserPromptSubmit`、`PreToolUse`、`PermissionRequest`、`Stop`。
+- 可控事件返回退出码 `2` 视为**明确阻止**（`blocked`）；`UserPromptSubmit` 与 `Stop` 的阻止以 `stdout` JSON 的 `decision`/`reason` 表达，`PreToolUse` 与 `PermissionRequest` 以 `permissionDecision`/`decision` 表达。
+- 退出码 `0` 且无 stdout 视为无操作；其余失败（非零、超时、输出超限、输入超限、非法 JSON）视为 Hook 失败并警告，不产生阻止。
+
+### 组合关系
+
+- `PreToolUse` 在任何权限判定之前执行；`PermissionRequest` 只在策略层要求人工时执行。
+- `Notification` 在 `permission_prompt` 与 `attention_required`（turn 失败）等场景触发。
+- `Stop` 的 `block` 会注入反馈要求模型继续，仍受 `maxSteps` 限制；再次 `block` 会标记 `stopHookActive`。
+
+### 相关参考
+
+- [匹配规则](/coden/zh/docs/extend/skills-and-hooks/)
+- [I/O 协议](/coden/zh/docs/reference/hooks-and-storage/)
+- [决策与权限](/coden/zh/docs/reference/hooks-and-storage/)
+- [示例](/coden/zh/docs/extend/skills-and-hooks/)

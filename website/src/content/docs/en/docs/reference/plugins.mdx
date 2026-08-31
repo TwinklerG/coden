@@ -1,0 +1,235 @@
+---
+title: Plugin Protocol Reference
+description: Manifests, exports, types, runtime matrix, and error codes.
+sidebar:
+  order: 630
+---
+
+The plugin protocol reference describes machine-checkable boundaries, not ecosystem promises. It covers the public export path, manifest fields, tool types, schema rules, and current loading errors. Package sources, hot reload, and runtime capabilities must be understood within the current version’s limits.
+
+## Local TypeScript Plugins
+
+### Scan locations
+
+| Source | Path | Trust |
+| --- | --- | --- |
+| user | `~/.config/coden/plugins/*.ts` | none (user-initiated install) |
+| project | `<workspace>/.coden/plugins/*.ts` | workspace trust required |
+| additional directories | `--plugin <path>` or config `plugins` entries (repeatable) | project semantics: workspace trust required |
+
+`.ts` files in a directory load in filename order. Missing project directories are skipped silently.
+
+### Single-file constraints
+
+- A plugin must be **self-contained in one file**: it is imported in-process through a `data:text/typescript` URL, so relative imports (`./helper.ts`) cannot resolve; npm bare package imports (`import pc from "picocolors"`) work.
+- Content hashes drive the module cache: unchanged plugins reuse the loaded module on `/reload`; changed ones rebuild the module and atomically replace the tool registry.
+- Top-level code executes at load time — unrelated to authorization and part of the trust boundary.
+
+### Minimal example
+
+```ts
+import type { ToolDefinition } from "@twinklerg/coden/plugin";
+
+const tool: ToolDefinition = {
+  name: "line_count",
+  description: "Count lines in supplied text",
+  risk: "read",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["text"],
+    properties: { text: { type: "string" } },
+  },
+  async execute(input) {
+    const { text } = input as { text: string };
+    return { content: String(text.split("\n").length) };
+  },
+};
+
+export default tool;
+```
+
+### Loading and validation
+
+- The export may be a single `ToolDefinition` or a `CodeNPlugin` (`apiVersion: 1`, `name`, non-empty `tools` array).
+- Tool names must match `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`; input schemas are compiled and validated with Ajv; `execute` returns `{ content, isError?, metadata? }`.
+- On name collisions (including built-ins) the **whole plugin is skipped**: existing tools are never overwritten and other plugins are unaffected.
+- Execution context: `ToolContext` provides `workspace`, `signal` (`AbortSignal`; 60-second timeout requires cooperative cancellation), and structured file-path information.
+
+### Runtime requirement
+
+Local `.ts` plugins are loaded by Bun. **They cannot load under a Node.js runtime**: Node returns `ERR_UNKNOWN_MODULE_FORMAT` for `data:text/typescript`, so the plugin is skipped and reported as failed (other functionality is unaffected). Run from source with Bun or ensure Bun is on PATH to use local TypeScript plugins.
+
+### Related references
+
+- [npm Plugin Management](/coden/en/docs/extend/npm-plugins/)
+- [Author Protocol](/coden/en/docs/extend/plugin-authoring/)
+- [Trust and Security Boundaries](/coden/en/docs/safety/security-boundaries/)
+- [Runtime capability matrix](/coden/en/docs/start/install/)
+
+## npm Plugin Management
+
+### Install
+
+```bash
+coden plugin install npm:@scope/coden-plugin-example
+coden plugin install npm:@scope/coden-plugin-example@^2 --global
+coden plugin remove @scope/coden-plugin-example
+coden plugin list
+coden plugin sync
+```
+
+- Default scope is **project**; `--global` installs into the user-global scope.
+- Specifiers accept only `npm:<package>` or `npm:<package>@<version-or-tag>`; `https://registry.npmjs.org` is always used — private registries, Git, URLs, and local directory sources are unsupported.
+- Install validation imports the entry: top-level code runs with the current user's permissions.
+- Install/remove/upgrade require a CodeN restart; `/reload` re-reads local `.ts` plugins only.
+
+### Project files
+
+```text
+<workspace>/.coden/plugins.json              # manifest (commit)
+<workspace>/.coden/plugin-runtime/.gitignore # excludes node_modules (commit)
+<workspace>/.coden/plugin-runtime/bun.lock   # locked dependencies (commit)
+```
+
+`plugin-runtime/package.json` is generated deterministically from `plugins.json`; `node_modules/` is never committed. Global plugins live at `$XDG_DATA_HOME/coden/plugins/` (default `~/.local/share/coden/plugins/`) and are not part of the project repository.
+
+### Sync
+
+```bash
+coden plugin sync
+coden plugin sync --global
+```
+
+- Project `sync` requires `plugin-runtime/bun.lock` to exist, otherwise it reports `plugin.lock_missing`.
+- Sync runs `bun install` with `--frozen-lockfile`: an outdated lock file reports `plugin.lock_outdated`; update and commit the lock file.
+- Sync rebuilds the runtime and re-validates every plugin entry.
+
+### Lifecycle scripts
+
+| Behavior | Meaning |
+| --- | --- |
+| disabled by default | equivalent to `bun install --ignore-scripts`; `preinstall`/`install`/`postinstall` do not run |
+| `--allow-scripts` | lets this package and transitive deps run scripts with user permissions; prints a warning and asks again |
+| `--yes` | skips confirmations only, and never enables scripts on its own |
+
+### Listing and shadowing
+
+`coden plugin list` prints project and global sections: package name, installed version, requested version, tool count. When the same package exists in both scopes, the project row is marked as shadowed (`shadowed by project`) and the global version is inactive.
+
+### Transactions and concurrency
+
+- Install/sync/remove commit transactionally (manifest + runtime backups with crash recovery).
+- Only one transaction per scope at a time; concurrent operations report `plugin.install_busy` (stale locks are cleaned automatically).
+
+### Runtime requirement
+
+**Loading** npm plugins requires only a built `.js`/`.mjs` entry (Node or Bun); **install and sync** run `bun install` internally and need Bun on PATH.
+
+### Related references
+
+- [Local TypeScript Plugins](/coden/en/docs/extend/local-plugins/)
+- [Author Protocol](/coden/en/docs/extend/plugin-authoring/)
+- [Trust and Security Boundaries](/coden/en/docs/safety/security-boundaries/)
+- [Marketplace](/coden/en/docs/extend/npm-plugins/)
+
+## Author Protocol
+
+### package.json requirements
+
+```json
+{
+  "name": "@scope/coden-plugin-example",
+  "version": "1.0.0",
+  "type": "module",
+  "files": ["dist"],
+  "coden": {
+    "apiVersion": 1,
+    "plugin": "./dist/index.js"
+  }
+}
+```
+
+| Field | Requirement |
+| --- | --- |
+| `type` | must be `"module"` |
+| `coden.apiVersion` | must be `1` |
+| `coden.plugin` | a `.js` or `.mjs` path starting with `./`; no `..`, `\`, `://`, or whitespace |
+| entry file | must publish **built** JS; publishing TypeScript source only is rejected |
+| entry boundary | the resolved real path must stay inside the package directory |
+
+### Export shapes (pick one)
+
+Single tool: default-export a `ToolDefinition`:
+
+```ts
+import type { ToolDefinition } from "@twinklerg/coden/plugin";
+
+const tool: ToolDefinition = {
+  name: "example_echo",
+  description: "Echo supplied text",
+  risk: "read",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["text"],
+    properties: { text: { type: "string" } },
+  },
+  async execute(input) {
+    const { text } = input as { text: string };
+    return { content: text };
+  },
+};
+
+export default tool;
+```
+
+Multiple tools: default-export a `CodeNPlugin` whose `name` equals the npm package name:
+
+```ts
+import type { CodeNPlugin, ToolDefinition } from "@twinklerg/coden/plugin";
+
+const readTool: ToolDefinition = {
+  name: "example_read",
+  description: "Read example data",
+  risk: "read",
+  inputSchema: { type: "object", additionalProperties: false },
+  async execute() {
+    return { content: "read" };
+  },
+};
+
+const plugin: CodeNPlugin = {
+  apiVersion: 1,
+  name: "@scope/coden-plugin-example",
+  tools: [readTool],
+};
+
+export default plugin;
+```
+
+### Validation rules
+
+| Check | Error on failure |
+| --- | --- |
+| export is not a tool or plugin object | `plugin.export_invalid` |
+| `apiVersion` is not 1 | `plugin.api_unsupported` |
+| `CodeNPlugin.name` differs from the package name | `plugin.name_mismatch` |
+| `tools` empty or containing invalid tools | `plugin.export_invalid` |
+| tool name not matching `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$` | `tool.invalid_name` |
+| name collides with an existing tool | `tool.duplicate` (local load) / `plugin.tool_conflict` (npm composition) |
+| invalid inputSchema | `tool.invalid_schema` |
+
+### Public contract
+
+- `@twinklerg/coden/plugin` is the only public subpath; the main entry `"."` is not public and `import "@twinklerg/coden"` is rejected.
+- Import `ToolDefinition`/`CodeNPlugin` types from that subpath; put `@twinklerg/coden` in `devDependencies`, and `import type` is erased at build time so no second copy loads at runtime.
+- `ToolContext.signal` is an `AbortSignal`: the tsconfig must provide a lib defining it (such as `@types/node` or DOM).
+- `src/plugin/index.ts` in the repository is the single source of the contract; the build emits `dist/plugin/index.js` and `dist/plugin/index.d.ts` and never publishes `src`.
+
+### Related references
+
+- [npm Plugin Management](/coden/en/docs/extend/npm-plugins/)
+- [Local TypeScript Plugins](/coden/en/docs/extend/local-plugins/)
+- [Trust and Security Boundaries](/coden/en/docs/safety/security-boundaries/)
+- [Tools and Risk Levels](/coden/en/docs/agent/tools-and-context/)

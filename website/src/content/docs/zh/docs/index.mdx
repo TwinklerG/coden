@@ -1,11 +1,15 @@
 ---
 title: CodeN 文档
-description: CodeN 的功能定位、最短上手路径与文档地图。
+description: 理解并塑造一个以可插拔工具插件为特色的 Coding Agent。
 sidebar:
   order: 0
 ---
 
-CodeN（Code NJU）是一个用 TypeScript 独立实现的极简编程智能体。它直接使用模型原生的 Tool Calling，在本地读取、修改文件和执行命令；不依赖 Agent 框架或服务端代码执行。
+CodeN 是一个有意思的 Coding Agent，以可插拔工具插件为特色。它保持核心执行路径小而透明：模型看到工具协议，决定何时调用工具，CodeN 负责校验、授权、执行、记录并把结果送回下一次模型请求。这里的“有意思”不是人格包装，而是你可以观察并重塑这条路径。
+
+这套文档面向希望理解 Agent 而不只使用命令的读者。先建立运行循环与安全边界，再选择 Plugin、Skill、Hook 或项目指令扩展系统；需要精确字段时再进入协议参考。所有行为均以当前源码、测试和发布产物为准。
+
+CodeN（Code NJU）是一个以可插拔工具插件为特色的 Coding Agent。它直接使用模型原生 Tool Calling，在本地读取、修改文件和执行命令；核心小而透明，不依赖 Agent 框架或服务端代码执行。
 
 ## 最短上手路径
 
@@ -21,11 +25,11 @@ coden "fix the failing tests in this project"
 
 | 步骤 | 任务 | 页面 |
 | --- | --- | --- |
-| 1 | 确认运行环境 | [安装要求](/coden/zh/docs/getting-started/requirements/) |
-| 2 | 安装 CodeN | [安装 CodeN](/coden/zh/docs/getting-started/installation/) |
-| 3 | 配置第一个 Provider | [配置第一个 Provider](/coden/zh/docs/getting-started/provider/) |
-| 4 | 了解界面模式 | [启动 CLI / TUI](/coden/zh/docs/getting-started/interfaces/) |
-| 5 | 完成第一个任务 | [完成第一个任务](/coden/zh/docs/getting-started/first-task/) |
+| 1 | 确认运行环境 | [安装要求](/coden/zh/docs/start/install/) |
+| 2 | 安装 CodeN | [安装 CodeN](/coden/zh/docs/start/install/) |
+| 3 | 配置第一个 Provider | [配置第一个 Provider](/coden/zh/docs/start/provider-and-model/) |
+| 4 | 了解界面模式 | [启动 CLI / TUI](/coden/zh/docs/start/first-task/) |
+| 5 | 完成第一个任务 | [完成第一个任务](/coden/zh/docs/start/first-task/) |
 
 ## 文档地图
 
@@ -49,5 +53,5 @@ coden "fix the failing tests in this project"
 
 - [CLI 命令参考](/coden/zh/docs/reference/cli/)
 - [配置参考](/coden/zh/docs/reference/configuration/)
-- [常见错误](/coden/zh/docs/reference/troubleshooting/)
-- [安全模型](/coden/zh/docs/reference/security-model/)
+- [常见错误](/coden/zh/docs/operate/automation-and-recovery/)
+- [安全模型](/coden/zh/docs/safety/security-boundaries/)

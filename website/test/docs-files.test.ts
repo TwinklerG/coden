@@ -47,7 +47,7 @@ describe("documentation files", () => {
     await writeFile(extra, "---\ntitle: Extra\n---\n");
 
     const result = await syncDocFiles(root, "check");
-    expect(result.expectedCount).toBe(100);
+    expect(result.expectedCount).toBe(54);
     expect(result.issues.some((issue) => issue.startsWith("missing:"))).toBe(true);
     expect(result.issues.some((issue) => issue.startsWith("unexpected:"))).toBe(true);
     const custom = path.join(root, "src", "content", "docs", "zh", "docs", "index.mdx");

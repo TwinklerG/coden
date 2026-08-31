@@ -9,8 +9,8 @@ describe("localized routes", () => {
   });
 
   it("preserves the page when switching languages", () => {
-    expect(alternateLanguagePath("/coden/zh/docs/hooks/events/", "en")).toBe(
-      "/coden/en/docs/hooks/events/",
+    expect(alternateLanguagePath("/coden/zh/docs/extend/tool-plugins/", "en")).toBe(
+      "/coden/en/docs/extend/tool-plugins/",
     );
   });
 

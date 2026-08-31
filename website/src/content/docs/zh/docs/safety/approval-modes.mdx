@@ -1,0 +1,107 @@
+---
+title: 审批模式
+description: 准确使用 manual、smart 与 auto 策略。
+sidebar:
+  order: 420
+---
+
+manual、smart 与 auto 决定 CodeN 何时询问人类或审批模型，不改变操作系统赋予进程的权限。Smart Approval 是一次独立模型审查，故障时回到人工；auto 只跳过受其控制的普通调用确认，仍受项目信任、Hook 和工作区外规则约束。
+
+## 审批模式
+
+### 模式一览
+
+| 模式 | 触发 | 行为 |
+| --- | --- | --- |
+| `manual` | 默认（无参数） | 每次普通修改人工确认 |
+| `smart` | `--smart-approve` | 普通修改由独立 LLM 审查，不确定转人工 |
+| `auto` | `--auto` | 跳过工具权限确认（工作区内） |
+
+`--smart-approve` 与 `--auto` 互斥，同时传入会在创建应用前报配置错误。
+
+### 判定顺序
+
+每次工具调用依次经过：
+
+1. `PreToolUse` Hook 决策：`deny` 直接拒绝；`ask` 强制人工；`allow` 跳过策略层。
+2. 风险分类（含 bash 危险命令升级）。
+3. 策略层：`auto` 放行；`read` 放行；`modify` 在 `smart` 模式下先请求 LLM 审查。
+4. 需要人工时：`manual`/`smart` 弹出确认；`auto` 下直接返回 `permission.hook_requires_interaction`。
+5. `PermissionRequest` Hook 可覆盖最终决定。
+6. 人工确认：`y` 允许一次；普通修改可 `s` 允许本会话；`N`/`Esc` 拒绝。
+
+### Smart Approval 细节
+
+- 使用与主任务相同的 Provider 与凭据，模型为 `approvalModel`（未设置时回退 `model`）。
+- 只审查**工作区内**的普通修改；工作区外、危险操作直接人工。
+- 审查请求输出上限 256 tokens、30 秒超时；输出必须是不含工具调用的合法 JSON（`decision` + `reason`）。
+- 任何异常失败关闭：超时、截断、非法 JSON、模型故障都转为人工审查，绝不静默放行。
+- 严格度 `approvalStrictness`：`soft`/`medium`（默认）/`hard`，控制允许判定的保守程度。
+
+### auto 模式的边界
+
+- 只跳过**工具调用确认**；工作区信任确认、项目插件确认与 Hook 全部照常执行。
+- `PreToolUse` 返回 `deny` 时拒绝；返回 `ask` 时安全拒绝（`permission.hook_requires_interaction`）。
+- 工作区外 `read`/`write`/`edit` 返回 `permission.outside_workspace_denied`，提示需要 `--auto --allow-outside-workspace`。
+
+### 会话授权
+
+- `s`（`allow_session`）只记录 `modify` 级工具的本会话授权；`dangerous` 不提供该选项。
+- 会话授权跨同一次会话内的多个 turn 保持，`/new` 重置对话不清除它（授权集合绑定当前 Application 实例）。
+
+### 相关参考
+
+- [工具与风险等级](/coden/zh/docs/agent/tools-and-context/)
+- [Smart Approval](/coden/zh/docs/safety/approval-modes/)
+- [决策与权限](/coden/zh/docs/reference/hooks-and-storage/)
+- [安全模型](/coden/zh/docs/safety/security-boundaries/)
+
+## Smart Approval
+
+### 触发
+
+```bash
+coden --smart-approve "your task"
+```
+
+只审查**工作区内**、风险为 `modify` 的工具调用（`read` 自动允许；危险命令升级为 `dangerous` 后直接人工；工作区外路径直接人工；`--auto` 与 `--smart-approve` 互斥）。
+
+### 审查模型
+
+- 使用与主任务相同的 Provider 与凭据；模型为 `approvalModel`，未设置时回退 `model`。
+- 每次普通修改一次独立请求：`maxOutputTokens` 256，超时 30 秒。
+- 审查请求的系统提示把 payload 标记为不可信数据，要求只返回一个 JSON 对象（`decision` + `reason`）。
+
+### 判定协议
+
+| 结果 | 行为 |
+| --- | --- |
+| `allow` | 直接放行（不再人工确认） |
+| `human_review` | 转人工确认 |
+| 响应无效 | 超时、截断（`length`/`max_tokens`）、包含工具调用、非 JSON、字段违规、reason 为空 → 转人工 |
+
+失败关闭：任何异常都不会静默放行。
+
+### 严格度
+
+| 值 | 策略 |
+| --- | --- |
+| `soft` | 任务一致、工作区内、普通且可恢复即可允许；无需穷尽证明所有影响 |
+| `medium`（默认） | 仅在任务一致性、有限影响与实际恢复路径都清晰时允许 |
+| `hard` | 只允许目标、完整实质影响与恢复路径都非常清晰的常规局部操作；任何实质不确定性转人工 |
+
+### 成本与可见性
+
+- 每次修改调用消耗与主任务相同的 Provider 配额；批量修改会产生多次审查调用。
+- 界面显示审查过程：`reviewing <tool>…`、`AI approved <tool>`、`AI requested human review — <reason>`；审查不可用时提示需要人工批准。
+- 事件：`permission.review_started`/`review_completed`/`review_failed`。
+
+### 与 Hook 的关系
+
+`PreToolUse` 的 `deny` 优先于 LLM 的 `allow`；Hook 要求 `ask` 时直接人工。LLM 审查作为策略层的一部分，不替代 [PermissionRequest Hook](/coden/zh/docs/reference/hooks-and-storage/)。
+
+### 相关参考
+
+- [审批模式](/coden/zh/docs/safety/approval-modes/)
+- [工具与风险等级](/coden/zh/docs/agent/tools-and-context/)
+- [安全模型](/coden/zh/docs/safety/security-boundaries/)

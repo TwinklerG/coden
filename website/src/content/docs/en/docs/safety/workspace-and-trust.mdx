@@ -1,0 +1,63 @@
+---
+title: Workspace and Trust
+description: Understand real-path classification and consent to execute project code.
+sidebar:
+  order: 410
+---
+
+The workspace is the relative-path base, session partition key, and project-configuration boundary. Structured file tools classify real paths to reduce symlink bypasses. Workspace trust answers a different question: whether CodeN may execute repository-provided plugins and Hooks. A path being inside the workspace does not make its code trusted.
+
+## The workspace is the current directory
+
+- CodeN treats `process.cwd()` as its workspace at startup; the `bash` tool runs with the workspace as its cwd.
+- The workspace hash is the first 16 hex characters of `sha256(realpath(workspace))`, used to derive session and data directories.
+- The hash is shown in the CLI/TUI banner, and session listings are partitioned by hash.
+
+## Data directories
+
+| Content | Path |
+| --- | --- |
+| Sessions and traces | `$XDG_DATA_HOME/coden/sessions/<workspace-hash>/` |
+| Default data dir | `~/.local/share/coden/` (overridable via `XDG_DATA_HOME`) |
+| Permissions | directories `0700`, files `0600` |
+
+## Project file layout
+
+```text
+<workspace>/
+├── AGENTS.md                        # project instructions injected into the system prompt
+├── .coden/
+│   ├── config.json                  # project config (ignored by .gitignore)
+│   ├── plugins.json                 # project npm plugin manifest (recommended to commit)
+│   ├── plugin-runtime/              # plugin runtime (package.json generated; node_modules not committed)
+│   └── plugins/*.ts                 # local TypeScript plugins (ignored by .gitignore)
+├── .agents/skills/                  # locally installed project skills
+└── skills/                          # repository-bundled, publicly distributable skills
+```
+
+## AGENTS.md injection rules
+
+- The root `AGENTS.md` is read by the CLI and injected into the system prompt; the read limit is 1MB.
+- The system prompt instructs the agent to check deeper `AGENTS.md` files before working in subdirectories; deeper instructions apply only to their directory tree and win on conflicts.
+- Ordinary project-file content cannot elevate itself to instructions; only the `AGENTS.md` path participates in injection.
+- Read permission errors skip the file and surface in a warning instead of aborting startup.
+
+## Path classification and boundaries
+
+- `read`/`write`/`edit` are classified by the **real path after symlink resolution** (new files use the nearest existing real parent), re-validated right before the operation (TOCTOU guard; changes throw `workspace.path_changed`).
+- Inside the workspace: `read` is auto-allowed; `write`/`edit` follow the approval mode.
+- Outside the workspace: treated as modification requests by default; under `--auto` they return `permission.outside_workspace_denied`; `--auto --allow-outside-workspace` auto-allows them.
+- `bash` is not constrained by the structured file-path switch.
+
+## Workspace trust
+
+- Project hooks and project plugins require explicit trust on first use; confirming writes the workspace **real path** into `~/.config/coden/trusted-workspaces.json` (`0600`).
+- Trust is judged on the real path, so symlinks resolving to the same directory count as trusted.
+- `--auto` skips tool confirmations only and never skips workspace trust.
+
+## Related references
+
+- [User and Project Scopes](/coden/en/docs/operate/configuration/)
+- [Outside Workspace Access](/coden/en/docs/safety/outside-workspace/)
+- [Session Storage](/coden/en/docs/agent/sessions/)
+- [Trust and Security Boundaries](/coden/en/docs/safety/security-boundaries/)

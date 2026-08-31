@@ -1,0 +1,206 @@
+---
+title: Providers 与 Thinking
+description: 理解 OpenAI、Anthropic、自定义端点和思考映射。
+sidebar:
+  order: 520
+---
+
+Provider 配置同时控制协议、凭据、模型 ID 和可选推理参数。OpenAI 支持兼容 Base URL；Anthropic 使用自身消息格式并需要保持扩展思考状态。CodeN 不探测服务能力，因而自定义端点的兼容性应通过真实请求验证。
+
+## OpenAI 配置
+
+### 最小配置
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+coden
+```
+
+`openai` 是默认 Provider，模型默认 `gpt-5-mini`。覆盖方式：
+
+```bash
+export CODEN_MODEL=gpt-5-mini
+coden --model gpt-5-mini "your task"
+```
+
+### 兼容端点
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+export CODEN_OPENAI_BASE_URL=https://api.example.com/v1
+coden --model your-model-id "your task"
+```
+
+`CODEN_OPENAI_BASE_URL` 由 OpenAI SDK 直接使用；任何与该 SDK兼容的端点均可，但 CodeN 不维护模型能力白名单，参数按原样发送。
+
+### 请求形态
+
+- 使用 `chat.completions` 流式接口，`stream_options.include_usage` 获取用量。
+- 工具以 OpenAI function calling 形式传递（`type: "function"`，名称/描述/JSON Schema）。
+- 每次请求的 `max_completion_tokens` = `reservedOutputTokens`（默认 8192）。
+- SDK 内部 `maxRetries` 为 0：重试由 Agent 循环执行（最多 3 次指数退避，见 [Agent 循环](/coden/zh/docs/agent/loop/)）。
+
+### 思考参数
+
+`--thinking` 等级映射到 `reasoning_effort`；`off` 映射 `minimal`（界面显示 `off→minimal`），`minimal`/`low`/`medium`/`high` 同名映射。`default` 不发送。详见 [语言与思考等级](/coden/zh/docs/agent/compaction-and-thinking/)。
+
+### 配置示例
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "approvalModel": "gpt-5-mini"
+}
+```
+
+### 失败模式
+
+- 缺少 `CODEN_OPENAI_API_KEY`：启动失败（退出码 2）。
+- 无效模型/端点：Provider 返回的错误会带 `provider` 类别透传；重试槽位用尽后失败。
+
+### 相关参考
+
+- [配置第一个 Provider](/coden/zh/docs/start/provider-and-model/)
+- [环境变量](/coden/zh/docs/operate/configuration/)
+- [字段参考](/coden/zh/docs/reference/configuration/)
+- [常见错误](/coden/zh/docs/operate/automation-and-recovery/)
+
+## Anthropic 配置
+
+### 最小配置
+
+```bash
+export CODEN_ANTHROPIC_API_KEY=sk-ant-...
+coden --provider anthropic --model claude-sonnet-4-20250514 "your task"
+```
+
+Anthropic 不是默认 Provider：必须显式 `--provider anthropic`（或配置 `provider: "anthropic"`）。`approvalModel` 同样使用 Anthropic 凭据。
+
+### 配置示例
+
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-20250514",
+  "approvalStrictness": "hard"
+}
+```
+
+### 请求形态
+
+- 使用 `messages.stream` 流式接口；`max_tokens` = `reservedOutputTokens`。
+- 工具以 Anthropic tool 形式传递（`name`/`description`/`input_schema`）。
+- SDK 内部 `maxRetries` 为 0：重试由 Agent 循环执行。
+- 思考块（`thinking`/`redacted_thinking` 与签名）作为 `providerState` 持久化，在工具调用和恢复后原样回传；切换 Provider 时忽略不匹配的状态。
+
+### 思考预算
+
+| 等级 | 行为 |
+| --- | --- |
+| `default` | 不发送 thinking 参数 |
+| `off` | 发送 `{ "type": "disabled" }` |
+| `minimal` | 预算 1024 tokens |
+| `low` / `medium` / `high` | `reservedOutputTokens` 的 25% / 50% / 75%，并截断到 `[1024, reservedOutputTokens − 1]` |
+| 任意启用等级 | 要求 `reservedOutputTokens > 1024`，否则配置错误（退出码 2） |
+
+预算计入 `reservedOutputTokens`：提高等级会减少同次输出中最终文本与工具调用可用的 token。
+
+### 失败模式
+
+- 缺少 `CODEN_ANTHROPIC_API_KEY`：启动失败（退出码 2）。
+- `reservedOutputTokens <= 1024` 且启用已知思考：`thinking: ...` 配置错误。
+- 模型不支持所请求的思考参数时，错误原样透传，不静默降级。
+
+### 相关参考
+
+- [配置第一个 Provider](/coden/zh/docs/start/provider-and-model/)
+- [环境变量](/coden/zh/docs/operate/configuration/)
+- [语言与思考等级](/coden/zh/docs/agent/compaction-and-thinking/)
+- [字段参考](/coden/zh/docs/reference/configuration/)
+
+## 自定义 Base URL
+
+### 配置
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+export CODEN_OPENAI_BASE_URL=https://api.example.com/v1
+coden --model your-model-id "your task"
+```
+
+`CODEN_OPENAI_BASE_URL` 由 OpenAI SDK 直接使用，支持代理、网关与任何 OpenAI 兼容服务。也可写入配置 `env` 字段（不覆盖 shell 已导出变量）。
+
+### 行为说明
+
+- Base URL 只影响 OpenAI Provider（默认 Provider）；`createProvider` 在构造时读取。
+- Anthropic Provider 固定使用官方端点，当前版本不接受自定义 Base URL。
+- 兼容服务必须实现 OpenAI 的 `chat.completions` 流式接口：`stream_options.include_usage`、function calling 与 tool calls 的流式增量。
+- CodeN 不维护模型能力白名单：`--thinking` 与工具定义按原样发送；服务不支持时会返回 Provider 错误，不做静默降级。
+
+### 验证
+
+```bash
+coden -p "Reply with exactly: coden-ok"
+```
+
+预期输出包含 `coden-ok`。若服务只是部分兼容（例如不支持 usage），可以检查流是否仍正常完成。
+
+### 常见失败
+
+| 现象 | 原因 |
+| --- | --- |
+| `provider.*` 错误 | 端点返回非 2xx；检查 Base URL 是否含 `/v1`、模型 ID 是否有效 |
+| 流式中断/无输出 | 服务不支持流式增量或 `include_usage` |
+| 参数被拒 | 服务不支持 `reasoning_effort` 等字段；改用 `--thinking default` 或选择兼容模型 |
+
+### 相关参考
+
+- [OpenAI 配置](/coden/zh/docs/operate/providers/)
+- [配置第一个 Provider](/coden/zh/docs/start/provider-and-model/)
+- [常见错误](/coden/zh/docs/operate/automation-and-recovery/)
+
+## 语言与思考等级
+
+### 语言
+
+- CodeN 固定默认中文，**不读取系统区域设置**。
+- 语言来源：`--lang <zh|en>`（仅当前进程，不写配置）> 用户配置 `language` > 默认 `zh`。
+- 项目配置 `language` 字段被忽略——语言是用户的个人偏好。
+- REPL `/lang <zh|en>` 切换语言：立即生效并原子更新**用户级**配置文件（保留其他字段，`0600` 权限）。
+- 系统提示词、内建工具描述与界面共享同一语言；用户在单次任务中要求其他回复语言时 Agent 可遵从，但不会更改界面或持久化偏好。
+- 第三方插件的名称、描述、输出与错误始终保留作者原文。
+- 无效 `--lang` 或配置值会报错退出（退出码 2），但 `--lang` 无效时进程仅报错不写配置。
+
+### 思考等级
+
+统一六档：`default`（默认）、`off`、`minimal`、`low`、`medium`、`high`。
+
+| 设置入口 | 生效范围 | 持久化 |
+| --- | --- | --- |
+| `--thinking <level>` | 当前进程 | 启动时覆盖写入会话（resume 场景） |
+| `CODEN_THINKING_LEVEL` | 当前进程 | 无 |
+| 配置 `thinkingLevel` | 用户/项目 | 配置文件本身 |
+| `/thinking [level]` | 当前进程与会话 | 写入会话记录；不写配置文件 |
+| `/new` | — | 不改变等级 |
+
+恢复会话时的优先级：显式 `--thinking` > 会话保存值 > 环境/项目/用户配置 > `default`。
+
+### Provider 映射
+
+- OpenAI：`reasoning_effort`；`off→minimal`（显示 `off→minimal`）。
+- Anthropic：显式思考预算（1024 / 25% / 50% / 75%），要求 `reservedOutputTokens > 1024`；`off` 发送 `{ type: "disabled" }`。
+- `default` 不发送任何参数，保持升级前的既有行为。
+
+### 作用边界
+
+- 只作用于主 Agent 请求；上下文压缩与 Smart Approval 审查保持 Provider 默认。
+- 每个 turn 起始的快照贯穿该 turn 的工具循环与重试。
+- 显式设置失败不静默降级：不支持的参数会得到清晰的 Provider 错误。
+
+### 相关参考
+
+- [上下文与思考等级](/coden/zh/docs/agent/compaction-and-thinking/)
+- [斜杠命令](/coden/zh/docs/reference/cli/)
+- [CLI 选项](/coden/zh/docs/reference/cli/)
+- [字段参考](/coden/zh/docs/reference/configuration/)

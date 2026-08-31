@@ -11,7 +11,7 @@ export const en: Messages = {
     saveFailed: (reason) => `Failed to save language preference: ${reason}`,
   },
   cli: {
-    description: "CodeN — a minimal coding agent",
+    description: "CodeN — a hackable coding agent with pluggable tool plugins",
     promptArgument: "task to execute",
     print: "non-interactive print mode",
     tui: "explicitly start the full-screen TUI",

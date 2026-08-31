@@ -9,7 +9,7 @@ export const zh = {
     saveFailed: (reason: string) => `保存语言偏好失败：${reason}`,
   },
   cli: {
-    description: "CodeN — 极简编程智能体",
+    description: "CodeN — 一个以可插拔工具插件为特色的 Coding Agent",
     promptArgument: "要执行的任务",
     print: "非交互式输出模式",
     tui: "显式启动全屏 TUI",

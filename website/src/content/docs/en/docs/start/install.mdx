@@ -1,0 +1,132 @@
+---
+title: Installation and Runtimes
+description: Install, upgrade, and distinguish Node and Bun capabilities.
+sidebar:
+  order: 120
+---
+
+Installing CodeN requires separating “start the CLI” from “use every extension workflow.” The published package is a built artifact that runs on Node.js 22+, while local TypeScript plugins depend on Bun’s TypeScript loading and npm plugin installation and synchronization invoke `bun install`. Node can therefore run the core agent without covering every plugin workflow.
+
+## Requirements
+
+### Runtime: pick one
+
+| Purpose | Runtime | Version |
+| --- | --- | --- |
+| Run the published CLI (npm bin) | Node.js | `>=22` |
+| Run from source / develop | Bun | `>=1.1.0` |
+
+The published artifact is a minified single-file Node CLI (`dist/index.js`) that requires Node.js 22+; Bun is not needed at runtime. Bun is used only for repository development: dependency installation, scripts, and TypeScript plugin execution. The source code uses only standard Web/Node.js APIs.
+
+Developing from source also requires [Just](https://github.com/casey/just) as the command runner:
+
+```bash
+bun install
+just check
+```
+
+### Runtime capability matrix
+
+Local TypeScript plugins and npm plugin installation depend on Bun's internal loading and package-management capabilities; Node covers only the core feature set:
+
+| Capability | Node.js 22+ | Bun 1.1+ |
+| --- | --- | --- |
+| Agent loop, built-in tools, hooks, sessions | full | full |
+| npm plugins: load installed JS entry | full | full |
+| npm plugins: `plugin install/sync` (runs `bun install` internally) | **unsupported** (needs Bun on PATH) | full |
+| Local TypeScript plugins (`*.ts` files) | **unsupported** (skipped and reported as failed) | full |
+
+Reason: local `.ts` plugins are imported in-process through a `data:text/typescript` URL, which Node rejects with `ERR_UNKNOWN_MODULE_FORMAT`; npm plugin install always uses `bun install --registry https://registry.npmjs.org`. A failed plugin only affects that plugin and never blocks other functionality.
+
+### Terminal requirements
+
+- **CLI/REPL (default)**: works in any terminal, including non-TTY environments (pipes, CI).
+- **Full-screen TUI (`--tui`)**: stdin and stdout must both be TTYs, raw mode must be available, and `TERM` must not be `dumb`. Otherwise an explicit `--tui` falls back to the CLI with a warning rather than failing.
+- **Print mode (`-p`)**: no TTY required; output is plain text and pipe-friendly.
+- `NO_COLOR` disables color only and does not affect interface-mode selection.
+
+### Network requirements
+
+- Installing CodeN or its npm plugins requires access to `https://registry.npmjs.org` (plugin installs always use this registry; private registries, Git, URLs, and local directory sources are not supported).
+- Running an agent requires access to the configured provider API (the OpenAI default endpoint, or the compatible endpoint specified by `CODEN_OPENAI_BASE_URL`).
+
+### Credential requirements
+
+- OpenAI: `CODEN_OPENAI_API_KEY`
+- Anthropic: `CODEN_ANTHROPIC_API_KEY`
+
+Startup fails immediately with the corresponding `..._API_KEY is required` error when the key is missing. Environment variables exported in the shell take precedence over the `env` field in config files.
+
+### Verify the environment
+
+```bash
+node --version            # Node.js >= 22
+coden --version           # 0.1.9
+coden --help
+```
+
+### Related references
+
+- [Install CodeN](/coden/en/docs/start/install/)
+- [Configure Your First Provider](/coden/en/docs/start/provider-and-model/)
+- [CLI Reference](/coden/en/docs/reference/cli/)
+
+## Install CodeN
+
+### Install globally
+
+Install the published CLI with Bun or npm:
+
+```bash
+bun add -g @twinklerg/coden
+# or
+npm install -g @twinklerg/coden
+```
+
+### Verify the installation
+
+```bash
+coden --version   # 0.1.9
+coden --help
+```
+
+`coden --help` lists every option and subcommand, including `--tui`, `--cli`, `-p/--print`, `--provider`, `--model`, `--resume`, `--auto`, `--smart-approve`, `--allow-outside-workspace`, `--verbose`, `--max-steps`, `--thinking`, the repeatable `--plugin`, `--lang`, and `--version`.
+
+### Upgrade and uninstall
+
+```bash
+bun update -g @twinklerg/coden
+# or
+npm install -g @twinklerg/coden@latest
+
+bun remove -g @twinklerg/coden
+# or
+npm uninstall -g @twinklerg/coden
+```
+
+### Published artifact notes
+
+- The bin entry is `dist/index.js`: a minified single-file Node CLI that requires Node.js 22+ at runtime; Bun is not needed.
+- The npm package exposes exactly one subpath, `@twinklerg/coden/plugin`, for author build-time types. The main entry `"."` is not public and `import "@twinklerg/coden"` is rejected.
+- With no provider API key configured, startup fails immediately with exit code 2 — a configuration error, not a runtime error.
+- Plugins depend on Bun: local TypeScript plugins (`*.ts` files) need the Bun runtime, and npm plugin install/sync runs `bun install` internally. See the [Runtime capability matrix](/coden/en/docs/start/install/).
+
+### Run from source (development)
+
+```bash
+git clone <repository-url>
+cd coden
+bun install
+just check
+just build
+just run "your task"
+```
+
+Repository commands: `just build` builds the CLI and the public plugin contract; `just test` runs the offline tests; `just check` runs lint, typecheck, and the full offline suite; `just publish-dry-run` previews exactly what npm would publish without uploading.
+
+### Related references
+
+- [Requirements](/coden/en/docs/start/install/)
+- [Configure Your First Provider](/coden/en/docs/start/provider-and-model/)
+- [CLI Reference](/coden/en/docs/reference/cli/)
+- [Troubleshooting](/coden/en/docs/operate/automation-and-recovery/)

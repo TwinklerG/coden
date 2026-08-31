@@ -1,11 +1,221 @@
 ---
 title: CLI Reference
-description: Full reference for the coden command and the plugin subcommands.
+description: Commands, flags, slash commands, and exit codes.
 sidebar:
-  order: 910
+  order: 610
 ---
 
-## Main command
+This page is the exact lookup entry. Plain `coden` enters the CLI/REPL; `--tui` explicitly requests the full-screen interface and falls back when capabilities are missing; `-p/--print` exits after one turn. Flag conflicts and slash-command side effects follow the current command definitions.
+
+## CLI / REPL
+
+### Launch
+
+```bash
+coden                 # interactive REPL
+coden "your task"     # run one task and exit
+coden --cli "your task"
+```
+
+With no interface flag, CodeN always enters CLI/REPL regardless of terminal type. The startup banner shows version, workspace hash, model, approval mode, thinking level, and the current session ID.
+
+### Input
+
+| Input | Behavior |
+| --- | --- |
+| plain text | submitted as a task |
+| single trailing `\` | inserts a newline to continue input (fallback stream; with the multiline editor Enter submits directly) |
+| `Ctrl+C` | cancels the current task (aborts the request and tools), does not exit |
+| `Ctrl+D` (empty input) | exits |
+| lines starting with `/` | handled by [Slash Commands](/coden/en/docs/reference/cli/) |
+
+### Output
+
+- Model answers and tool activity render as a continuous stream: tool start/completion with duration, provider retries, thought duration, token summaries.
+- `--verbose` shows more runtime detail (including skill discovery failure reasons).
+- Authorization requests print inline: risk level, tool name, input preview, `[y]es / [s]ession / [N]o` (dangerous operations offer only `[y]es / [N]o`).
+- `NO_COLOR` disables color; terminal width is used to align authorization prompts.
+
+### Task lifecycle
+
+- With a prompt: one turn runs and the process exits; exit code `0` means successful completion.
+- Without a prompt: the REPL loop runs until `/quit`, `Ctrl+D`, or failure.
+- Session end (`completed`/`failed`/`cancelled`/`eof`/`quit`) triggers the `SessionEnd` hook and trace flush.
+
+### Related references
+
+- [Slash Commands](/coden/en/docs/reference/cli/)
+- [Print Mode](/coden/en/docs/reference/cli/)
+- [Full-screen TUI](/coden/en/docs/reference/cli/)
+- [CLI Options](/coden/en/docs/reference/cli/)
+
+## Full-screen TUI
+
+### Launch and fallback
+
+```bash
+coden --tui "your task"
+coden --tui
+```
+
+`--tui` requires stdin and stdout to both be TTYs, raw mode to be available, and `TERM != dumb`. If any condition fails it falls back to the CLI with a warning (not an error); TUI initialization failures fall back the same way. `--tui` cannot be combined with `--cli` or `--print`.
+
+### Layout
+
+- The content area keeps the CLI style: transient thinking and tool activity enter the transcript stream at the current conversation position.
+- The input area is enclosed by two full-width horizontal rules; below it the status row shows provider/model, workspace, authorization mode, phase, and context occupancy.
+- While an interaction is pending (authorization, trust, plugin confirmation) the input area stays visible but disabled, and the request renders inline in the transcript instead of a dialog.
+- Requests, available choices, and the final selection remain permanently in the current transcript.
+
+### Keybindings
+
+| Key | Behavior |
+| --- | --- |
+| `Enter` | submit input |
+| `Shift+Enter` / trailing `\` | insert a newline |
+| `Ctrl+P` / `Ctrl+N` | browse input history |
+| `PageUp` / `PageDown`, mouse wheel | scroll the transcript |
+| `End` | return to the latest content |
+| `Ctrl+C` while running | cancel the current task |
+| `Ctrl+C` while idle | begin the exit flow (after confirmation) |
+| `Ctrl+D` with empty input | exit |
+| `Esc` | deny the pending inline authorization request |
+
+### Execution model
+
+- Single-task serial execution: input is not queued while running, and the input area stays disabled until completion or cancellation.
+- The same slash-command set is available (`/help`, `/skills`, `/session`, `/sessions`, `/compact`, `/reload`, `/new`, `/lang`, `/thinking`, `/quit`).
+- Escape sequences are disambiguated via the Kitty keyboard protocol; `Ctrl+C` does not terminate the process directly (handled in-process).
+
+### Related references
+
+- [CLI / REPL](/coden/en/docs/reference/cli/)
+- [Print Mode](/coden/en/docs/reference/cli/)
+- [Slash Commands](/coden/en/docs/reference/cli/)
+- [CLI Options](/coden/en/docs/reference/cli/)
+
+## Print Mode
+
+### Trigger and constraints
+
+```bash
+coden -p "Reply with exactly: coden-ok"
+coden -p --auto "run the tests and report the results"
+```
+
+- `-p/--print` requires a prompt: without one it errors immediately (`print mode requires a prompt`).
+- Runs a single turn and exits: suited to scripts, CI, and pipes.
+- Output is a plain-text stream; combine with `--auto` to skip in-workspace confirmations.
+- Mutually exclusive with `--tui`; when combined with `--cli`, `print` wins (no error).
+
+### Combinations for non-interactive environments
+
+| Scenario | Command |
+| --- | --- |
+| single-turn output | `coden -p --auto "your task"` |
+| explicit provider and model | `coden -p --provider anthropic --model claude-sonnet-4-20250514 "your task"` |
+| resume then continue | `coden -p --auto --resume <session-id> "continue"` |
+| English interface | `coden -p --lang en "your task"` |
+
+### Notes
+
+- Print mode does not change permission semantics: outside-workspace `read`/`write`/`edit` still return `permission.outside_workspace_denied` under `--auto`.
+- Non-TTY environments do not implicitly enable print; interface mode is decided only by flags.
+- Exit codes: `2` for configuration errors, `1` for execution failures, `0` for normal completion.
+
+### Related references
+
+- [CLI / REPL](/coden/en/docs/reference/cli/)
+- [Full-screen TUI](/coden/en/docs/reference/cli/)
+- [Automation](/coden/en/docs/operate/automation-and-recovery/)
+- [CLI Options](/coden/en/docs/reference/cli/)
+
+## Slash Commands
+
+### Command list
+
+| Command | Behavior |
+| --- | --- |
+| `/help` | lists all commands |
+| `/skills` | lists active skills (name, description, project/user scope) without calling the model |
+| `/session` | prints the current session ID |
+| `/sessions` | lists all sessions of the current workspace (newest activity first) |
+| `/compact` | compacts context immediately (runs the automatic flow; result is persisted) |
+| `/reload` | reloads local TypeScript plugins and the npm plugin registry; prints loaded/failed/tool summary |
+| `/new` | starts a new conversation in the current session (keeps system messages; clears summary and history) |
+| `/lang` | lists `zh`, `en`, and the current language |
+| `/lang <zh\|en>` | switches language; atomically writes the user config with mode `0600` and takes effect immediately |
+| `/thinking` | lists thinking levels, the current value, and the effective mapping |
+| `/thinking <level>` | switches level and persists it to the current session |
+| `/quit` | exits |
+
+### Parsing rules
+
+- A command must occupy a single line: input containing newlines (such as `multiline input\n/help`) is treated as a message.
+- Command names match exactly: leading/trailing whitespace of `/help` is trimmed before recognition; unknown prefixes submit as a normal task.
+- Invalid arguments never end the session: `/lang xx` and `/thinking xx` print the error plus the available list and continue.
+
+### Side-effect notes
+
+- `/lang` accepts only `zh`/`en`; it writes the **user-level** config file, preserving other fields.
+- `/thinking` affects only the current process and session, never user/project config files.
+- `/reload` guarantees re-reading local `.ts` plugins only; npm package changes require a CodeN restart.
+- `/new` does not change the thinking level; the session grant set (`s` grants) is bound to the current process and survives `/new`.
+
+### Related references
+
+- [CLI / REPL](/coden/en/docs/reference/cli/)
+- [Full-screen TUI](/coden/en/docs/reference/cli/)
+- [Language and Thinking Levels](/coden/en/docs/agent/compaction-and-thinking/)
+- [CLI Reference](/coden/en/docs/reference/cli/)
+
+## CLI Options
+
+### Option table
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `<prompt>` | — | the task to execute; omit to enter the REPL |
+| `-p, --print` | `false` | non-interactive output mode; requires a prompt; exits after one turn |
+| `--tui` | `false` | explicitly start the full-screen TUI; falls back to the CLI with a warning when TTY/raw-mode/`TERM` conditions fail |
+| `--cli` | `false` | explicitly use the CLI interface (the default mode) |
+| `--provider <openai\|anthropic>` | `openai` | model provider |
+| `--model <model-id>` | `gpt-5-mini` | model identifier |
+| `--resume [session-id]` | — | with an ID, resume the session; without, list sessions of the current workspace |
+| `--auto` | `false` | skip tool permission confirmations (ordinary in-workspace operations only) |
+| `--smart-approve` | `false` | LLM review for ordinary modifications, escalating to human on uncertainty |
+| `--allow-outside-workspace` | `false` | with `--auto`, allow read/write paths outside the workspace |
+| `--verbose` | `false` | show detailed runtime status |
+| `--max-steps <n>` | `20` | maximum model steps (positive integer) |
+| `--thinking <level>` | config value/`default` | thinking level: `default`/`off`/`minimal`/`low`/`medium`/`high` |
+| `--plugin <path>` | `[]` | additional local TypeScript plugin or directory; repeatable |
+| `--lang <zh\|en>` | config value/`zh` | UI and agent language; this process only |
+| `-V, --version` | — | print the version (0.1.9) |
+| `-h, --help` | — | print help |
+
+### Validation and mutual exclusions
+
+- `--tui` with `--cli` or `--print` is rejected; `--cli` with `--print` is allowed and print wins.
+- `--smart-approve` and `--auto` are mutually exclusive (configuration error, exit code 2).
+- `--allow-outside-workspace` requires `--auto`.
+- `--provider` accepts only `openai`/`anthropic`; `--max-steps` must be a positive integer; `--thinking` accepts only the six levels.
+- `--resume` combines with approval flags (resume keeps the current command-line settings).
+- Invalid environment variables (such as `CODEN_THINKING_LEVEL=bad`) fail config loading with exit code 2.
+
+### Precedence
+
+CLI flags > `CODEN_*` environment variables > project config > user config > defaults (`--lang` is the exception: user config plus `--lang` override only).
+
+### Related references
+
+- [Precedence](/coden/en/docs/operate/configuration/)
+- [CLI / REPL](/coden/en/docs/reference/cli/)
+- [Print Mode](/coden/en/docs/reference/cli/)
+- [CLI Reference](/coden/en/docs/reference/cli/)
+
+## CLI Reference
+
+### Main command
 
 ```text
 coden [prompt] [options]
@@ -31,7 +241,7 @@ coden [prompt] [options]
 | `-V, --version` | version |
 | `-h, --help` | help |
 
-## plugin subcommands
+### plugin subcommands
 
 ```text
 coden plugin install <npm:package[@version]> [--global] [--allow-scripts] [--yes]
@@ -47,7 +257,7 @@ coden plugin sync [--global] [--allow-scripts] [--yes]
 | `--allow-scripts` | allow npm lifecycle scripts (warning + second confirmation) |
 | `--yes` | skip confirmations (never enables scripts on its own) |
 
-## Exit codes
+### Exit codes
 
 | Code | Meaning |
 | --- | --- |
@@ -55,7 +265,7 @@ coden plugin sync [--global] [--allow-scripts] [--yes]
 | `1` | execution failure (runtime error) |
 | `2` | configuration/startup error (missing API key, invalid flags, invalid config JSON, plugin command failure) |
 
-## Examples
+### Examples
 
 ```bash
 coden --resume                          # list sessions of the current workspace
@@ -64,9 +274,9 @@ coden -p --auto "run the tests"         # CI single-turn output
 coden plugin install npm:coden-msb      # install an npm plugin
 ```
 
-## Related references
+### Related references
 
-- [CLI Options](/coden/en/docs/interfaces/cli-options/)
-- [npm Plugin Management](/coden/en/docs/plugins/npm-management/)
-- [Slash Commands](/coden/en/docs/interfaces/slash-commands/)
-- [Troubleshooting](/coden/en/docs/reference/troubleshooting/)
+- [CLI Options](/coden/en/docs/reference/cli/)
+- [npm Plugin Management](/coden/en/docs/extend/npm-plugins/)
+- [Slash Commands](/coden/en/docs/reference/cli/)
+- [Troubleshooting](/coden/en/docs/operate/automation-and-recovery/)

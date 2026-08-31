@@ -1,0 +1,101 @@
+---
+title: 压缩与思考状态
+description: 理解有损压缩、thinking level 与 Provider 状态。
+sidebar:
+  order: 230
+---
+
+上下文管理与模型推理是两条不同控制轴。压缩在历史接近预算时有损地保留任务状态；thinking level 则映射到 Provider 参数，并在 turn 开始时快照。CodeN 统一的是用户控制面，不保证不同 Provider 或模型具有相同推理语义。
+
+## 上下文与思考等级
+
+### 上下文预算
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `contextWindow` | `128000` | Provider 上下文窗口 |
+| `reservedOutputTokens` | `8192` | 每次请求的 `maxOutputTokens` |
+| `safetyMargin` | `4096` | 输入预算的安全余量 |
+| 输入预算 | `115712` | `contextWindow − reservedOutputTokens − safetyMargin` |
+
+校验规则：三者必须是非负整数；`contextWindow` 与 `reservedOutputTokens` 必须为正；`contextWindow` 必须大于 `reservedOutputTokens + safetyMargin`。估算方法：文本按 `length / 3.5` 向上取整，每条消息额外计 6，工具定义按 JSON 估算——这是估算器，不是 Provider 精确计费。
+
+### 自动压缩
+
+- 当预估输入超过输入预算的 **80%** 时：保留最近 3 个消息单元，其余生成确定性摘要（工具行 300 字符、其他 500 字符、总上限 6000 字符）。
+- 随后用同一模型精炼摘要（输出上限 `min(2048, reservedOutputTokens)`）；精炼失败时回退确定性摘要，不影响主任务。
+- Provider 返回 413 或上下文长度类错误时触发**紧急压缩**（仅保留最后 1 个单元）；一次后仍超限则抛 `context.exhausted`。
+- 压缩摘要、源范围与精炼结果都持久化到会话；`/compact` 手动触发；`/new` 清除摘要。
+
+### 思考等级
+
+统一六档：`default`（默认，不发送参数）、`off`、`minimal`、`low`、`medium`、`high`。
+
+| 等级 | OpenAI（`reasoning_effort`） | Anthropic（thinking 预算） |
+| --- | --- | --- |
+| `default` | 不发送 | 不发送 |
+| `off` | `minimal`（界面显示 `off→minimal`） | `{ type: "disabled" }` |
+| `minimal` | `minimal` | 1024 tokens |
+| `low` | `low` | `reservedOutputTokens` 的 25% |
+| `medium` | `medium` | 50% |
+| `high` | `high` | 75% |
+
+Anthropic 预算按 `[1024, reservedOutputTokens − 1]` 截断；启用已知思考要求 `reservedOutputTokens > 1024`。预算计入 `reservedOutputTokens` 内，提高等级会减少同次输出中最终文本与工具调用的可用 token。
+
+### 作用范围
+
+- 只作用于主 Agent 请求；上下文压缩与 Smart Approval 审查保持 Provider 默认。
+- 每个 turn 起始的等级快照贯穿该 turn 的工具循环与重试。
+- Anthropic 的 `thinking`/`redacted_thinking` 与签名块作为 `providerState` 持久化并在工具调用与恢复后回传；切换 Provider 时忽略不匹配的状态。
+- 设置入口：`--thinking <level>`、`CODEN_THINKING_LEVEL`、配置 `thinkingLevel`、REPL `/thinking [level]`。
+
+### 相关参考
+
+- [语言与思考等级](/coden/zh/docs/agent/compaction-and-thinking/)
+- [配置参考](/coden/zh/docs/reference/configuration/)
+- [Agent 循环](/coden/zh/docs/agent/loop/)
+
+## 语言与思考等级
+
+### 语言
+
+- CodeN 固定默认中文，**不读取系统区域设置**。
+- 语言来源：`--lang <zh|en>`（仅当前进程，不写配置）> 用户配置 `language` > 默认 `zh`。
+- 项目配置 `language` 字段被忽略——语言是用户的个人偏好。
+- REPL `/lang <zh|en>` 切换语言：立即生效并原子更新**用户级**配置文件（保留其他字段，`0600` 权限）。
+- 系统提示词、内建工具描述与界面共享同一语言；用户在单次任务中要求其他回复语言时 Agent 可遵从，但不会更改界面或持久化偏好。
+- 第三方插件的名称、描述、输出与错误始终保留作者原文。
+- 无效 `--lang` 或配置值会报错退出（退出码 2），但 `--lang` 无效时进程仅报错不写配置。
+
+### 思考等级
+
+统一六档：`default`（默认）、`off`、`minimal`、`low`、`medium`、`high`。
+
+| 设置入口 | 生效范围 | 持久化 |
+| --- | --- | --- |
+| `--thinking <level>` | 当前进程 | 启动时覆盖写入会话（resume 场景） |
+| `CODEN_THINKING_LEVEL` | 当前进程 | 无 |
+| 配置 `thinkingLevel` | 用户/项目 | 配置文件本身 |
+| `/thinking [level]` | 当前进程与会话 | 写入会话记录；不写配置文件 |
+| `/new` | — | 不改变等级 |
+
+恢复会话时的优先级：显式 `--thinking` > 会话保存值 > 环境/项目/用户配置 > `default`。
+
+### Provider 映射
+
+- OpenAI：`reasoning_effort`；`off→minimal`（显示 `off→minimal`）。
+- Anthropic：显式思考预算（1024 / 25% / 50% / 75%），要求 `reservedOutputTokens > 1024`；`off` 发送 `{ type: "disabled" }`。
+- `default` 不发送任何参数，保持升级前的既有行为。
+
+### 作用边界
+
+- 只作用于主 Agent 请求；上下文压缩与 Smart Approval 审查保持 Provider 默认。
+- 每个 turn 起始的快照贯穿该 turn 的工具循环与重试。
+- 显式设置失败不静默降级：不支持的参数会得到清晰的 Provider 错误。
+
+### 相关参考
+
+- [上下文与思考等级](/coden/zh/docs/agent/compaction-and-thinking/)
+- [斜杠命令](/coden/zh/docs/reference/cli/)
+- [CLI 选项](/coden/zh/docs/reference/cli/)
+- [字段参考](/coden/zh/docs/reference/configuration/)

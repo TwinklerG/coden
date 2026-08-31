@@ -1,0 +1,356 @@
+---
+title: Skills and Hooks
+description: Distinguish progressive method knowledge from deterministic lifecycle control.
+sidebar:
+  order: 360
+---
+
+Skills and Hooks both change behavior but occupy different trust layers. A Skill is guidance loaded into model context on demand, so its effect depends on the model following it. A Hook is a command process launched by CodeN at event boundaries and can block or adjust parts of the flow. A Skill is not enforced policy, and a Hook is not a sandbox.
+
+## Create a Skill
+
+### Minimal structure
+
+```text
+<workspace>/skills/pdf-processing/
+└── SKILL.md
+```
+
+`SKILL.md` content:
+
+```markdown
+---
+name: pdf-processing
+description: Use when reading or modifying PDF documents.
+---
+
+# PDF workflow
+
+Read the relevant files before changing them.
+```
+
+`name` must match the directory name; `description` states **when to trigger**, which is how the agent matches tasks against the startup context.
+
+### frontmatter fields
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `name` | yes | lowercase letters/digits/hyphens, 1–64 chars |
+| `description` | yes | non-empty, ≤1024 chars |
+| `license` | no | license information |
+| `compatibility` | no | compatibility statement |
+| `metadata` | no | arbitrary object |
+| `allowed-tools` | no | tool allowlist |
+
+### Progressive-disclosure guidance
+
+- Expand the body as needed: start with a minimal workflow and keep details in `references/`, `scripts/`, etc., which the agent reads with ordinary tools after activation.
+- Prefer explicit steps and rules over background prose.
+- Resource files travel with the skill directory; paths are relative to the skill root (returned by `activate_skill`).
+- The repository-bundled `skills/coden-tool-plugin-development/` is a reusable template.
+
+### Placement in a repository
+
+| Directory | Purpose |
+| --- | --- |
+| `<workspace>/skills/<name>/` | bundled with the repository, distributed with it |
+| `<workspace>/.agents/skills/<name>/` | locally installed, not distributed |
+| `~/.agents/skills/<name>/` | user-global |
+
+### Related references
+
+- [Discovery](/coden/en/docs/extend/choose-an-extension/)
+- [Install and Debug](/coden/en/docs/extend/skills-and-hooks/)
+- [Agent Skills specification](https://agentskills.io/specification)
+
+## Install and Debug
+
+### Installation
+
+| Target | How |
+| --- | --- |
+| user-global | place at `~/.agents/skills/<name>/SKILL.md` |
+| project-local | place at `<workspace>/.agents/skills/<name>/SKILL.md` |
+| repository-bundled | place at `<workspace>/skills/<name>/SKILL.md` and commit |
+| install a skill from a repository | `npx skills add TwinklerG/CodeN --skill coden-tool-plugin-development` |
+
+### Verification
+
+```bash
+coden --verbose
+```
+
+After startup, run `/skills` to list active skills (name, description, `project`/`user` scope). `--verbose` prints the reason for each skipped entry:
+
+```text
+ignored project skill <path>: <reason>
+```
+
+### Common failure reasons
+
+| Symptom | Cause |
+| --- | --- |
+| skill not listed | directory name differs from frontmatter `name`; or it sits in a non-scanned location |
+| invalid `description` | empty or longer than 1024 characters |
+| YAML parse failure | malformed frontmatter (must start and end with `---`) |
+| directory skipped | missing `SKILL.md`, not a regular file, larger than 1MB, or a symlink escaping the scan root |
+| changes not effective | skills are discovered at startup only; restart required |
+
+### Debug order
+
+1. Start with `coden --verbose` and inspect `ignored ... skill` lines.
+2. Confirm the name and scope with `/skills`.
+3. Check the directory name, frontmatter, file size, and real path (`realpath`).
+4. Activation test: `coden -p "use the <name> skill for the task"` and watch for a `activate_skill` call.
+
+### Related references
+
+- [Discovery](/coden/en/docs/extend/choose-an-extension/)
+- [Create a Skill](/coden/en/docs/extend/skills-and-hooks/)
+- [Tools and Risk Levels](/coden/en/docs/agent/tools-and-context/)
+
+## Matchers
+
+### Syntax
+
+- `matcher` is a regular-expression string (compiled with `new RegExp(matcherSource)`) at config parse time; omitting it or using `"*"` matches everything.
+- An invalid regex fails config parsing (startup error).
+- With no match target, the matcher is treated as `"*"` (for example `Stop` has no matcher).
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "bash|edit|write",
+      "hooks": [{
+        "type": "command",
+        "command": "echo matched"
+      }]
+    }]
+  }
+}
+```
+
+### Matchable events and targets
+
+| Event | Match target |
+| --- | --- |
+| `PreToolUse` | `toolName` |
+| `PermissionRequest` | `toolName` |
+| `PostToolUse` | `toolName` |
+| `PostToolUseFailure` | `toolName` |
+| `SessionStart` | `source` (`startup`/`resume`) |
+| `Notification` | `notificationType` (`permission_prompt`/`attention_required`) |
+| `UserPromptSubmit`, `Stop`, `SessionEnd` | matcher not accepted (config with a matcher errors) |
+
+### Matching semantics
+
+- The matcher accepts a string only; other types fail configuration.
+- The regex tests the target string (such as the `bash` tool name), not the full input.
+- Multiple groups may target the same event; all matching hooks run in parallel in config order (see [Execution](/coden/en/docs/agent/failures-and-control-flow/)).
+- At most 64 commands per event across merged user + project scopes.
+
+### Related references
+
+- [Agent Hooks Events](/coden/en/docs/extend/skills-and-hooks/)
+- [Protocol](/coden/en/docs/reference/hooks-and-storage/)
+- [Execution](/coden/en/docs/agent/failures-and-control-flow/)
+
+## Protocol
+
+### Process conventions
+
+- Commands run through the system shell: POSIX `/bin/sh -c <command>`; Windows `cmd /d /s /c`.
+- The working directory is the CodeN workspace; the environment inherits the CodeN process plus:
+
+| Variable | Value |
+| --- | --- |
+| `CODEN_PROJECT_DIR` | workspace path |
+| `CODEN_SESSION_ID` | current session ID |
+| `CODEN_HOOK_EVENT` | event name |
+
+### stdin: one JSON object
+
+```json
+{
+  "schemaVersion": 1,
+  "hookEventName": "PreToolUse",
+  "sessionId": "…",
+  "turnId": "…",
+  "cwd": "/path/to/workspace",
+  "permissionMode": "manual",
+  "toolName": "bash",
+  "callId": "…",
+  "input": { "command": "git status" },
+  "risk": "modify"
+}
+```
+
+Common fields: `schemaVersion`, `hookEventName`, `sessionId`, optional `turnId`, `cwd`, `permissionMode`, followed by the event payload. The input limit is **1MB** (over limit counts as a failure).
+
+### stdout: one JSON object
+
+- Allowed top-level fields: `systemMessage` (all events); `Stop` additionally allows `decision` (`"block"` only) and `reason`; other events use `hookSpecificOutput` with per-event allowlists.
+- `systemMessage` must be a string, scrubbed of control characters, truncated to 2000 characters, and forwarded to the diagnostic sink (stdout/stderr).
+- `hookSpecificOutput.hookEventName` must match the event; unknown fields count as failures.
+- Output limit is **10KB** per stream (stdout and stderr independently); exceeding it terminates the process and marks `outputExceeded`.
+- Exit code `0` with empty stdout: no-op.
+
+### Output example
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow"
+  }
+}
+```
+
+### Exit-code semantics
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | success; stdout optional |
+| `2` | explicit block (controllable events only) |
+| other / timeout / output or input over limit | hook failure: warn and fail open, producing no decision |
+
+### Security notes
+
+- The event JSON is the only data channel: never interpolate event fields into shell command strings.
+- Commands should read JSON from stdin and emit valid JSON, avoiding injection and escaping issues.
+- Hook output is scrubbed of terminal control characters; do not rely on stdout to echo sensitive information.
+
+### Related references
+
+- [Decisions](/coden/en/docs/reference/hooks-and-storage/)
+- [Execution](/coden/en/docs/agent/failures-and-control-flow/)
+- [Examples](/coden/en/docs/extend/skills-and-hooks/)
+
+## Decisions
+
+### Decision entry points
+
+| Event | Decision field | Effect |
+| --- | --- | --- |
+| `PreToolUse` | `hookSpecificOutput.permissionDecision`: `allow`/`ask`/`deny` | predicates permission: `deny` rejects outright (`permission.hook_denied`); `ask` forces human; `allow` bypasses the policy layer |
+| `PermissionRequest` | `hookSpecificOutput.decision.behavior`: `allow`/`ask`/`deny` (optional `message`) | fires when the policy layer needs a human; can override the final decision |
+| `Stop` | top-level `decision: "block"` + `reason` | injects feedback asking the model to continue |
+| controllable event + exit code `2` | stderr as `blockReason` | equivalent to `deny`/block |
+
+### Full PreToolUse order
+
+1. `PreToolUse` hook decision (including `updatedInput` and `additionalContext`).
+2. After an input update, re-validate everything: schema (fails as `hook.invalid_updated_input`), structured file path, risk classification, and permissions.
+3. Policy layer (`manual`/`smart`/`auto`).
+4. When a human is needed, fire the `PermissionRequest` hook (`reason: "policy"`; `"hook"` when a hook requested human review).
+5. Human confirmation (inline in CLI/TUI).
+6. Execute the tool and fire `PostToolUse`/`PostToolUseFailure`.
+
+### Merge semantics
+
+Multiple hooks for the same event run **in parallel**, with results ordered by config `order`:
+
+- Permission decisions merge as `deny > ask > allow` (the most conservative wins).
+- Multiple `updatedInput` values conflict and are **all discarded** (`inputConflict`); no update applies.
+- Any `blocked` blocks the whole result.
+- Each `additionalContext` injects as a separate `[CodeN hook context: <event>]` message; the total is capped at 10KB.
+
+### Interaction with approval modes
+
+| Mode | Hook behavior |
+| --- | --- |
+| `manual` | `PreToolUse` decisions apply; policy asks a human; `PermissionRequest` can override |
+| `smart` | same; ordinary modifications first go through LLM review, and hook `deny` beats an LLM allow |
+| `auto` | `PreToolUse` still runs: `deny` applies; `ask` safely rejects (`permission.hook_requires_interaction`) |
+
+### Related references
+
+- [Agent Hooks Events](/coden/en/docs/extend/skills-and-hooks/)
+- [Protocol](/coden/en/docs/reference/hooks-and-storage/)
+- [Approval Modes](/coden/en/docs/safety/approval-modes/)
+- [Examples](/coden/en/docs/extend/skills-and-hooks/)
+
+## Examples
+
+### macOS authorization notification
+
+The `PermissionRequest` event fires when human authorization is needed. This sends a system notification while waiting (macOS):
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [{
+      "matcher": "bash|edit|write",
+      "hooks": [{
+        "type": "command",
+        "command": "osascript -e 'display notification \"CodeN 正在等待授权\" with title \"CodeN\"'; afplay /System/Library/Sounds/Glass.aiff",
+        "timeout": 5
+      }]
+    }]
+  }
+}
+```
+
+### PreToolUse approval script (Node)
+
+Reads JSON from stdin and emits an `allow` decision; on parse failure it emits nothing (fail-open to the policy layer).
+
+```js
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (input += chunk));
+process.stdin.on("end", () => {
+  JSON.parse(input);
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" }
+  }));
+});
+```
+
+Matching configuration:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "bash",
+      "hooks": [{
+        "type": "command",
+        "command": "node /path/to/approve.js"
+      }]
+    }]
+  }
+}
+```
+
+### Stop demand-more-work
+
+When the model stops, `decision: "block"` injects `reason` into the conversation and asks it to continue (still bounded by `maxSteps`):
+
+```json
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "echo '{\"decision\":\"block\",\"reason\":\"tests have not been run yet\"}'"
+      }]
+    }]
+  }
+}
+```
+
+### Reading session variables
+
+Hook environments provide `CODEN_PROJECT_DIR`, `CODEN_SESSION_ID`, and `CODEN_HOOK_EVENT`:
+
+```bash
+echo "project=$CODEN_PROJECT_DIR session=$CODEN_SESSION_ID event=$CODEN_HOOK_EVENT"
+```
+
+### Related references
+
+- [Protocol](/coden/en/docs/reference/hooks-and-storage/)
+- [Decisions](/coden/en/docs/reference/hooks-and-storage/)
+- [Matchers](/coden/en/docs/extend/skills-and-hooks/)

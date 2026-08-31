@@ -1,0 +1,126 @@
+---
+title: 认识 CodeN
+description: 了解 CodeN 的定位、设计取向与明确边界。
+sidebar:
+  order: 110
+---
+
+CodeN 的产品边界很具体：它是运行在本机、直接连接模型 Provider 的终端 Coding Agent。核心不是一个远端执行服务，也不是通用 Agent 框架；它把模型原生 Tool Calling 与本地工具 Registry、权限策略、会话和扩展机制连接起来。
+
+最重要的设计取向是可塑造性。Plugin 改变模型可调用的能力，Skill 按需提供方法知识，Hook 在生命周期边界执行确定性策略，`AGENTS.md` 提供项目长期约束。四者互补，但都不会把不可信代码变成沙箱。
+
+## CodeN 文档
+
+CodeN（Code NJU）是一个以可插拔工具插件为特色的 Coding Agent。它直接使用模型原生 Tool Calling，在本地读取、修改文件和执行命令；核心小而透明，不依赖 Agent 框架或服务端代码执行。
+
+### 最短上手路径
+
+```bash
+bun add -g @twinklerg/coden      # or npm install -g @twinklerg/coden
+export CODEN_OPENAI_API_KEY=...  # or CODEN_ANTHROPIC_API_KEY
+coden "fix the failing tests in this project"
+```
+
+三条命令即可完成安装、配置和首个任务。启动后默认进入 CLI/REPL，工作目录即工作区。
+
+### 使用流程
+
+| 步骤 | 任务 | 页面 |
+| --- | --- | --- |
+| 1 | 确认运行环境 | [安装要求](/coden/zh/docs/start/install/) |
+| 2 | 安装 CodeN | [安装 CodeN](/coden/zh/docs/start/install/) |
+| 3 | 配置第一个 Provider | [配置第一个 Provider](/coden/zh/docs/start/provider-and-model/) |
+| 4 | 了解界面模式 | [启动 CLI / TUI](/coden/zh/docs/start/first-task/) |
+| 5 | 完成第一个任务 | [完成第一个任务](/coden/zh/docs/start/first-task/) |
+
+### 文档地图
+
+- **核心概念**：Agent 循环、工作区、工具与风险等级、审批模式、会话、上下文与思考等级。
+- **界面与使用方式**：CLI/REPL、全屏 TUI、print 模式、斜杠命令、命令行参数。
+- **配置**：配置优先级、作用域、环境变量、OpenAI/Anthropic 配置、语言与思考等级、字段参考、凭据与数据安全。
+- **Skills**：发现规则、创建 Skill、安装与调试。
+- **插件**：本地 TypeScript 插件、npm 插件管理、插件作者协议、信任与安全边界、插件市场。
+- **Agent Hooks**：事件、匹配规则、I/O 协议、决策与权限、执行与超时、信任与安全、示例。
+- **进阶指南**：Smart Approval、工作区外访问、会话存储、自定义 Base URL、自动化。
+- **参考与排错**：CLI 命令参考、配置参考、常见错误、FAQ、安全模型。
+
+### 行为边界
+
+- 每条命令、配置键和行为均以当前版本源码为唯一事实来源。
+- CodeN 不读取系统区域设置，默认界面语言为中文。
+- `bash` 与插件以当前用户进程权限运行，这不是通用安全沙箱；风险分类是防误操作的启发式护栏。
+- 会话与 trace 保存在本地数据目录，可能包含敏感内容，请勿未经审查地分享。
+
+### 相关参考
+
+- [CLI 命令参考](/coden/zh/docs/reference/cli/)
+- [配置参考](/coden/zh/docs/reference/configuration/)
+- [常见错误](/coden/zh/docs/operate/automation-and-recovery/)
+- [安全模型](/coden/zh/docs/safety/security-boundaries/)
+
+## FAQ
+
+### CodeN 是什么？
+
+一个以可插拔工具插件为特色、用 TypeScript 独立实现的 Coding Agent：直接使用模型原生 Tool Calling，在本地读取、修改文件和执行命令，不依赖 Agent 框架或服务端代码执行。
+
+### 需要 Node 还是 Bun？
+
+| 场景 | 要求 |
+| --- | --- |
+| 运行发布版 CLI | Node.js 22+ |
+| 本地 TypeScript 插件（`*.ts`） | Bun（Node 下无法加载） |
+| npm 插件安装/同步 | PATH 上需要 `bun` |
+| 从源码开发 | Bun 1.1+ 与 Just |
+
+### 支持哪些模型？
+
+`openai` 与 `anthropic` 两个 Provider，模型 ID 由用户显式指定（默认 `gpt-5-mini`）。CodeN 不维护模型能力白名单，参数按原样发送。详见 [配置第一个 Provider](/coden/zh/docs/start/provider-and-model/)。
+
+### 支持自定义端点吗？
+
+OpenAI 兼容端点：`CODEN_OPENAI_BASE_URL`。Anthropic 固定使用官方端点。详见 [自定义 Base URL](/coden/zh/docs/operate/providers/)。
+
+### 会话保存在哪里？
+
+`$XDG_DATA_HOME/coden/sessions/<workspace-hash>/`（默认 `~/.local/share/coden`）。文件权限 `0700`/`0600`；内容含模型输出与推理，属敏感数据。详见 [会话存储](/coden/zh/docs/agent/sessions/)。
+
+### 如何控制用量？
+
+- `-p --auto` 单轮执行，CI 友好。
+- `--max-steps` 限制步骤数（默认 20）。
+- `--resume <id>` 恢复上下文，避免重复建立上下文。
+- 思考等级影响输出预算分配（Anthropic 预算计入 `reservedOutputTokens`）。
+
+### 插件会做危险的事吗？
+
+插件与 `bash` 一样以当前用户进程权限运行，**不是沙箱**。防护措施：项目插件需要工作区信任；npm 生命周期脚本默认禁用；危险命令识别；`--auto` 不跳过信任确认。详见 [插件信任与安全](/coden/zh/docs/safety/security-boundaries/)。
+
+### 支持私有 npm Registry 吗？
+
+不支持。npm 插件固定使用 `https://registry.npmjs.org`，specifier 仅接受 `npm:<package>[@version]` 形式；私有 Registry、Git、URL 与本地目录源均不受支持。
+
+### 如何恢复一个被中断的任务？
+
+重启后 `coden --resume <session-id>`；中断的工具调用会以 `runtime.interrupted` 错误补齐，模型可继续。
+
+### 如何参与开发？
+
+```bash
+git clone <repository-url>
+cd coden
+bun install
+just check
+```
+
+`just build` 构建 CLI 与插件契约；`just publish-dry-run` 预览 npm 发布内容。
+
+### 文档里的命令都验证过吗？
+
+是的。每条命令、默认值与行为都以当前源码、测试与实际构建产物为准；无法验证的内容不在文档中出现。
+
+### 相关参考
+
+- [常见错误](/coden/zh/docs/operate/automation-and-recovery/)
+- [CLI 命令参考](/coden/zh/docs/reference/cli/)
+- [安全模型](/coden/zh/docs/safety/security-boundaries/)

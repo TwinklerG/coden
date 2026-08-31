@@ -1,0 +1,101 @@
+---
+title: Compaction and Thinking
+description: Understand lossy compaction, thinking levels, and provider state.
+sidebar:
+  order: 230
+---
+
+Context management and model reasoning are separate control axes. Compaction preserves task state lossily as history approaches its budget; the thinking level maps to provider parameters and is snapshotted at the start of a turn. CodeN unifies the user-facing control, not the reasoning semantics of different providers or models.
+
+## Context and Thinking Levels
+
+### Context budget
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `contextWindow` | `128000` | provider context window |
+| `reservedOutputTokens` | `8192` | `maxOutputTokens` of every request |
+| `safetyMargin` | `4096` | safety margin on the input budget |
+| input budget | `115712` | `contextWindow − reservedOutputTokens − safetyMargin` |
+
+Validation: all three must be non-negative integers; `contextWindow` and `reservedOutputTokens` must be positive; `contextWindow` must exceed `reservedOutputTokens + safetyMargin`. Estimation: text counts as `length / 3.5` rounded up, +6 per message, and tool definitions are estimated from their JSON — an estimator, not provider-exact billing.
+
+### Automatic compaction
+
+- When the estimate exceeds **80%** of the input budget: keep the 3 most recent message units and summarize the rest deterministically (tool lines 300 chars, others 500 chars, 6000-char total cap).
+- The same model then refines the summary (output capped at `min(2048, reservedOutputTokens)`); if refinement fails the deterministic summary is kept and the main task is unaffected.
+- On a provider 413 or context-length error, **emergency compaction** keeps only the last unit; if still over after one pass, `context.exhausted` is thrown.
+- The summary, source range, and refinement are persisted to the session; `/compact` triggers it manually; `/new` clears the summary.
+
+### Thinking levels
+
+Six unified levels: `default` (default; sends no parameter), `off`, `minimal`, `low`, `medium`, `high`.
+
+| Level | OpenAI (`reasoning_effort`) | Anthropic (thinking budget) |
+| --- | --- | --- |
+| `default` | not sent | not sent |
+| `off` | `minimal` (shown as `off→minimal`) | `{ type: "disabled" }` |
+| `minimal` | `minimal` | 1024 tokens |
+| `low` | `low` | 25% of `reservedOutputTokens` |
+| `medium` | `medium` | 50% |
+| `high` | `high` | 75% |
+
+Anthropic budgets clamp to `[1024, reservedOutputTokens − 1]`; enabling enabled thinking requires `reservedOutputTokens > 1024`. The budget counts inside `reservedOutputTokens`, so a higher level leaves fewer tokens for final text and tool calls in the same response.
+
+### Scope
+
+- Applies to main-agent requests only; context compaction and Smart Approval reviews keep provider defaults.
+- The level snapshot at turn start covers that turn's tool loop and retries.
+- Anthropic `thinking`/`redacted_thinking` and signature blocks persist as `providerState` and are replayed after tool calls and resume; mismatched provider state is ignored when switching providers.
+- Entry points: `--thinking <level>`, `CODEN_THINKING_LEVEL`, config `thinkingLevel`, REPL `/thinking [level]`.
+
+### Related references
+
+- [Language and Thinking Levels](/coden/en/docs/agent/compaction-and-thinking/)
+- [Configuration Reference](/coden/en/docs/reference/configuration/)
+- [Agent Loop](/coden/en/docs/agent/loop/)
+
+## Language and Thinking Levels
+
+### Language
+
+- CodeN defaults to Chinese and **never reads the system locale**.
+- Language resolution: `--lang <zh|en>` (this process only, no config write) > user config `language` > default `zh`.
+- The project config `language` field is ignored — language is a user-owned preference.
+- REPL `/lang <zh|en>` switches immediately and atomically updates the **user-level** config file (preserving other fields, mode `0600`).
+- The system prompt, built-in tool descriptions, and UI share one language; the agent may follow a per-task request for another reply language without changing the UI or persisting the preference.
+- Third-party plugin names, descriptions, output, and errors always keep the author's original text.
+- Invalid `--lang` or config values error out (exit code 2); an invalid `--lang` on the command line only reports the error and writes no config.
+
+### Thinking levels
+
+Six unified levels: `default` (default), `off`, `minimal`, `low`, `medium`, `high`.
+
+| Entry point | Scope | Persistence |
+| --- | --- | --- |
+| `--thinking <level>` | this process | overridden into the session at startup (resume scenarios) |
+| `CODEN_THINKING_LEVEL` | this process | none |
+| config `thinkingLevel` | user/project | the config file itself |
+| `/thinking [level]` | this process and session | written to session records; never to config files |
+| `/new` | — | does not change the level |
+
+Resume precedence: explicit `--thinking` > saved session value > environment/project/user config > `default`.
+
+### Provider mapping
+
+- OpenAI: `reasoning_effort`; `off→minimal` (displayed as `off→minimal`).
+- Anthropic: explicit thinking budgets (1024 / 25% / 50% / 75%), requiring `reservedOutputTokens > 1024`; `off` sends `{ type: "disabled" }`.
+- `default` sends no parameter, preserving pre-upgrade behavior.
+
+### Scope boundaries
+
+- Main-agent requests only; context compaction and Smart Approval reviews keep provider defaults.
+- The turn-start snapshot covers that turn's tool loop and retries.
+- Explicit settings never silently degrade: unsupported parameters surface as clear provider errors.
+
+### Related references
+
+- [Context and Thinking Levels](/coden/en/docs/agent/compaction-and-thinking/)
+- [Slash Commands](/coden/en/docs/reference/cli/)
+- [CLI Options](/coden/en/docs/reference/cli/)
+- [Reference](/coden/en/docs/reference/configuration/)
