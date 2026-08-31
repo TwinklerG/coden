@@ -179,6 +179,19 @@ export class EditorState {
     if (targetRow) this._cursor = offsetAtColumn(targetRow, this.preferredColumn);
   }
 
+  /**
+   * True when the cursor sits on the top (direction -1) or bottom (direction 1)
+   * visual row, so an arrow key would leave the draft and should instead recall
+   * the previous/next history entry. Mirrors readline's up/down-at-boundary
+   * behavior: moving up at the first row recalls history, moving down at the
+   * last row returns toward the saved draft.
+   */
+  atVerticalBoundary(direction: -1 | 1, columns: number): boolean {
+    const layout = layoutEditor(this._text, this._cursor, columns);
+    const targetRowIndex = layout.cursor.row + direction;
+    return targetRowIndex < 0 || targetRowIndex >= layout.rows.length;
+  }
+
   historyPrevious(): void {
     if (this._entries.length === 0) return;
     if (this.historyIndex === null) {

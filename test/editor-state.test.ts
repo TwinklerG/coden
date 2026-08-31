@@ -187,7 +187,7 @@ describe("editor state", () => {
     expect(wrapped.cursor).toBe(6);
   });
 
-  it("stops vertical arrows at draft boundaries without recalling history", () => {
+  it("stops the moveVertical primitive at draft boundaries", () => {
     const state = new EditorState(["history"]);
     state.insert("ab\ncd");
 
@@ -202,5 +202,43 @@ describe("editor state", () => {
 
     state.historyPrevious();
     expect(state.text).toBe("history");
+  });
+
+  it("detects the top and bottom visual boundaries for arrow-key history recall", () => {
+    const state = new EditorState();
+    // Single-line/empty draft: every row is both the top and the bottom boundary.
+    expect(state.atVerticalBoundary(-1, 80)).toBe(true);
+    expect(state.atVerticalBoundary(1, 80)).toBe(true);
+
+    state.insert("ab\ncd");
+    // Cursor at end (bottom row): only the down boundary is reachable.
+    expect(state.atVerticalBoundary(-1, 80)).toBe(false);
+    expect(state.atVerticalBoundary(1, 80)).toBe(true);
+
+    // Move the cursor to the very first row (offset 0): only the up boundary.
+    while (state.cursor > 0) state.moveHorizontal(-1);
+    expect(state.cursor).toBe(0);
+    expect(state.atVerticalBoundary(-1, 80)).toBe(true);
+    expect(state.atVerticalBoundary(1, 80)).toBe(false);
+  });
+
+  it("recalls previous/next history when arrow keys reach a boundary", () => {
+    // Mirrors readline: up at the top/empty row recalls history, down returns
+    // forward toward the saved draft.
+    const state = new EditorState(["one", "two"]);
+
+    // Empty prompt: up recalls the last entry.
+    if (state.atVerticalBoundary(-1, 80)) state.historyPrevious();
+    expect(state.text).toBe("two");
+
+    // Up again walks further back.
+    if (state.atVerticalBoundary(-1, 80)) state.historyPrevious();
+    expect(state.text).toBe("one");
+
+    // Down walks forward, then restores the empty saved draft.
+    if (state.atVerticalBoundary(1, 80)) state.historyNext();
+    expect(state.text).toBe("two");
+    if (state.atVerticalBoundary(1, 80)) state.historyNext();
+    expect(state.text).toBe("");
   });
 });

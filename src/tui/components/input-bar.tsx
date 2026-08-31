@@ -98,8 +98,14 @@ export function InputBar({
       let handled = true;
       if (key.leftArrow) state.moveHorizontal(-1);
       else if (key.rightArrow) state.moveHorizontal(1);
-      else if (key.upArrow) state.moveVertical(-1, layout.editorColumns);
-      else if (key.downArrow) state.moveVertical(1, layout.editorColumns);
+      else if (key.upArrow)
+        state.atVerticalBoundary(-1, layout.editorColumns)
+          ? state.historyPrevious()
+          : state.moveVertical(-1, layout.editorColumns);
+      else if (key.downArrow)
+        state.atVerticalBoundary(1, layout.editorColumns)
+          ? state.historyNext()
+          : state.moveVertical(1, layout.editorColumns);
       else if (key.home || (key.ctrl && input === "a")) state.moveLineBoundary("start");
       else if (key.end || (key.ctrl && input === "e")) state.moveLineBoundary("end");
       else if (key.backspace) state.backspace();

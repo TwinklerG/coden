@@ -200,10 +200,12 @@ export class MultilineEditor {
         this.state.moveHorizontal(1);
         break;
       case "up":
-        this.state.moveVertical(-1, this.columns());
+        if (this.state.atVerticalBoundary(-1, this.columns())) this.state.historyPrevious();
+        else this.state.moveVertical(-1, this.columns());
         break;
       case "down":
-        this.state.moveVertical(1, this.columns());
+        if (this.state.atVerticalBoundary(1, this.columns())) this.state.historyNext();
+        else this.state.moveVertical(1, this.columns());
         break;
       case "home":
       case "ctrl-a":

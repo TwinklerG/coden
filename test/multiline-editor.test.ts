@@ -198,6 +198,30 @@ describe("MultilineEditor", () => {
     expect(h.screen.lines().at(-1)).toBe("> one!");
   });
 
+  it("recalls history with Up on an empty prompt and restores the draft with Down", async () => {
+    const h = editorHarness(20);
+    const first = h.editor.read();
+    h.input.write("one\r");
+    await first;
+    const second = h.editor.read();
+    h.input.write("two\r");
+    await second;
+
+    // Empty prompt: Up recalls the last entry, Up again walks back, Down walks
+    // forward and finally restores the empty saved draft.
+    const third = h.editor.read();
+    h.input.write("\u001b[A");
+    expect(h.screen.lines().at(-1)).toBe("> two");
+    h.input.write("\u001b[A");
+    expect(h.screen.lines().at(-1)).toBe("> one");
+    h.input.write("\u001b[B");
+    expect(h.screen.lines().at(-1)).toBe("> two");
+    h.input.write("\u001b[B");
+    expect(h.screen.lines().at(-1)).toBe("> ");
+    h.input.write("\u0003");
+    await expect(third).resolves.toEqual({ type: "eof" });
+  });
+
   it("dispose resolves EOF and restores the terminal", async () => {
     const h = editorHarness(20);
     const result = h.editor.read();
