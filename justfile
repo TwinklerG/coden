@@ -19,9 +19,21 @@ fmt:
 
 # Lint, typecheck, and test
 check:
-  bun run lint
+  biome check --config-path . src test
   bun run typecheck
   bun run test
+
+# Start the product website locally
+website-dev:
+  cd website && bun run dev
+
+# Lint, typecheck, test, build, and validate the product website
+website-check:
+  cd website && bun install --frozen-lockfile && bun run check
+
+# Build the product website
+website-build:
+  cd website && bun install --frozen-lockfile && bun run build
 
 # Verify exactly what npm would publish (no upload)
 publish-dry-run:
