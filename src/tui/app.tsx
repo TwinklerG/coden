@@ -57,7 +57,7 @@ export function TuiApp({
 
   useEffect(() => {
     void controller.bootstrap();
-    const terminate = () => void controller.shutdown();
+    const terminate = () => void controller.shutdown("cancelled");
     process.on("SIGTERM", terminate);
     process.on("SIGHUP", terminate);
     return () => {
@@ -106,7 +106,7 @@ export function TuiApp({
         columns={columns}
         topRow={calculateInputCursorTopRow(transcriptRows)}
         onSubmit={(text) => void controller.submit(text)}
-        onEof={() => void controller.shutdown()}
+        onEof={() => void controller.shutdown("eof")}
         onInterrupt={() => void controller.requestExit()}
         onEditorChange={() => reviseEditor()}
       />

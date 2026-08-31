@@ -80,6 +80,7 @@ export async function runAgentCommand(
   const editor = richRepl ? new MultilineEditor() : undefined;
   let renderer: TerminalRenderer | undefined;
   let application: AgentApplication | undefined;
+  let endReason: "completed" | "failed" | "cancelled" | "eof" | "quit" = "completed";
   const interaction: AgentInteraction = {
     confirm: (message, signal) => yesNo(ask, message, signal),
     permission: createPermissionPrompt(ask, i18n),
@@ -98,11 +99,14 @@ export async function runAgentCommand(
           printMode: options.print,
         });
       },
+      onHookDiagnostic(message) {
+        process.stderr.write(`[coden] ${message}\n`);
+      },
     });
     for (const warning of application.startupWarnings) process.stderr.write(`coden: ${warning}\n`);
 
     if (initialPrompt) {
-      await runTurn(application.runtime, initialPrompt, rl);
+      if (await runTurn(application.runtime, initialPrompt, rl)) endReason = "cancelled";
       return;
     }
     if (options.print) throw new Error(i18n.messages.cli.printRequiresPrompt);
@@ -110,8 +114,12 @@ export async function runAgentCommand(
       typeof options.resume === "string"
         ? renderResumeTranscript(application.session.sessionId, application.recoveredMessages, i18n)
         : undefined;
-    await repl(application, rl, editor, resumeTranscript, i18n);
+    endReason = await repl(application, rl, editor, resumeTranscript, i18n);
+  } catch (error) {
+    endReason = "failed";
+    throw error;
   } finally {
+    await application?.end(endReason);
     editor?.dispose();
     rl?.close();
     renderer?.dispose();
@@ -147,7 +155,7 @@ async function repl(
   editor: MultilineEditor | undefined,
   resumeTranscript: string | undefined,
   i18n: I18n,
-): Promise<void> {
+): Promise<"eof" | "quit"> {
   stdout.write(CODEN_BANNER);
   stdout.write(`${i18n.messages.repl.version(CODEN_VERSION)}\n`);
   stdout.write(`${i18n.messages.repl.workspace(application.metadata.workspaceId)}\n`);
@@ -165,7 +173,7 @@ async function repl(
           const line = await question(requireInterface(rl), localizedPrompt);
           return line === EOF ? undefined : line;
         });
-    if (result.type === "eof") break;
+    if (result.type === "eof") return "eof";
 
     const command = await executeReplCommand(result.text, {
       runtime: application.runtime,
@@ -179,7 +187,7 @@ async function repl(
       switchThinkingLevel: application.switchThinkingLevel,
     });
     if (command.type === "empty") continue;
-    if (command.type === "exit") break;
+    if (command.type === "exit") return "quit";
     if (command.type === "output") {
       stdout.write(command.text);
       continue;
@@ -261,15 +269,17 @@ function requireInterface(rl: Interface | undefined): Interface {
   return rl;
 }
 
-async function runTurn(runtime: AgentRuntime, text: string, rl?: Interface): Promise<void> {
+async function runTurn(runtime: AgentRuntime, text: string, rl?: Interface): Promise<boolean> {
   const controller = new AbortController();
   const cancel = () => controller.abort(new Error("Cancelled by user"));
   process.once("SIGINT", cancel);
   rl?.once("SIGINT", cancel);
   try {
     await runtime.run(text, controller.signal);
+    return false;
   } catch (error) {
     if (!controller.signal.aborted) throw error;
+    return true;
   } finally {
     process.removeListener("SIGINT", cancel);
     rl?.removeListener("SIGINT", cancel);

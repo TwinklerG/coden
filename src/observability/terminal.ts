@@ -170,6 +170,12 @@ export class TerminalRenderer {
     if (event.type === "turn.failed") {
       this.status(pc.red(this.i18n.messages.terminal.failed(String(event.data?.message))));
     }
+    if (event.type === "hook.completed" && this.options.verbose)
+      this.status(hookLabel("hook completed", event));
+    if (event.type === "hook.failed") this.status(pc.red(hookLabel("hook failed", event)));
+    if (event.type === "hook.blocked") this.status(pc.yellow(hookLabel("hook blocked", event)));
+    if (event.type === "hook.input_conflict")
+      this.status(pc.yellow(hookLabel("hook input conflict", event)));
     if (event.type === "plugin.loaded" && this.options.verbose) {
       this.status(this.i18n.messages.terminal.pluginLoaded(pluginLabel(event)));
     }
@@ -329,6 +335,14 @@ export class TerminalRenderer {
     this.reviewingTool = undefined;
     this.endProviderAttempt();
   }
+}
+
+function hookLabel(prefix: string, event: RuntimeEvent): string {
+  const eventName = sanitizeTerminalText(String(event.data?.event ?? "hook"));
+  const scope = sanitizeTerminalText(String(event.data?.scope ?? ""));
+  const order = event.data?.order;
+  const duration = event.data?.durationMs;
+  return `${prefix}: ${eventName}${scope ? ` ${scope}#${String(order ?? "?")}` : ""}${duration === undefined ? "" : ` (${String(duration)}ms)`}`;
 }
 
 function pluginLabel(event: RuntimeEvent): string {

@@ -188,7 +188,7 @@ export const en: Messages = {
   },
   trust: {
     local: (workspace) =>
-      `Project plugins run in-process with full user permissions. Trust workspace ${workspace}? [y/N] `,
+      `Project hooks and plugins run with full user permissions and can access files, network, and environment secrets. Trust workspace ${workspace}? [y/N] `,
     npm: (workspace) =>
       `Project npm plugins in ${workspace} run in-process with full user permissions. Trust this workspace?`,
     denied: "workspace is not trusted for project npm plugins",

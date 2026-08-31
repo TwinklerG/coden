@@ -54,6 +54,7 @@ export class TuiController {
           this.#disconnect?.();
           this.#disconnect = this.#options.store.connect(events);
         },
+        onHookDiagnostic: (message) => this.#options.store.addInfo(`[hook] ${message}`),
       });
       if (this.#closing) {
         await application.dispose();
@@ -107,7 +108,7 @@ export class TuiController {
         return;
       }
       if (command.type === "exit") {
-        await this.shutdown();
+        await this.shutdown("quit");
         return;
       }
 
@@ -128,7 +129,7 @@ export class TuiController {
       }
     } catch (error) {
       this.#options.store.setFatal(error);
-      await this.shutdown();
+      await this.shutdown("failed");
     } finally {
       this.#busy = false;
       if (!this.#closing && this.#options.store.getSnapshot().phase !== "failed")
@@ -145,10 +146,12 @@ export class TuiController {
       this.cancel();
       return;
     }
-    await this.shutdown();
+    await this.shutdown("quit");
   }
 
-  async shutdown(): Promise<void> {
+  async shutdown(
+    reason: "completed" | "failed" | "cancelled" | "eof" | "quit" = "completed",
+  ): Promise<void> {
     if (this.#closing) return;
     this.#closing = true;
     this.cancel();
@@ -157,6 +160,7 @@ export class TuiController {
     } catch {
       // Runtime already emitted a failure event; shutdown still restores the terminal.
     }
+    if (typeof this.#application?.end === "function") await this.#application.end(reason);
     await this.dispose();
     this.#options.onExit();
   }

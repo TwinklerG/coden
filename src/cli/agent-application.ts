@@ -18,10 +18,13 @@ import type {
   ToolDefinition,
   ToolRisk,
 } from "../core/types.js";
+import { HookEngine } from "../hooks/engine.js";
+import type { SessionEndReason } from "../hooks/types.js";
 import { saveUserLanguage } from "../i18n/config.js";
 import type { I18n } from "../i18n/i18n.js";
 import type { Language } from "../i18n/language.js";
 import { buildSystemPrompt } from "../i18n/prompts.js";
+import { sanitizeTerminalText } from "../observability/terminal-text.js";
 import { JSONLTraceWriter } from "../observability/trace.js";
 import type { PermissionDecision, PermissionMode } from "../permissions/policy.js";
 import { PermissionPolicy } from "../permissions/policy.js";
@@ -77,6 +80,7 @@ export interface CreateAgentApplicationOptions {
   i18n: I18n;
   interaction: AgentInteraction;
   onEvents?: (events: EventBus) => void;
+  onHookDiagnostic?: (message: string) => void;
 }
 
 export interface AgentApplication {
@@ -92,6 +96,7 @@ export interface AgentApplication {
   switchLanguage(language: Language): Promise<void>;
   getThinkingStatus(): ThinkingStatus;
   switchThinkingLevel(level: ThinkingLevel): Promise<ThinkingStatus>;
+  end(reason: SessionEndReason): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -208,6 +213,23 @@ export async function createAgentApplication(
       : undefined;
   const permissions = new PermissionPolicy(permissionMode, permissionPrompt, reviewer);
   const registry = new ToolRegistry(builtins);
+  const trustStore = new TrustStore(path.join(userConfigDir(), "trusted-workspaces.json"));
+  const ensureWorkspaceTrusted = createWorkspaceTrustGate(
+    workspace,
+    trustStore,
+    interaction.confirm,
+    i18n,
+  );
+  let projectTrusted = await trustStore.isWorkspaceTrusted(workspace);
+  if (!projectTrusted && config.hooks.some((hook) => hook.scope === "project"))
+    projectTrusted = await ensureWorkspaceTrusted();
+  const activeHooks = projectTrusted
+    ? config.hooks
+    : config.hooks.filter((hook) => hook.scope === "user");
+  const hooks = new HookEngine(activeHooks, events, undefined, (message) =>
+    options.onHookDiagnostic?.(sanitizeTerminalText(message)),
+  );
+  const hookContext = { cwd: workspace, sessionId: session.sessionId, permissionMode };
   const executor = new ToolExecutor(
     registry,
     permissions,
@@ -215,13 +237,8 @@ export async function createAgentApplication(
     workspace,
     60_000,
     command.allowOutsideWorkspace,
-  );
-  const trustStore = new TrustStore(path.join(userConfigDir(), "trusted-workspaces.json"));
-  const ensureWorkspaceTrusted = createWorkspaceTrustGate(
-    workspace,
-    trustStore,
-    interaction.confirm,
-    i18n,
+    hooks,
+    hookContext,
   );
   const loader = new PluginLoader(builtins, events, async () => ensureWorkspaceTrusted());
   const installedLoader = new InstalledPluginLoader();
@@ -312,7 +329,10 @@ export async function createAgentApplication(
       thinkingLevel: resolvedThinkingLevel,
     },
     initialMessages,
+    hooks,
+    hookContext,
   );
+  await runtime.start(typeof command.resume === "string" ? "resume" : "startup");
   const switchLanguage = async (language: Language) => {
     await saveUserLanguage(language);
     const previous = i18n.currentLanguage;
@@ -376,6 +396,17 @@ export async function createAgentApplication(
     await session.appendThinkingLevel(command.thinking);
   }
 
+  let ended = false;
+  const end = async (reason: SessionEndReason) => {
+    if (ended) return;
+    ended = true;
+    try {
+      await hooks.run("SessionEnd", { reason }, hookContext);
+    } catch {
+      /* best effort */
+    }
+  };
+
   return {
     runtime,
     events,
@@ -389,9 +420,11 @@ export async function createAgentApplication(
     switchLanguage,
     getThinkingStatus,
     switchThinkingLevel,
+    end,
     async dispose() {
       if (disposed) return;
       disposed = true;
+      await end("completed");
       await trace.flush();
     },
   };
@@ -454,19 +487,26 @@ export function createWorkspaceTrustGate(
   confirm: (message: string, signal?: AbortSignal) => Promise<boolean | string>,
   i18n?: I18n,
 ): () => Promise<boolean> {
+  let decision: Promise<boolean> | undefined;
   return async () => {
-    if (await store.isWorkspaceTrusted(workspace)) return true;
-    let realWorkspace: string;
-    try {
-      realWorkspace = await import("node:fs/promises").then(({ realpath }) => realpath(workspace));
-    } catch {
-      return false;
-    }
-    const message = i18n?.messages.trust.local(realWorkspace) ?? realWorkspace;
-    const answer = await confirm(message);
-    const allowed = typeof answer === "boolean" ? answer : /^y(?:es)?$/i.test(answer);
-    if (allowed) await store.trustWorkspace(workspace);
-    return allowed;
+    if (decision) return decision;
+    decision = (async () => {
+      if (await store.isWorkspaceTrusted(workspace)) return true;
+      let realWorkspace: string;
+      try {
+        realWorkspace = await import("node:fs/promises").then(({ realpath }) =>
+          realpath(workspace),
+        );
+      } catch {
+        return false;
+      }
+      const message = i18n?.messages.trust.local(realWorkspace) ?? realWorkspace;
+      const answer = await confirm(message);
+      const allowed = typeof answer === "boolean" ? answer : /^y(?:es)?$/i.test(answer);
+      if (allowed) await store.trustWorkspace(workspace);
+      return allowed;
+    })();
+    return decision;
   };
 }
 

@@ -186,7 +186,7 @@ export const zh = {
   },
   trust: {
     local: (workspace: string) =>
-      `项目插件将在当前进程中以完整用户权限运行。是否信任工作区 ${workspace}？[y/N] `,
+      `项目 Hook 与插件将以完整用户权限运行，并可访问文件、网络和环境机密。是否信任工作区 ${workspace}？[y/N] `,
     npm: (workspace: string) =>
       `位于 ${workspace} 的项目 npm 插件将在当前进程中以完整用户权限运行。是否信任此工作区？`,
     denied: "工作区未获项目 npm 插件信任",
