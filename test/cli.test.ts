@@ -164,6 +164,26 @@ describe("CLI session list and resume", () => {
   async function makeWorkspace() {
     return realpathSync(await mkdtemp(path.join(os.tmpdir(), "coden-ws-")));
   }
+  it("shows model, approval mode, and thinking level in the startup banner", async () => {
+    const workspace = await makeWorkspace();
+    const xdgHome = await mkdtemp(path.join(os.tmpdir(), "coden-xdg-"));
+    const result = spawnSync("bun", [cli], {
+      cwd: workspace,
+      encoding: "utf8",
+      input: "/quit\n",
+      env: { ...baseEnv, CODEN_OPENAI_API_KEY: "test-key", XDG_DATA_HOME: xdgHome },
+      timeout: 30_000,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`版本：${CODEN_VERSION}`);
+    expect(result.stdout).toContain(`工作区哈希：${workspaceHash(workspace)}`);
+    expect(result.stdout).toContain("模型：gpt-5-mini");
+    expect(result.stdout).toContain("审批模式：manual");
+    expect(result.stdout).toContain("思考等级：default");
+    expect(result.stdout).toContain("会话ID：");
+    expect(result.stdout).not.toContain("CodeN 会话");
+    expect(result.stdout).not.toContain("输入 /help 查看命令");
+  });
   it("lists sessions with --resume and no id", async () => {
     const workspace = await makeWorkspace();
     const xdgHome = await mkdtemp(path.join(os.tmpdir(), "coden-xdg-"));

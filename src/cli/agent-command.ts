@@ -159,6 +159,9 @@ async function repl(
   stdout.write(CODEN_BANNER);
   stdout.write(`${i18n.messages.repl.version(CODEN_VERSION)}\n`);
   stdout.write(`${i18n.messages.repl.workspace(application.metadata.workspaceId)}\n`);
+  stdout.write(`${i18n.messages.repl.model(application.metadata.model)}\n`);
+  stdout.write(`${i18n.messages.repl.approvalMode(application.metadata.approvalMode)}\n`);
+  stdout.write(`${i18n.messages.repl.thinking(application.metadata.thinkingDisplay)}\n`);
   stdout.write(
     resumeTranscript
       ? `${resumeTranscript}\n\n${i18n.messages.repl.resumedHelp}\n`
