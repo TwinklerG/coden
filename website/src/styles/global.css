@@ -272,11 +272,6 @@ input {
   color: inherit;
 }
 
-.site-footer-version {
-  margin: 0;
-  color: var(--coden-accent);
-}
-
 .home-shell,
 .page-not-found,
 .root-language-card {

@@ -24,7 +24,6 @@ export interface LocalizedMessages {
     docs: string;
     plugins: string;
     license: string;
-    version: string;
   };
   home: {
     eyebrow: string;
@@ -114,7 +113,6 @@ export const messages = {
       docs: "文档",
       plugins: "插件市场",
       license: "MIT License",
-      version: "版本",
     },
     home: {
       eyebrow: "CodeN",
@@ -202,7 +200,6 @@ export const messages = {
       docs: "Docs",
       plugins: "Plugins",
       license: "MIT License",
-      version: "Version",
     },
     home: {
       eyebrow: "CodeN",
