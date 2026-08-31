@@ -30,9 +30,9 @@ jobs:
       - name: Set up Node for npm publish
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
       - name: Smoke test Node artifact
         run: node dist/index.js --help
       - name: Publish to npm (trusted publishing)
-        run: npm publish --provenance --access public
+        run: npm publish --access public
