@@ -6,7 +6,7 @@
 
 **A hackable coding agent built around pluggable tool plugins.**
 
-CodeN (Code NJU) uses provider-native tool calling to read and modify files and run commands locally. Its agent core stays small and inspectable, so you can complete real coding work while understanding and shaping how model requests, tools, permissions, context, and sessions fit together.
+CodeN uses provider-native tool calling to read and modify files and run commands locally. Its agent core stays small and inspectable, so you can complete real coding work while understanding and shaping how model requests, tools, permissions, context, and sessions fit together.
 
 ## Why CodeN is interesting
 

@@ -33,7 +33,7 @@
 }
 
 .home-hero-copy::after {
-  content: "CODEN // NJU";
+  content: "CODEN";
   position: absolute;
   right: 1rem;
   bottom: 0.75rem;

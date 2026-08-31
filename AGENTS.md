@@ -1,6 +1,6 @@
 # CodeN
 
-CodeN(Code NJU)，极简编程智能体。
+CodeN，极简编程智能体。
 
 ## 工具链约定
 
