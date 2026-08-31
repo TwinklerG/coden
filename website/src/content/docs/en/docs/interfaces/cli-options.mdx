@@ -1,10 +1,48 @@
 ---
 title: CLI Options
-description: Collects the common CLI flags.
+description: "Every CLI option: purpose, defaults, validation, and mutual exclusions."
 sidebar:
   order: 350
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Option table
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `<prompt>` | — | the task to execute; omit to enter the REPL |
+| `-p, --print` | `false` | non-interactive output mode; requires a prompt; exits after one turn |
+| `--tui` | `false` | explicitly start the full-screen TUI; falls back to the CLI with a warning when TTY/raw-mode/`TERM` conditions fail |
+| `--cli` | `false` | explicitly use the CLI interface (the default mode) |
+| `--provider <openai\|anthropic>` | `openai` | model provider |
+| `--model <model-id>` | `gpt-5-mini` | model identifier |
+| `--resume [session-id]` | — | with an ID, resume the session; without, list sessions of the current workspace |
+| `--auto` | `false` | skip tool permission confirmations (ordinary in-workspace operations only) |
+| `--smart-approve` | `false` | LLM review for ordinary modifications, escalating to human on uncertainty |
+| `--allow-outside-workspace` | `false` | with `--auto`, allow read/write paths outside the workspace |
+| `--verbose` | `false` | show detailed runtime status |
+| `--max-steps <n>` | `20` | maximum model steps (positive integer) |
+| `--thinking <level>` | config value/`default` | thinking level: `default`/`off`/`minimal`/`low`/`medium`/`high` |
+| `--plugin <path>` | `[]` | additional local TypeScript plugin or directory; repeatable |
+| `--lang <zh\|en>` | config value/`zh` | UI and agent language; this process only |
+| `-V, --version` | — | print the version (0.1.9) |
+| `-h, --help` | — | print help |
+
+## Validation and mutual exclusions
+
+- `--tui` with `--cli` or `--print` is rejected; `--cli` with `--print` is allowed and print wins.
+- `--smart-approve` and `--auto` are mutually exclusive (configuration error, exit code 2).
+- `--allow-outside-workspace` requires `--auto`.
+- `--provider` accepts only `openai`/`anthropic`; `--max-steps` must be a positive integer; `--thinking` accepts only the six levels.
+- `--resume` combines with approval flags (resume keeps the current command-line settings).
+- Invalid environment variables (such as `CODEN_THINKING_LEVEL=bad`) fail config loading with exit code 2.
+
+## Precedence
+
+CLI flags > `CODEN_*` environment variables > project config > user config > defaults (`--lang` is the exception: user config plus `--lang` override only).
+
+## Related references
+
+- [Precedence](../configuration/precedence)
+- [CLI / REPL](./cli)
+- [Print Mode](./print-mode)
+- [CLI Reference](../reference/cli)

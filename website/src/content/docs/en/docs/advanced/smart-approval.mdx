@@ -1,10 +1,54 @@
 ---
 title: Smart Approval
-description: Explains how Smart Approval works.
+description: When the separate LLM reviews ordinary modifications, the output protocol, and fail-closed semantics.
 sidebar:
   order: 810
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Trigger
+
+```bash
+coden --smart-approve "your task"
+```
+
+Only **in-workspace**, `modify`-risk tool calls are reviewed (`read` is auto-allowed; commands escalated to `dangerous` go straight to a human; outside-workspace paths go straight to a human; `--auto` and `--smart-approve` are mutually exclusive).
+
+## Review model
+
+- Uses the same provider and credentials as the main task; the model is `approvalModel`, falling back to `model`.
+- One independent request per ordinary modification: `maxOutputTokens` 256 with a 30-second timeout.
+- The review system prompt marks the payload as untrusted data and requires a single JSON object (`decision` + `reason`).
+
+## Decision protocol
+
+| Result | Behavior |
+| --- | --- |
+| `allow` | allowed directly (no human confirmation) |
+| `human_review` | escalated to human confirmation |
+| invalid response | timeout, truncation (`length`/`max_tokens`), tool calls included, non-JSON, illegal fields, empty reason → human review |
+
+Fail closed: no anomaly ever silently allows.
+
+## Strictness
+
+| Value | Policy |
+| --- | --- |
+| `soft` | allow task-aligned, workspace-local, ordinary reversible operations; exhaustive proof is not required |
+| `medium` (default) | allow only when task alignment, limited impact, and a practical recovery path are all clear |
+| `hard` | allow only routine local operations whose target, complete material impact, and recovery path are very clear; escalate every substantive uncertainty |
+
+## Cost and visibility
+
+- Each modification consumes the same provider quota as the main task; batches of modifications produce multiple review calls.
+- The UI shows the review: `reviewing <tool>…`, `AI approved <tool>`, `AI requested human review — <reason>`; when review is unavailable it asks for human approval.
+- Events: `permission.review_started`/`review_completed`/`review_failed`.
+
+## Relationship to hooks
+
+A `PreToolUse` `deny` beats an LLM `allow`; when a hook requests `ask`, the call goes straight to a human. LLM review is part of the policy layer and does not replace the [PermissionRequest hook](../hooks/decisions).
+
+## Related references
+
+- [Approval Modes](../concepts/approval-modes)
+- [Tools and Risk Levels](../concepts/tools-and-risk)
+- [Security Model](../reference/security-model)

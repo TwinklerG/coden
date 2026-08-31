@@ -1,10 +1,58 @@
 ---
 title: 用户级与项目级配置
-description: 说明不同配置作用域。
+description: 两种配置作用域的位置、职责、可提交性与合并行为。
 sidebar:
   order: 420
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 作用域对照
+
+| 作用域 | 路径 | 归属 |
+| --- | --- | --- |
+| 用户级 | `~/.config/coden/config.json`（`$XDG_CONFIG_HOME/coden/config.json`） | 当前用户，所有项目共享 |
+| 项目级 | `<workspace>/.coden/config.json` | 单个项目；`.gitignore` 忽略该文件，默认不入库 |
+
+数据目录独立于配置：`$XDG_DATA_HOME/coden/`（默认 `~/.local/share/coden/`），存放会话与全局插件，不属于项目仓库。
+
+## 项目级文件布局
+
+```text
+.coden/
+├── config.json          # project config (gitignored)
+├── plugins.json         # npm plugin manifest (recommended to commit)
+├── plugin-runtime/      # plugin runtime; package.json generated from the manifest, node_modules not committed
+└── plugins/*.ts         # local TypeScript plugins (gitignored)
+```
+
+## 合并行为
+
+| 行为 | 说明 |
+| --- | --- |
+| 项目覆盖用户 | 除 `language`（用户专属）外，项目级字段覆盖同名字段 |
+| `plugins` 拼接 | 用户级 + 项目级 + CLI，按顺序生效 |
+| `env` 合并 | 项目级逐键覆盖用户级；不覆盖 shell 已导出变量 |
+| `hooks` 合并 | 用户级在前、项目级在后，统一编号 |
+
+## 项目级配置示例
+
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-20250514",
+  "maxSteps": 40,
+  "thinkingLevel": "medium"
+}
+```
+
+## 信任差异
+
+- 项目级 Hook 与项目 npm 插件首次使用需要**显式信任工作区**（按真实路径记录到 `~/.config/coden/trusted-workspaces.json`）。
+- 用户级 Hook 与全局插件视为用户主动安装，不在每次启动时重复确认。
+- `--auto` 不会跳过项目级信任。
+
+## 相关参考
+
+- [配置优先级](./precedence)
+- [字段参考](./reference)
+- [工作区](../concepts/workspace)
+- [信任与安全边界](../plugins/trust-and-security)

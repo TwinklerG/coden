@@ -1,10 +1,66 @@
 ---
 title: 完成第一个任务
-description: 展示如何完成第一个真实任务。
+description: 从进入工作区到验证结果：一次可复现的基础任务流程、可见行为与失败模式。
 sidebar:
   order: 150
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 前提
+
+- Node.js 22+（或直接以 Bun 运行源码）。
+- 已配置 Provider 凭据（见 [配置第一个 Provider](./provider)）。
+- 进入目标项目目录；当前工作目录就是 CodeN 的工作区。
+
+## 最短流程
+
+```bash
+cd /path/to/project
+coden "run the test suite and fix the first failure"
+```
+
+## 观察到的行为
+
+| 阶段 | 行为 |
+| --- | --- |
+| 启动 | 读取配置、发现 Skills、加载插件；打印启动横幅（版本、工作区哈希、模型、审批模式、思考等级） |
+| 等待授权 | 默认审批模式为 `manual`：`read` 自动允许；`write`/`edit` 显示输入摘要并请求确认 |
+| 授权选项 | `y` 允许一次；危险操作只提供 `y/N`；普通修改可输入 `s` 允许本会话（`allow_session`） |
+| 工具调用 | `bash` 以工作区为当前目录执行；输出有界（默认 30000 字符）并截断 |
+| 完成 | 模型不再调用工具时，单轮结束；CLI 中带 prompt 启动的任务在完成后退出 |
+
+会话内提示符为 `任务 > `；首条用户消息作为会话标题。工作区哈希与数据目录由工作区路径决定（`workspaceHash`）。
+
+## 常用变体
+
+```bash
+coden --auto "run the test suite and fix the first failure"   # skip permission prompts (ordinary operations only)
+coden --smart-approve "run the test suite and fix the first failure"  # LLM review for ordinary modifications
+coden -p --auto "run the test suite and fix the first failure"        # single-turn plain-text output
+coden --tui "run the test suite and fix the first failure"            # run in the full-screen TUI
+coden --resume              # list sessions for the current workspace
+coden --resume <session-id> # resume a specific session
+```
+
+## 验证与检查
+
+```bash
+git status           # inspect the change scope
+git diff --stat      # inspect the change size
+coden --resume       # session list: title, message count, last activity
+```
+
+## 边界与失败模式
+
+- **权限拒绝**：返回 `permission.denied: <tool> was not authorized`（或 `permission.outside_workspace_denied`），模型会收到错误并调整策略；`--auto` 不改变 `PreToolUse` Hook 的 `deny`/`ask` 语义。
+- **超出步数**：默认 `maxSteps` 为 20，达到后抛出 `runtime.step_limit`（`Maximum model steps (20) reached`）；模型先耗尽步骤再报错。
+- **工作区外访问**：`read`/`write`/`edit` 按符号链接解析后的真实路径分类；外部路径默认作为修改请求人工确认，`--auto` 下直接拒绝。
+- **取消**：CLI 中 `Ctrl+C` 取消当前任务；TUI 中运行中 `Ctrl+C` 取消、空闲时退出。被中断的工具调用在会话恢复时会以 `runtime.interrupted` 错误标记补齐。
+- **会话与费用**：每次有效任务都会创建会话文件并计入 Provider 用量；请为任务选择明确、可验证的范围。
+
+## 相关参考
+
+- [审批模式](../concepts/approval-modes)
+- [工具与风险等级](../concepts/tools-and-risk)
+- [会话](../concepts/sessions)
+- [斜杠命令](../interfaces/slash-commands)
+- [Smart Approval](../advanced/smart-approval)

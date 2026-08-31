@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { allDocEntries, renderScaffold } from "./docs-scaffold";
 import { SUPPORTED_LANGUAGES } from "./site";
@@ -78,7 +79,7 @@ export async function syncDocFiles(root: string, mode: DocsSyncMode): Promise<Do
 
 async function walkMdxFiles(directory: string): Promise<string[]> {
   const files: string[] = [];
-  let entries;
+  let entries: Dirent[] | undefined;
   try {
     entries = await readdir(directory, { withFileTypes: true });
   } catch (error) {

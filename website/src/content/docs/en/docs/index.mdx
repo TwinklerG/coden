@@ -1,10 +1,53 @@
 ---
 title: CodeN Docs
-description: CodeN documentation structure and navigation hub.
+description: What CodeN is, the shortest path to a first task, and the documentation map.
 sidebar:
   order: 0
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+CodeN (Code NJU) is a minimal coding agent implemented independently in TypeScript. It drives the model's native tool calling to read, modify, and execute commands locally; it does not depend on an agent framework or server-side code execution.
+
+## Shortest path to a first task
+
+```bash
+bun add -g @twinklerg/coden      # or npm install -g @twinklerg/coden
+export CODEN_OPENAI_API_KEY=...  # or CODEN_ANTHROPIC_API_KEY
+coden "fix the failing tests in this project"
+```
+
+Install, configure, and finish a first task in three commands. CodeN starts in the CLI/REPL by default and treats the working directory as its workspace.
+
+## Workflow
+
+| Step | Task | Page |
+| --- | --- | --- |
+| 1 | Confirm the runtime environment | [Requirements](./getting-started/requirements) |
+| 2 | Install CodeN | [Install CodeN](./getting-started/installation) |
+| 3 | Configure your first provider | [Configure Your First Provider](./getting-started/provider) |
+| 4 | Understand the interface modes | [Launch the CLI / TUI](./getting-started/interfaces) |
+| 5 | Complete your first task | [Complete Your First Task](./getting-started/first-task) |
+
+## Documentation map
+
+- **Core Concepts**: agent loop, workspace, tools and risk levels, approval modes, sessions, context and thinking levels.
+- **Interfaces**: CLI/REPL, full-screen TUI, print mode, slash commands, CLI options.
+- **Configuration**: precedence, scopes, environment variables, OpenAI/Anthropic setup, language and thinking levels, field reference, credential and data security.
+- **Skills**: discovery, creating a skill, installation and debugging.
+- **Plugins**: local TypeScript plugins, npm plugin management, author protocol, trust and security boundaries, marketplace.
+- **Agent Hooks**: events, matchers, I/O protocol, decisions and permissions, execution and timeouts, trust and security, examples.
+- **Advanced**: Smart Approval, outside-workspace access, session storage, custom base URL, automation.
+- **Reference**: CLI reference, configuration reference, troubleshooting, FAQ, security model.
+
+## Boundaries to keep in mind
+
+- Every command, configuration key, and behavior in these docs is verified against the current source code.
+- CodeN does not read the system locale; the default interface language is Chinese.
+- `bash` and plugins run with the current user's process permissions. This is not a general-purpose sandbox; risk classification is a heuristic guard against mistakes.
+- Session JSONL and trace files may contain sensitive content; do not share them without review.
+
+## Related references
+
+- [CLI Reference](./reference/cli)
+- [Configuration Reference](./reference/configuration)
+- [Troubleshooting](./reference/troubleshooting)
+- [Security Model](./reference/security-model)

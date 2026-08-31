@@ -1,10 +1,52 @@
 ---
 title: Context and Thinking Levels
-description: Covers context windows, compression, and thinking levels.
+description: Context budget, token estimation, automatic compaction, and the six thinking-level mappings.
 sidebar:
   order: 260
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Context budget
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `contextWindow` | `128000` | provider context window |
+| `reservedOutputTokens` | `8192` | `maxOutputTokens` of every request |
+| `safetyMargin` | `4096` | safety margin on the input budget |
+| input budget | `115712` | `contextWindow − reservedOutputTokens − safetyMargin` |
+
+Validation: all three must be non-negative integers; `contextWindow` and `reservedOutputTokens` must be positive; `contextWindow` must exceed `reservedOutputTokens + safetyMargin`. Estimation: text counts as `length / 3.5` rounded up, +6 per message, and tool definitions are estimated from their JSON — an estimator, not provider-exact billing.
+
+## Automatic compaction
+
+- When the estimate exceeds **80%** of the input budget: keep the 3 most recent message units and summarize the rest deterministically (tool lines 300 chars, others 500 chars, 6000-char total cap).
+- The same model then refines the summary (output capped at `min(2048, reservedOutputTokens)`); if refinement fails the deterministic summary is kept and the main task is unaffected.
+- On a provider 413 or context-length error, **emergency compaction** keeps only the last unit; if still over after one pass, `context.exhausted` is thrown.
+- The summary, source range, and refinement are persisted to the session; `/compact` triggers it manually; `/new` clears the summary.
+
+## Thinking levels
+
+Six unified levels: `default` (default; sends no parameter), `off`, `minimal`, `low`, `medium`, `high`.
+
+| Level | OpenAI (`reasoning_effort`) | Anthropic (thinking budget) |
+| --- | --- | --- |
+| `default` | not sent | not sent |
+| `off` | `minimal` (shown as `off→minimal`) | `{ type: "disabled" }` |
+| `minimal` | `minimal` | 1024 tokens |
+| `low` | `low` | 25% of `reservedOutputTokens` |
+| `medium` | `medium` | 50% |
+| `high` | `high` | 75% |
+
+Anthropic budgets clamp to `[1024, reservedOutputTokens − 1]`; enabling enabled thinking requires `reservedOutputTokens > 1024`. The budget counts inside `reservedOutputTokens`, so a higher level leaves fewer tokens for final text and tool calls in the same response.
+
+## Scope
+
+- Applies to main-agent requests only; context compaction and Smart Approval reviews keep provider defaults.
+- The level snapshot at turn start covers that turn's tool loop and retries.
+- Anthropic `thinking`/`redacted_thinking` and signature blocks persist as `providerState` and are replayed after tool calls and resume; mismatched provider state is ignored when switching providers.
+- Entry points: `--thinking <level>`, `CODEN_THINKING_LEVEL`, config `thinkingLevel`, REPL `/thinking [level]`.
+
+## Related references
+
+- [Language and Thinking Levels](../configuration/language-and-thinking)
+- [Configuration Reference](../reference/configuration)
+- [Agent Loop](./agent-loop)

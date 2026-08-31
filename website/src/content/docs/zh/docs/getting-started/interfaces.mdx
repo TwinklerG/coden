@@ -1,10 +1,53 @@
 ---
 title: 启动 CLI / TUI
-description: 概览 CLI 与 TUI 的启动方式。
+description: CLI/REPL、全屏 TUI 与 print 模式的选择规则、互斥与降级行为。
 sidebar:
   order: 140
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 三种界面模式
+
+| 模式 | 触发方式 | 特点 |
+| --- | --- | --- |
+| CLI/REPL | 默认；或 `--cli` | 连续输出；交互式多行输入；带启动横幅 |
+| 全屏 TUI | 显式 `--tui` | Ink 全屏界面；瞬时活动进入 transcript；单任务串行 |
+| print | `-p` / `--print` | 纯文本、可管道化；单轮后退出 |
+
+## 选择规则
+
+- 不带任何界面选项时始终进入 CLI/REPL，无论是否为 TTY。
+- `--tui` 要求 stdin、stdout 都是 TTY、支持 raw mode 且 `TERM != dumb`；不满足时降级为 CLI 并输出警告，不报错。
+- `-p/--print` 必须同时提供 prompt；例如 `coden -p --auto "实现功能并运行测试"`。
+- `--tui` 与 `--cli`、`--tui` 与 `--print` 组合会在参数解析阶段报错；`--cli` 与 `--print` 组合不报错，以 print 优先。
+- `NO_COLOR` 只关闭颜色，不影响界面模式。
+
+## CLI 会话中的输入
+
+- 首次输入为空时使用多行编辑器（支持时）：Enter 提交；行尾单个 `\` 插入换行。
+- `Ctrl+D`（空输入）退出；`Ctrl+C` 取消当前任务而不是退出。
+- 启动横幅显示版本、工作区哈希、模型、审批模式、思考等级与会话 ID，随后进入 `任务 > ` 提示。
+
+## TUI 行为要点
+
+- 输入区由两条贯穿全宽的水平线包围；Enter 提交，Shift+Enter 或行尾 `\` 插入换行。
+- `Ctrl+P`/`Ctrl+N` 浏览输入历史；`PageUp`/`PageDown` 和滚轮浏览 transcript，`End` 回到最新内容。
+- 运行中 `Ctrl+C` 取消当前任务；空闲时 `Ctrl+C` 或空输入 `Ctrl+D` 退出。
+- 工具授权、工作区信任与插件确认以内联请求显示在 transcript 中，不弹窗；等待时输入区可见但禁用。
+- TUI 保持单任务串行，不会在运行中排队输入。
+
+## 启动示例
+
+```bash
+coden                                     # CLI/REPL (default)
+coden --tui                               # explicit full-screen TUI
+coden --cli                               # explicit CLI/REPL
+coden -p "Reply with exactly: coden-ok"   # print single-turn output
+coden --tui "fix the failing tests in this project"
+```
+
+## 相关参考
+
+- [CLI / REPL](../interfaces/cli)
+- [全屏 TUI](../interfaces/tui)
+- [print 模式](../interfaces/print-mode)
+- [常用命令行参数](../interfaces/cli-options)

@@ -1,10 +1,67 @@
 ---
 title: 字段参考
-description: 汇总完整配置字段。
+description: 配置文件全部字段：类型、默认值、校验与作用域。
 sidebar:
   order: 470
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 完整示例
+
+```json
+{
+  "language": "zh",
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "approvalModel": "gpt-5-mini",
+  "approvalStrictness": "medium",
+  "maxSteps": 20,
+  "contextWindow": 128000,
+  "reservedOutputTokens": 8192,
+  "safetyMargin": 4096,
+  "thinkingLevel": "default",
+  "plugins": [],
+  "env": {
+    "CODEN_OPENAI_API_KEY": "sk-..."
+  },
+  "hooks": {}
+}
+```
+
+## 字段表
+
+| 字段 | 类型 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `language` | `"zh"` \| `"en"` | `zh` | 仅用户级；项目级忽略 |
+| `provider` | `"openai"` \| `"anthropic"` | `openai` | 模型 Provider |
+| `model` | 非空字符串 | `gpt-5-mini` | 模型标识符 |
+| `approvalModel` | 非空字符串 | 回退 `model` | Smart Approval 审查模型 |
+| `approvalStrictness` | `"soft"` \| `"medium"` \| `"hard"` | `medium` | 审查保守度 |
+| `maxSteps` | 正整数 | `20` | 最大模型步骤数 |
+| `contextWindow` | 正整数 | `128000` | 上下文窗口 |
+| `reservedOutputTokens` | 正整数 | `8192` | 每次请求输出预算 |
+| `safetyMargin` | 非负整数 | `4096` | 输入预算安全余量 |
+| `thinkingLevel` | 六档之一 | `default` | 思考等级 |
+| `plugins` | 字符串数组 | `[]` | 附加本地插件路径/目录；三来源拼接 |
+| `env` | 字符串映射 | `{}` | 注入进程环境的变量 |
+| `hooks` | 事件映射 | `{}` | Hook 配置；用户级 + 项目级合并 |
+
+## 校验规则
+
+- `contextWindow`、`reservedOutputTokens`、`safetyMargin` 必须是非负整数；前两者必须为正。
+- `contextWindow` 必须大于 `reservedOutputTokens + safetyMargin`。
+- `model`、`approvalModel` 必须是非空字符串；`maxSteps` 必须是正整数。
+- `env` 值必须是字符串；`plugins` 元素必须是字符串。
+- `thinkingLevel` 必须是 `default`/`off`/`minimal`/`low`/`medium`/`high` 之一。
+- Anthropic 启用已知思考时要求 `reservedOutputTokens > 1024`。
+
+## 不可配置字段
+
+- `dataDir`（数据目录）不来自配置文件：由 `XDG_DATA_HOME` 派生，默认 `~/.local/share/coden`。
+- 会话 ID、工作区哈希、界面模式等由运行时决定。
+
+## 相关参考
+
+- [配置优先级](./precedence)
+- [用户级与项目级配置](./scopes)
+- [配置参考（README 汇总）](../reference/configuration)
+- [常见错误](../reference/troubleshooting)

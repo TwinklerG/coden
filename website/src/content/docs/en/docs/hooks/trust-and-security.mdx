@@ -1,10 +1,46 @@
 ---
 title: Trust and Security
-description: Explains trust and security considerations for project hooks.
+description: Trust requirements, permission boundaries, and terminal-injection protection for project hooks.
 sidebar:
   order: 760
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Configuration locations
+
+- User scope: `~/.config/coden/config.json` (or `$XDG_CONFIG_HOME/coden/config.json`).
+- Project scope: `<workspace>/.coden/config.json` (ignored by `.gitignore`; not committed by default).
+
+User hooks always run before project hooks; changes require a restart.
+
+## Trust model
+
+- Project hooks and project plugins share **workspace trust**: explicit confirmation by the workspace real path (`trusted-workspaces.json`, `0600`).
+- Untrusted project hooks are excluded from execution (user hooks still run), while configured project hooks remain the source of the trust prompt.
+- No mode — `manual`, `smart`, or `auto` — implicitly trusts project code; `--auto` skips tool confirmations only.
+
+## Permission boundaries
+
+- **Hooks are not a sandbox**: they inherit the CodeN process environment (including API keys) and can access files, network, the full prompt, tool arguments, and results; they can modify the workspace or run arbitrary subprocesses.
+- Commands run through the system shell in the workspace with the current user's permissions.
+- A hook reads the event JSON on stdin — including input and tool-call content; do not echo sensitive data in hook output.
+
+## Terminal-injection protection
+
+- Hook stderr and `systemMessage` are scrubbed of control characters (`sanitizeTerminalText`) and truncated before output.
+- Decision reasons and block reasons are scrubbed and truncated too (500 characters).
+- Never interpolate event fields into shell strings: data flows only through stdin JSON.
+
+## Defensive guidance
+
+1. Review command content before merging project hooks; prefer scripts that parse JSON on stdin.
+2. Keep personal/team hooks in the user config; keep only repo-distributable content in the project config.
+3. Do not use `eval`, `bash -c "$(…)"`, or similar patterns that treat event data as code.
+4. Set a sensible `timeout` (default 10 seconds) so hooks cannot hang indefinitely.
+5. Confirm workspace content before trusting project hooks in sensitive repositories.
+
+## Related references
+
+- [Configuration](../configuration/scopes)
+- [Protocol](./protocol)
+- [Execution](./execution)
+- [Data Security](../configuration/data-security)

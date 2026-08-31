@@ -1,10 +1,75 @@
 ---
 title: I/O 协议
-description: 说明 stdin 和 stdout 的协议结构。
+description: Hook 命令的 stdin 输入结构、stdout 输出约定、环境变量与限额。
 sidebar:
   order: 730
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 进程约定
+
+- 命令通过系统 shell 执行：POSIX `/bin/sh -c <command>`；Windows `cmd /d /s /c`。
+- 工作目录为 CodeN 工作区；环境继承 CodeN 进程，并追加：
+
+| 变量 | 值 |
+| --- | --- |
+| `CODEN_PROJECT_DIR` | 工作区路径 |
+| `CODEN_SESSION_ID` | 当前会话 ID |
+| `CODEN_HOOK_EVENT` | 事件名 |
+
+## stdin：一个 JSON 对象
+
+```json
+{
+  "schemaVersion": 1,
+  "hookEventName": "PreToolUse",
+  "sessionId": "…",
+  "turnId": "…",
+  "cwd": "/path/to/workspace",
+  "permissionMode": "manual",
+  "toolName": "bash",
+  "callId": "…",
+  "input": { "command": "git status" },
+  "risk": "modify"
+}
+```
+
+公共字段：`schemaVersion`、`hookEventName`、`sessionId`、可选 `turnId`、`cwd`、`permissionMode`，其后附加事件负载。输入上限 **1MB**（超出视为失败）。
+
+## stdout：单个 JSON 对象
+
+- 顶层允许字段：`systemMessage`（事件通用），`Stop` 额外允许 `decision`（仅 `"block"`）与 `reason`；其他事件的 `hookSpecificOutput` 按事件允许字段。
+- `systemMessage` 必须是字符串，清洗控制字符后截断到 2000 字符，转发到诊断输出（stdout/stderr）。
+- `hookSpecificOutput.hookEventName` 必须与事件一致；字段白名单校验，非法字段视为失败。
+- 输出上限 **10KB**（stdout 与 stderr 各自）；超过时终止进程并标记 `outputExceeded`。
+- 退出码 `0` 且无 stdout：无操作。
+
+## 输出示例
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow"
+  }
+}
+```
+
+## 退出码语义
+
+| 退出码 | 含义 |
+| --- | --- |
+| `0` | 成功；stdout 可选 |
+| `2` | 明确阻止（仅可控事件） |
+| 其他 / 超时 / 输出或输入超限 | Hook 失败：警告并 fail-open，不产生决策 |
+
+## 安全注意
+
+- 事件 JSON 是唯一数据通道：不要把事件字段拼接进 shell 命令字符串。
+- 命令应从 stdin 读取 JSON 并原样输出合法 JSON，避免注入与转义问题。
+- Hook 输出会清除终端控制字符；不要依赖 stdout 回显敏感信息。
+
+## 相关参考
+
+- [决策与权限](./decisions)
+- [执行与超时](./execution)
+- [示例](./examples)

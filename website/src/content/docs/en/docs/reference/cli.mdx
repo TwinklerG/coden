@@ -1,10 +1,72 @@
 ---
 title: CLI Reference
-description: Summarizes the CLI commands.
+description: Full reference for the coden command and the plugin subcommands.
 sidebar:
   order: 910
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Main command
+
+```text
+coden [prompt] [options]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `<prompt>` | the task to execute; omit to enter the REPL |
+| `-p, --print` | non-interactive output mode (requires a prompt; exits after one turn) |
+| `--tui` | explicitly start the full-screen TUI (falls back to the CLI with a warning when unsupported) |
+| `--cli` | explicitly use the CLI (default) |
+| `--provider <openai\|anthropic>` | model provider (default `openai`) |
+| `--model <model-id>` | model (default `gpt-5-mini`) |
+| `--resume [session-id]` | resume a session; without an ID, list sessions |
+| `--auto` | skip tool permission confirmations |
+| `--smart-approve` | LLM review for ordinary modifications |
+| `--allow-outside-workspace` | with `--auto`, allow outside-workspace reads/writes |
+| `--verbose` | detailed runtime status |
+| `--max-steps <n>` | maximum model steps (default 20) |
+| `--thinking <level>` | `default`/`off`/`minimal`/`low`/`medium`/`high` |
+| `--plugin <path>` | local TypeScript plugin/directory (repeatable) |
+| `--lang <zh\|en>` | UI and agent language (this process only) |
+| `-V, --version` | version |
+| `-h, --help` | help |
+
+## plugin subcommands
+
+```text
+coden plugin install <npm:package[@version]> [--global] [--allow-scripts] [--yes]
+coden plugin remove <package> [--global] [--allow-scripts] [--yes]
+coden plugin list [--project | --global]
+coden plugin sync [--global] [--allow-scripts] [--yes]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--global` | user-global scope (project is the default) |
+| `--project` / `--global` (list) | show project/global only (mutually exclusive) |
+| `--allow-scripts` | allow npm lifecycle scripts (warning + second confirmation) |
+| `--yes` | skip confirmations (never enables scripts on its own) |
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | normal completion |
+| `1` | execution failure (runtime error) |
+| `2` | configuration/startup error (missing API key, invalid flags, invalid config JSON, plugin command failure) |
+
+## Examples
+
+```bash
+coden --resume                          # list sessions of the current workspace
+coden --resume <session-id>             # resume
+coden -p --auto "run the tests"         # CI single-turn output
+coden plugin install npm:coden-msb      # install an npm plugin
+```
+
+## Related references
+
+- [CLI Options](../interfaces/cli-options)
+- [npm Plugin Management](../plugins/npm-management)
+- [Slash Commands](../interfaces/slash-commands)
+- [Troubleshooting](./troubleshooting)

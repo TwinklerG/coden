@@ -1,10 +1,59 @@
 ---
 title: 工具与风险等级
-description: 概述工具调用与风险控制。
+description: 内置工具、风险分类、危险命令识别与各自的边界。
 sidebar:
   order: 230
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 内置工具
+
+| 工具 | 风险 | 输入要点 | 关键行为 |
+| --- | --- | --- | --- |
+| `read` | `read` | `path`、`offset`（默认 1）、`limit`（默认 500，上限 2000） | 按 1 起始行偏移读 UTF-8 文本；输出上限 50000 字符，超出提示省略；`O_NOFOLLOW` 打开 |
+| `write` | `modify` | `path`、`content` | 创建或完整覆盖；文件模式 `0600`；自动创建父目录 |
+| `edit` | `modify` | `path`、`oldText`、`newText` | 精确替换**唯一**匹配块；不唯一返回 `edit.multiple_matches`，未找到返回 `edit.no_match` |
+| `bash` | `modify`（命令可升级为 `dangerous`） | `command`、`timeout`（默认 30000，范围 100–60000）、`maxOutput`（默认 30000，范围 1000–100000） | `bash -lc` 以工作区为 cwd；非零退出码、超时或取消都标记错误；超时终止进程组 |
+| `activate_skill` | `read` | `name` | 按名称加载 Skill 的完整说明与根目录；无效名称返回 `skill.not_found`；仅读取已发现的入口文件并校验内容未变 |
+
+工具按模型返回的 tool_calls 顺序执行；单次调用超时 60 秒（超时需要工具配合取消）。所有工具输出在回填上下文前截断到 50000 字符。
+
+## 风险等级与授权
+
+| 等级 | 默认交互模式 | `--smart-approve` | `--auto` |
+| --- | --- | --- | --- |
+| `read` | 自动允许 | 自动允许 | 自动允许 |
+| `modify` | 人工确认（`y`/`s`/`N`） | LLM 审查，不确定转人工 | 自动允许 |
+| `dangerous` | 人工确认（仅 `y`/`N`，无会话授权） | 人工确认 | 自动允许（Hook 的 `deny` 仍生效） |
+
+## 危险命令识别（bash）
+
+以下命令片段会导致 `bash` 风险升级为 `dangerous`：
+
+```text
+rm -r / rm --recursive
+sudo
+git reset --hard
+git clean -f
+git push --force / --force-with-lease
+git checkout -- <path>
+git restore
+mkfs / fdisk / dd
+killall / pkill
+curl|sh or wget|sh
+path contains /etc /usr /bin /sbin
+```
+
+风险分类是防误操作的启发式护栏，不是安全沙箱：`bash` 与插件拥有当前用户进程权限。
+
+## 插件工具
+
+- 本地或 npm 插件注册的工具使用各自声明的 `risk` 字段，参与相同的授权流程。
+- 工具名须匹配 `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`；重名（含与内置工具冲突）导致该插件整体跳过。
+- 插件工具执行受同样的 60 秒超时与 `AbortSignal` 协作取消约束。
+
+## 相关参考
+
+- [审批模式](./approval-modes)
+- [本地 TypeScript 插件](../plugins/local-typescript)
+- [插件作者协议](../plugins/author-protocol)
+- [安全模型](../reference/security-model)

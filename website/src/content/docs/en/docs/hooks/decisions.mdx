@@ -1,10 +1,48 @@
 ---
 title: Decisions
-description: Explains how hooks participate in decisions and permissions.
+description: "How hooks join permission decisions: PreToolUse, PermissionRequest, and Stop merge semantics."
 sidebar:
   order: 740
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Decision entry points
+
+| Event | Decision field | Effect |
+| --- | --- | --- |
+| `PreToolUse` | `hookSpecificOutput.permissionDecision`: `allow`/`ask`/`deny` | predicates permission: `deny` rejects outright (`permission.hook_denied`); `ask` forces human; `allow` bypasses the policy layer |
+| `PermissionRequest` | `hookSpecificOutput.decision.behavior`: `allow`/`ask`/`deny` (optional `message`) | fires when the policy layer needs a human; can override the final decision |
+| `Stop` | top-level `decision: "block"` + `reason` | injects feedback asking the model to continue |
+| controllable event + exit code `2` | stderr as `blockReason` | equivalent to `deny`/block |
+
+## Full PreToolUse order
+
+1. `PreToolUse` hook decision (including `updatedInput` and `additionalContext`).
+2. After an input update, re-validate everything: schema (fails as `hook.invalid_updated_input`), structured file path, risk classification, and permissions.
+3. Policy layer (`manual`/`smart`/`auto`).
+4. When a human is needed, fire the `PermissionRequest` hook (`reason: "policy"`; `"hook"` when a hook requested human review).
+5. Human confirmation (inline in CLI/TUI).
+6. Execute the tool and fire `PostToolUse`/`PostToolUseFailure`.
+
+## Merge semantics
+
+Multiple hooks for the same event run **in parallel**, with results ordered by config `order`:
+
+- Permission decisions merge as `deny > ask > allow` (the most conservative wins).
+- Multiple `updatedInput` values conflict and are **all discarded** (`inputConflict`); no update applies.
+- Any `blocked` blocks the whole result.
+- Each `additionalContext` injects as a separate `[CodeN hook context: <event>]` message; the total is capped at 10KB.
+
+## Interaction with approval modes
+
+| Mode | Hook behavior |
+| --- | --- |
+| `manual` | `PreToolUse` decisions apply; policy asks a human; `PermissionRequest` can override |
+| `smart` | same; ordinary modifications first go through LLM review, and hook `deny` beats an LLM allow |
+| `auto` | `PreToolUse` still runs: `deny` applies; `ask` safely rejects (`permission.hook_requires_interaction`) |
+
+## Related references
+
+- [Agent Hooks Events](./events)
+- [Protocol](./protocol)
+- [Approval Modes](../concepts/approval-modes)
+- [Examples](./examples)

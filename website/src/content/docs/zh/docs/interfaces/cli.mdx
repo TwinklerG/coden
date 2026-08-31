@@ -1,10 +1,46 @@
 ---
 title: CLI / REPL
-description: 介绍交互式命令行界面。
+description: 默认交互式命令行的输入、输出、授权提示与会话命令行为。
 sidebar:
   order: 310
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 启动
+
+```bash
+coden                 # interactive REPL
+coden "your task"     # run one task and exit
+coden --cli "your task"
+```
+
+无 interface 选项时始终进入 CLI/REPL，与终端类型无关。启动横幅依次显示版本、工作区哈希、模型、审批模式、思考等级与当前会话 ID。
+
+## 输入
+
+| 输入 | 行为 |
+| --- | --- |
+| 普通文本 | 作为任务提交 |
+| 行尾单个 `\` | 插入换行继续输入（回退输入流；支持多行编辑器时 Enter 直接提交） |
+| `Ctrl+C` | 取消当前任务（信号中止请求与工具），不退出 |
+| `Ctrl+D`（空输入） | 退出 |
+| `/` 开头的命令 | 由 [斜杠命令](./slash-commands) 处理 |
+
+## 输出
+
+- 模型回答与工具活动以连续流渲染：工具开始/完成及耗时、Provider 重试、思考时长、token 汇总。
+- `--verbose` 显示更多运行状态（包括 Skill 发现失败原因）。
+- 工具授权请求内联打印：风险级别、工具名、输入预览、`[y]es / [s]ession / [N]o`（危险操作仅 `[y]es / [N]o`）。
+- `NO_COLOR` 关闭颜色；终端宽度用于对齐授权提示。
+
+## 任务生命周期
+
+- 带 prompt 启动：执行一个 turn 后进程退出；退出码 `0` 表示成功完成。
+- 不带 prompt 启动：进入 REPL 循环直到 `/quit`、`Ctrl+D` 或失败。
+- 会话结束（`completed`/`failed`/`cancelled`/`eof`/`quit`）触发 `SessionEnd` Hook 与 trace flush。
+
+## 相关参考
+
+- [斜杠命令](./slash-commands)
+- [print 模式](./print-mode)
+- [全屏 TUI](./tui)
+- [常用命令行参数](./cli-options)

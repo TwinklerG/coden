@@ -1,10 +1,71 @@
 ---
 title: FAQ
-description: Answers frequently asked questions.
+description: Frequently asked questions with short answers.
 sidebar:
   order: 940
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## What is CodeN?
+
+A minimal coding agent implemented independently in TypeScript: it drives the model's native tool calling to read, modify, and execute locally, without an agent framework or server-side code execution.
+
+## Node or Bun?
+
+| Scenario | Requirement |
+| --- | --- |
+| run the published CLI | Node.js 22+ |
+| local TypeScript plugins (`*.ts`) | Bun (cannot load under Node) |
+| npm plugin install/sync | `bun` on PATH |
+| develop from source | Bun 1.1+ and Just |
+
+## Which models are supported?
+
+Two providers, `openai` and `anthropic`, with model IDs set explicitly (default `gpt-5-mini`). CodeN maintains no model capability allowlist and sends parameters as-is. See [Configure Your First Provider](../getting-started/provider).
+
+## Are custom endpoints supported?
+
+OpenAI-compatible endpoints via `CODEN_OPENAI_BASE_URL`. Anthropic always uses the official endpoint. See [Custom Base URL](../advanced/custom-base-url).
+
+## Where are sessions stored?
+
+`$XDG_DATA_HOME/coden/sessions/<workspace-hash>/` (default `~/.local/share/coden`). File permissions are `0700`/`0600`; contents include model output and reasoning and are sensitive. See [Session Storage](../advanced/session-storage).
+
+## How do I control usage?
+
+- `-p --auto` for single-turn, CI-friendly runs.
+- `--max-steps` bounds steps (default 20).
+- `--resume <id>` restores context instead of rebuilding it.
+- Thinking levels affect budget allocation (Anthropic budgets count inside `reservedOutputTokens`).
+
+## Can plugins do dangerous things?
+
+Plugins and `bash` run with the current user's process permissions and are **not a sandbox**. Guards: project plugins require workspace trust; npm lifecycle scripts are disabled by default; dangerous-command detection; `--auto` never skips trust confirmation. See [Plugin Trust and Security](../plugins/trust-and-security).
+
+## Are private npm registries supported?
+
+No. npm plugins always use `https://registry.npmjs.org`, and specifiers accept only `npm:<package>[@version]`; private registries, Git, URLs, and local directory sources are unsupported.
+
+## How do I resume an interrupted task?
+
+Restart and run `coden --resume <session-id>`; interrupted tool calls are repaired as `runtime.interrupted` errors so the model can continue.
+
+## How do I contribute?
+
+```bash
+git clone <repository-url>
+cd coden
+bun install
+just check
+```
+
+`just build` builds the CLI and plugin contract; `just publish-dry-run` previews the npm publish contents.
+
+## Are the commands in these docs verified?
+
+Yes. Every command, default, and behavior is checked against the current source, tests, and the built artifact; unverifiable claims do not appear.
+
+## Related references
+
+- [Troubleshooting](./troubleshooting)
+- [CLI Reference](./cli)
+- [Security Model](./security-model)

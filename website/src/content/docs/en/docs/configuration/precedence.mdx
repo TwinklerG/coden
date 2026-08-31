@@ -1,10 +1,44 @@
 ---
 title: Precedence
-description: Explains the configuration precedence order.
+description: The five-layer configuration source order, exceptions, and merge rules.
 sidebar:
   order: 410
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Override order (highest first)
+
+| Layer | Source |
+| --- | --- |
+| 1 | CLI flags (`--provider`, `--model`, `--max-steps`, `--thinking`, `--lang`, `--plugin`) |
+| 2 | `CODEN_*` environment variables (`CODEN_PROVIDER`, `CODEN_MODEL`, `CODEN_MAX_STEPS`, `CODEN_THINKING_LEVEL`) |
+| 3 | `<workspace>/.coden/config.json` (project) |
+| 4 | `~/.config/coden/config.json` (user; overridable via `XDG_CONFIG_HOME`) |
+| 5 | built-in defaults |
+
+## Exceptions and merge rules
+
+| Field | Rule |
+| --- | --- |
+| `language` | a user-owned preference: read from the user config only, and the project-level field is **ignored**; `--lang` wins but affects only this process; `/lang` atomically writes back the user config |
+| `plugins` | **concatenated**, not overridden: user → project → CLI `--plugin` in that order of effect |
+| `env` | merged across scopes and injected **key by key**; project keys override user keys; an already-exported shell variable is **not** overwritten (shell export > config `env`) |
+| `hooks` | merged into an ordered list: user hooks first, project hooks after; at most 64 commands per event |
+
+The remaining fields (`provider`, `model`, `approvalModel`, `approvalStrictness`, `maxSteps`, `contextWindow`, `reservedOutputTokens`, `safetyMargin`, `thinkingLevel`) are simple overrides: the higher layer's value fully replaces the lower layer's.
+
+## When configuration is read
+
+- Configuration is read once at process startup; changes require a restart (`/reload` reloads plugins only, never config).
+- Invalid JSON at any layer (syntax, types, illegal values) fails startup with `Cannot read config ...` and exit code 2.
+- Session listing (`coden --resume` without an ID) also loads config and runs the same validation.
+
+## Environment-variable errors
+
+Illegal values for `CODEN_PROVIDER`, `CODEN_MODEL`, `CODEN_MAX_STEPS`, and `CODEN_THINKING_LEVEL` throw at load time instead of silently degrading.
+
+## Related references
+
+- [User and Project Scopes](./scopes)
+- [Environment Variables](./environment)
+- [Reference](./reference)
+- [CLI Options](../interfaces/cli-options)

@@ -1,10 +1,53 @@
 ---
 title: CodeN 文档
-description: CodeN 文档结构与导航入口。
+description: CodeN 的功能定位、最短上手路径与文档地图。
 sidebar:
   order: 0
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+CodeN（Code NJU）是一个用 TypeScript 独立实现的极简编程智能体。它直接使用模型原生的 Tool Calling，在本地读取、修改文件和执行命令；不依赖 Agent 框架或服务端代码执行。
+
+## 最短上手路径
+
+```bash
+bun add -g @twinklerg/coden      # or npm install -g @twinklerg/coden
+export CODEN_OPENAI_API_KEY=...  # or CODEN_ANTHROPIC_API_KEY
+coden "fix the failing tests in this project"
+```
+
+三条命令即可完成安装、配置和首个任务。启动后默认进入 CLI/REPL，工作目录即工作区。
+
+## 使用流程
+
+| 步骤 | 任务 | 页面 |
+| --- | --- | --- |
+| 1 | 确认运行环境 | [安装要求](./getting-started/requirements) |
+| 2 | 安装 CodeN | [安装 CodeN](./getting-started/installation) |
+| 3 | 配置第一个 Provider | [配置第一个 Provider](./getting-started/provider) |
+| 4 | 了解界面模式 | [启动 CLI / TUI](./getting-started/interfaces) |
+| 5 | 完成第一个任务 | [完成第一个任务](./getting-started/first-task) |
+
+## 文档地图
+
+- **核心概念**：Agent 循环、工作区、工具与风险等级、审批模式、会话、上下文与思考等级。
+- **界面与使用方式**：CLI/REPL、全屏 TUI、print 模式、斜杠命令、命令行参数。
+- **配置**：配置优先级、作用域、环境变量、OpenAI/Anthropic 配置、语言与思考等级、字段参考、凭据与数据安全。
+- **Skills**：发现规则、创建 Skill、安装与调试。
+- **插件**：本地 TypeScript 插件、npm 插件管理、插件作者协议、信任与安全边界、插件市场。
+- **Agent Hooks**：事件、匹配规则、I/O 协议、决策与权限、执行与超时、信任与安全、示例。
+- **进阶指南**：Smart Approval、工作区外访问、会话存储、自定义 Base URL、自动化。
+- **参考与排错**：CLI 命令参考、配置参考、常见错误、FAQ、安全模型。
+
+## 行为边界
+
+- 每条命令、配置键和行为均以当前版本源码为唯一事实来源。
+- CodeN 不读取系统区域设置，默认界面语言为中文。
+- `bash` 与插件以当前用户进程权限运行，这不是通用安全沙箱；风险分类是防误操作的启发式护栏。
+- 会话与 trace 保存在本地数据目录，可能包含敏感内容，请勿未经审查地分享。
+
+## 相关参考
+
+- [CLI 命令参考](./reference/cli)
+- [配置参考](./reference/configuration)
+- [常见错误](./reference/troubleshooting)
+- [安全模型](./reference/security-model)

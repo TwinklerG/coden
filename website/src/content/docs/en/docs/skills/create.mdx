@@ -1,10 +1,60 @@
 ---
 title: Create a Skill
-description: Explains how to create a new skill.
+description: The minimal skill structure, frontmatter fields, and progressive-disclosure guidance.
 sidebar:
   order: 520
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Minimal structure
+
+```text
+<workspace>/skills/pdf-processing/
+└── SKILL.md
+```
+
+`SKILL.md` content:
+
+```markdown
+---
+name: pdf-processing
+description: Use when reading or modifying PDF documents.
+---
+
+# PDF workflow
+
+Read the relevant files before changing them.
+```
+
+`name` must match the directory name; `description` states **when to trigger**, which is how the agent matches tasks against the startup context.
+
+## frontmatter fields
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `name` | yes | lowercase letters/digits/hyphens, 1–64 chars |
+| `description` | yes | non-empty, ≤1024 chars |
+| `license` | no | license information |
+| `compatibility` | no | compatibility statement |
+| `metadata` | no | arbitrary object |
+| `allowed-tools` | no | tool allowlist |
+
+## Progressive-disclosure guidance
+
+- Expand the body as needed: start with a minimal workflow and keep details in `references/`, `scripts/`, etc., which the agent reads with ordinary tools after activation.
+- Prefer explicit steps and rules over background prose.
+- Resource files travel with the skill directory; paths are relative to the skill root (returned by `activate_skill`).
+- The repository-bundled `skills/coden-tool-plugin-development/` is a reusable template.
+
+## Placement in a repository
+
+| Directory | Purpose |
+| --- | --- |
+| `<workspace>/skills/<name>/` | bundled with the repository, distributed with it |
+| `<workspace>/.agents/skills/<name>/` | locally installed, not distributed |
+| `~/.agents/skills/<name>/` | user-global |
+
+## Related references
+
+- [Discovery](./discovery)
+- [Install and Debug](./install-and-debug)
+- [Agent Skills specification](https://agentskills.io/specification)

@@ -1,10 +1,50 @@
 ---
 title: Agent 循环
-description: 说明 Agent 如何在循环中调用工具。
+description: 从用户输入到最终答复的执行循环：模型请求、工具调用、重试、压缩与完成。
 sidebar:
   order: 210
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 循环结构
+
+```text
+user input
+  → hook: UserPromptSubmit (can block)
+  → model request (tool definitions + context)
+  → if tool_calls: execute each tool → fill results back
+  → request the model again (same turn)
+  → until the model stops calling tools → hook: Stop (can demand more work)
+  → return the final answer
+```
+
+每个模型请求与工具执行序列构成一个 turn；默认 `maxSteps` 为 20，达到上限后抛 `runtime.step_limit`。
+
+## 单轮内的关键行为
+
+| 行为 | 细节 |
+| --- | --- |
+| 工具执行 | 按返回顺序逐个执行；未完成的工具调用在恢复时补齐为 `runtime.interrupted` 错误 |
+| 工具结果 | 入上下文前截断到 50000 字符；错误结果携带 `isError` 标记回传模型 |
+| 输入变更 | `PreToolUse` Hook 更新输入后重新校验 schema、路径、风险与权限 |
+| 重试 | 网络/5xx/429 错误最多重试 3 次，250ms 指数退避（0.8–1.2 随机抖动），尊重 `Retry-After` |
+| 上下文错误 | 413 或上下文长度类错误触发一次紧急压缩；仍超限则抛 `context.exhausted` |
+| 思考等级 | 每个 turn 开始时的等级快照贯穿该 turn 的工具循环与重试 |
+
+## 上下文化管理
+
+- 输入预算 = `contextWindow − reservedOutputTokens − safetyMargin`（默认 128000 − 8192 − 4096）。
+- 预估超过预算的 80% 时自动压缩：保留最近 3 个消息单元，其余生成确定性摘要；随后尝试用相同模型精炼摘要（上限 `min(2048, reservedOutputTokens)`），失败则回退确定性摘要。
+- 压缩历史与摘要持久化到会话；`/compact` 手动触发，`/new` 清除摘要并开始新对话。
+
+## 完成与失败
+
+- **正常完成**：模型输出不含 tool_calls；若 `Stop` Hook 返回 `decision: "block"`，会注入反馈并要求模型继续（仍受 `maxSteps` 限制）。
+- **失败**：抛 `CodeNError` 并触发 `Notification` Hook（`attention_required`）与 `turn.failed` 事件；SessionEnd 结束会话。
+- 每次有效 turn 的最后都会以 usage 汇总 token 用量。
+
+## 相关参考
+
+- [上下文与思考等级](./context-and-thinking)
+- [审批模式](./approval-modes)
+- [工具与风险等级](./tools-and-risk)
+- [会话](./sessions)

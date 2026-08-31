@@ -1,10 +1,46 @@
 ---
 title: 信任与安全
-description: 说明 Project Hook 的信任与安全注意事项。
+description: Project Hook 的信任要求、权限边界与终端注入防护。
 sidebar:
   order: 760
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 配置位置
+
+- 用户级：`~/.config/coden/config.json`（或 `$XDG_CONFIG_HOME/coden/config.json`）。
+- 项目级：`<workspace>/.coden/config.json`（已被 `.gitignore` 忽略，默认不入库）。
+
+用户 Hook 总在项目 Hook 之前执行；修改后需重启。
+
+## 信任模型
+
+- 项目 Hook 与项目插件共用**工作区信任**：按工作区真实路径显式确认（`trusted-workspaces.json`，`0600`）。
+- 未信任的项目 Hook 会从运行中排除（仅执行用户级 Hook），但配置中的项目 Hook 仍会成为信任提示的来源。
+- `manual`/`smart`/`auto` 任一模式都不会隐式信任项目代码；`--auto` 只跳过工具确认。
+
+## 权限边界
+
+- **Hook 不是沙箱**：继承 CodeN 进程环境（包括 API Key），可访问文件、网络、完整提示词、工具参数与结果；可以修改工作区或运行任意子进程。
+- 命令以系统 shell 运行在工作区，拥有当前用户权限。
+- Hook 能读取 stdin 中的事件 JSON——包含输入与工具调用内容；不要在 Hook 输出中回显敏感数据。
+
+## 终端注入防护
+
+- Hook 的 stderr 与 `systemMessage` 经 `sanitizeTerminalText` 清洗控制字符（ANSI 转义等），截断后输出。
+- 决策原因与 blockReason 同样清洗并截断（500 字符）。
+- 不要把事件字段拼接到 shell 字符串：数据只通过 stdin JSON 传递。
+
+## 防御建议
+
+1. 项目 Hook 合入前审查命令内容；优先使用能在 stdin 上解析 JSON 的脚本。
+2. 个人/团队级 Hook 放用户级配置；项目级配置只放必须随仓库分发的内容。
+3. 不在 Hook 命令中使用 `eval`、`bash -c "$(…)"` 等将事件数据作为代码执行的写法。
+4. 为 Hook 设置合理的 `timeout`（默认 10 秒），避免长时间挂起。
+5. 敏感仓库在信任项目 Hook 前确认工作区内容。
+
+## 相关参考
+
+- [配置](../configuration/scopes)
+- [I/O 协议](./protocol)
+- [执行与超时](./execution)
+- [凭据与数据安全](../configuration/data-security)

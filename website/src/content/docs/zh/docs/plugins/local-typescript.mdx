@@ -1,10 +1,64 @@
 ---
 title: 本地 TypeScript 插件
-description: 说明本地 TypeScript 插件的运行方式。
+description: 本地 .ts 插件的扫描位置、单文件约束、加载机制与运行要求。
 sidebar:
   order: 610
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 扫描位置
+
+| 来源 | 路径 | 信任 |
+| --- | --- | --- |
+| 用户级 | `~/.config/coden/plugins/*.ts` | 无需（视为用户主动安装） |
+| 项目级 | `<workspace>/.coden/plugins/*.ts` | 需要工作区信任 |
+| 附加目录 | `--plugin <path>` 或配置 `plugins` 条目（可重复） | 项目语义：需要工作区信任 |
+
+目录内 `.ts` 文件按文件名排序加载。项目级目录不存在时静默跳过。
+
+## 单文件约束
+
+- 插件必须是**自包含单文件**：通过 `data:text/typescript` URL 在进程内导入，相对路径导入（`./helper.ts`）无法解析；npm 包导入（`import pc from "picocolors"`）正常。
+- 内容哈希用于模块缓存：内容未变的插件 `/reload` 复用已加载模块；变更后重建模块并原子替换工具注册表。
+- 顶层代码会在加载时执行——这与授权无关，属于信任边界的一部分。
+
+## 最小示例
+
+```ts
+import type { ToolDefinition } from "@twinklerg/coden/plugin";
+
+const tool: ToolDefinition = {
+  name: "line_count",
+  description: "Count lines in supplied text",
+  risk: "read",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["text"],
+    properties: { text: { type: "string" } },
+  },
+  async execute(input) {
+    const { text } = input as { text: string };
+    return { content: String(text.split("\n").length) };
+  },
+};
+
+export default tool;
+```
+
+## 加载与校验
+
+- 导出可以是单个 `ToolDefinition` 或 `CodeNPlugin`（`apiVersion: 1`、`name`、非空 `tools` 数组）。
+- 工具名须匹配 `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`；输入 schema 用 Ajv 编译校验；`execute` 返回 `{ content, isError?, metadata? }`。
+- 重名（含与内置工具冲突）时**整个插件跳过**，不覆盖既有工具，不阻止其他插件。
+- 执行上下文：`ToolContext` 提供 `workspace`、`signal`（`AbortSignal`，60 秒超时需协作取消）与结构化文件路径信息。
+
+## 运行时要求
+
+本地 `.ts` 插件由 Bun 加载。**Node.js 运行时下无法加载**：Node 对 `data:text/typescript` 返回 `ERR_UNKNOWN_MODULE_FORMAT`，该插件被跳过并记为失败（不影响其他功能）。从源码用 Bun 运行或确保 PATH 上存在 Bun 才能使用本地 TypeScript 插件。
+
+## 相关参考
+
+- [npm 插件安装和管理](./npm-management)
+- [插件作者协议](./author-protocol)
+- [信任与安全边界](./trust-and-security)
+- [运行时能力矩阵](../getting-started/requirements)

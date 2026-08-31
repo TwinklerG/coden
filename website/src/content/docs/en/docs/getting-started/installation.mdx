@@ -1,10 +1,64 @@
 ---
 title: Install CodeN
-description: Explains how to install CodeN locally.
+description: Global installation, version verification, upgrades, uninstalls, and the published artifact vs. source checkout.
 sidebar:
   order: 120
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Install globally
+
+Install the published CLI with Bun or npm:
+
+```bash
+bun add -g @twinklerg/coden
+# or
+npm install -g @twinklerg/coden
+```
+
+## Verify the installation
+
+```bash
+coden --version   # 0.1.9
+coden --help
+```
+
+`coden --help` lists every option and subcommand, including `--tui`, `--cli`, `-p/--print`, `--provider`, `--model`, `--resume`, `--auto`, `--smart-approve`, `--allow-outside-workspace`, `--verbose`, `--max-steps`, `--thinking`, the repeatable `--plugin`, `--lang`, and `--version`.
+
+## Upgrade and uninstall
+
+```bash
+bun update -g @twinklerg/coden
+# or
+npm install -g @twinklerg/coden@latest
+
+bun remove -g @twinklerg/coden
+# or
+npm uninstall -g @twinklerg/coden
+```
+
+## Published artifact notes
+
+- The bin entry is `dist/index.js`: a minified single-file Node CLI that requires Node.js 22+ at runtime; Bun is not needed.
+- The npm package exposes exactly one subpath, `@twinklerg/coden/plugin`, for author build-time types. The main entry `"."` is not public and `import "@twinklerg/coden"` is rejected.
+- With no provider API key configured, startup fails immediately with exit code 2 — a configuration error, not a runtime error.
+- Plugins depend on Bun: local TypeScript plugins (`*.ts` files) need the Bun runtime, and npm plugin install/sync runs `bun install` internally. See the [Runtime capability matrix](./requirements).
+
+## Run from source (development)
+
+```bash
+git clone <repository-url>
+cd coden
+bun install
+just check
+just build
+just run "your task"
+```
+
+Repository commands: `just build` builds the CLI and the public plugin contract; `just test` runs the offline tests; `just check` runs lint, typecheck, and the full offline suite; `just publish-dry-run` previews exactly what npm would publish without uploading.
+
+## Related references
+
+- [Requirements](./requirements)
+- [Configure Your First Provider](./provider)
+- [CLI Reference](../reference/cli)
+- [Troubleshooting](../reference/troubleshooting)

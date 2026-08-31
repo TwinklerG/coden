@@ -1,10 +1,40 @@
 ---
 title: Print Mode
-description: Explains the output-only mode.
+description: Use cases, constraints, and automation pairings for single-turn plain-text output.
 sidebar:
   order: 330
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Trigger and constraints
+
+```bash
+coden -p "Reply with exactly: coden-ok"
+coden -p --auto "run the tests and report the results"
+```
+
+- `-p/--print` requires a prompt: without one it errors immediately (`print mode requires a prompt`).
+- Runs a single turn and exits: suited to scripts, CI, and pipes.
+- Output is a plain-text stream; combine with `--auto` to skip in-workspace confirmations.
+- Mutually exclusive with `--tui`; when combined with `--cli`, `print` wins (no error).
+
+## Combinations for non-interactive environments
+
+| Scenario | Command |
+| --- | --- |
+| single-turn output | `coden -p --auto "your task"` |
+| explicit provider and model | `coden -p --provider anthropic --model claude-sonnet-4-20250514 "your task"` |
+| resume then continue | `coden -p --auto --resume <session-id> "continue"` |
+| English interface | `coden -p --lang en "your task"` |
+
+## Notes
+
+- Print mode does not change permission semantics: outside-workspace `read`/`write`/`edit` still return `permission.outside_workspace_denied` under `--auto`.
+- Non-TTY environments do not implicitly enable print; interface mode is decided only by flags.
+- Exit codes: `2` for configuration errors, `1` for execution failures, `0` for normal completion.
+
+## Related references
+
+- [CLI / REPL](./cli)
+- [Full-screen TUI](./tui)
+- [Automation](../advanced/automation)
+- [CLI Options](./cli-options)

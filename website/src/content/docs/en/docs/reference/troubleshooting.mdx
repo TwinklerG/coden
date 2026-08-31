@@ -1,10 +1,65 @@
 ---
 title: Troubleshooting
-description: Lists common errors and how to handle them.
+description: Typical startup, runtime, plugin, and hook errors with resolutions.
 sidebar:
   order: 930
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Startup and configuration
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `CODEN_OPENAI_API_KEY is required` | no key set (default provider) | `export CODEN_OPENAI_API_KEY=...` or config `env` |
+| `CODEN_ANTHROPIC_API_KEY is required` | `--provider anthropic` without a key | export `CODEN_ANTHROPIC_API_KEY` |
+| `Cannot read config ...` | invalid JSON in a config file | fix the matching scope's `config.json` |
+| `language must be zh or en` | illegal `--lang`/config value | use `zh`/`en`; check the user config |
+| `--tui and --cli are mutually exclusive` | conflicting interface flags | keep one interface flag |
+| `--smart-approve and --auto are mutually exclusive` | conflicting approval flags | keep one |
+| `--allow-outside-workspace requires --auto` | the flag used alone | combine with `--auto` |
+| `print mode requires a prompt` | `-p` without a task | add a prompt argument |
+| `Anthropic enabled thinking requires maxOutputTokens greater than 1024` | `reservedOutputTokens <= 1024` with thinking enabled | raise `reservedOutputTokens` or lower the thinking level |
+
+## Runtime
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `runtime.step_limit` (`Maximum model steps (20) reached`) | exceeded `maxSteps` | split the task or raise `--max-steps` |
+| `context.exhausted` | still over budget after emergency compaction | `/new` or a fresh session; narrow the task |
+| `permission.denied` | permission refused | use a safer operation or approve manually |
+| `permission.outside_workspace_denied` | outside access under `--auto` | use `--auto --allow-outside-workspace` when truly needed |
+| `tool.timeout` | tool not finished in 60s (without cooperative cancel) | shorten the command/tool logic; check plugin cancellation |
+| `edit.no_match` / `edit.multiple_matches` | `oldText` absent or not unique | copy the exact text to replace |
+
+## Plugins
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `plugin.specifier_invalid` | bad specifier | use `npm:<package>` or `npm:<package>@<version-or-tag>` |
+| `plugin.install_busy` | scope transaction lock busy | retry later (stale locks auto-clean) |
+| `plugin.lock_missing` | project `sync` without `bun.lock` | `plugin install` first or commit the lock |
+| `plugin.lock_outdated` | lock file out of sync with the manifest | update and commit the lock |
+| `plugin.manifest_invalid` | corrupted `plugins.json` | repair the manifest; reinstall if necessary |
+| `plugin.metadata_missing` / `plugin.entry_invalid` / `plugin.api_unsupported` / `plugin.name_mismatch` | package violates the author protocol | fix the package per the [Author Protocol](../plugins/author-protocol) |
+| plugin load failure, tools missing | top-level/entry exception; loading `.ts` under Node | check `coden plugin list`; run with Bun or use an npm plugin |
+| `plugin restart required` | npm plugin metadata changed at runtime | restart CodeN |
+
+## Hooks
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| config parse failure: `unsupported hook event`/`invalid matcher`/`timeout` range | illegal hook config | see [Matchers](../hooks/matchers) and [Execution](../hooks/execution) |
+| `X config exceeds 64 commands` | too many hooks for one event | trim the hook list |
+| hook silently ineffective | non-zero exit, timeout, output over limit, invalid JSON | `--verbose`; check the stdin/stdout protocol |
+
+## Skills and runtime
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| skill not active | directory/frontmatter mismatch or illegal file | `--verbose` for `ignored ...` reasons; restart |
+| local `.ts` plugin not loading under Node | Node lacks `data:text/typescript` support | run with Bun (or use an npm plugin) |
+
+## Related references
+
+- [CLI Reference](./cli)
+- [Configuration Reference](./configuration)
+- [FAQ](./faq)

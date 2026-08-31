@@ -1,10 +1,47 @@
 ---
 title: 发现规则
-description: 说明 Skill 的发现和覆盖规则。
+description: Skill 的扫描位置、覆盖顺序、格式校验与启动上下文注入。
 sidebar:
   order: 510
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 扫描位置（启动时一次）
+
+```text
+~/.agents/skills/<skill-name>/SKILL.md     # user
+<workspace>/skills/<skill-name>/SKILL.md   # project (bundled)
+<workspace>/.agents/skills/<skill-name>/SKILL.md  # project (local)
+```
+
+按上述顺序扫描**直接子目录**；每个候选项必须是 `<skill-name>/SKILL.md`。
+
+## 覆盖顺序
+
+同名 Skill 按 user → bundled → local 覆盖，因此本地安装的项目级 Skill 优先级最高。`skills/` 用于仓库随附、可公开分发的 Skill；`.agents/skills/` 用于本地安装的项目级 Skill。
+
+## 格式校验
+
+| 规则 | 要求 |
+| --- | --- |
+| frontmatter | 必须以 YAML frontmatter 开头且可解析 |
+| `name` | `^[a-z0-9][a-z0-9-]{0,63}$`，且与目录名一致 |
+| `description` | 非空字符串，≤ 1024 字符 |
+| 大小 | `SKILL.md` ≤ 1MB |
+| 路径 | 不允许符号链接逃逸扫描根目录；须为普通文件 |
+
+可选 frontmatter 字段：`license`、`compatibility`、`metadata`、`allowed-tools`。
+
+非法条目被跳过；`--verbose` 输出每个失败原因（作用域、路径、原因）。失败不会影响其他 Skill 或启动。
+
+## 上下文注入
+
+- 启动上下文（系统提示）只包含有效 Skill 的**名称与描述**（`formatSkillCatalog`）。
+- 任务匹配时模型调用 `activate_skill` 加载完整说明与 Skill 绝对根目录；`references/`、`scripts/` 等资源仍由 Agent 按需用普通工具读取。
+- 无有效 Skill 时 `activate_skill` 返回 `skill.not_found`。
+- Skill 仅在启动时发现：文件变更需重启 CodeN。
+
+## 相关参考
+
+- [创建 Skill](./create)
+- [安装与调试](./install-and-debug)
+- [斜杠命令](../interfaces/slash-commands)

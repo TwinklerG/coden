@@ -1,10 +1,88 @@
 ---
 title: 示例
-description: 提供 Hook 配置和使用示例。
+description: 可复制的 Hook 配置：通知、批准脚本、Stop 检查与工作区变量。
 sidebar:
   order: 770
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## macOS 授权通知
+
+`PermissionRequest` 事件在需要人工授权时触发。以下配置在等待授权时发送系统通知（macOS）：
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [{
+      "matcher": "bash|edit|write",
+      "hooks": [{
+        "type": "command",
+        "command": "osascript -e 'display notification \"CodeN 正在等待授权\" with title \"CodeN\"'; afplay /System/Library/Sounds/Glass.aiff",
+        "timeout": 5
+      }]
+    }]
+  }
+}
+```
+
+## PreToolUse 批准脚本（Node）
+
+从 stdin 读取 JSON 并输出 `allow` 决策；解析失败时不输出决策（fail-open 到策略层）。
+
+```js
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (input += chunk));
+process.stdin.on("end", () => {
+  JSON.parse(input);
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" }
+  }));
+});
+```
+
+对应配置：
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "bash",
+      "hooks": [{
+        "type": "command",
+        "command": "node /path/to/approve.js"
+      }]
+    }]
+  }
+}
+```
+
+## Stop 要求继续
+
+模型停止时若 `decision: "block"`，会把 `reason` 注入对话要求模型继续（仍受 `maxSteps` 限制）：
+
+```json
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "echo '{\"decision\":\"block\",\"reason\":\"tests have not been run yet\"}'"
+      }]
+    }]
+  }
+}
+```
+
+## 读取会话变量
+
+Hook 环境提供 `CODEN_PROJECT_DIR`、`CODEN_SESSION_ID`、`CODEN_HOOK_EVENT`：
+
+```bash
+echo "project=$CODEN_PROJECT_DIR session=$CODEN_SESSION_ID event=$CODEN_HOOK_EVENT"
+```
+
+## 相关参考
+
+- [I/O 协议](./protocol)
+- [决策与权限](./decisions)
+- [匹配规则](./matchers)

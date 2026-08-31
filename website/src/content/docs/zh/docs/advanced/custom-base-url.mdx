@@ -1,10 +1,45 @@
 ---
 title: 自定义 Base URL
-description: 说明如何配置自定义 Base URL。
+description: OpenAI 兼容端点的配置与兼容性边界。
 sidebar:
   order: 840
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 配置
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+export CODEN_OPENAI_BASE_URL=https://api.example.com/v1
+coden --model your-model-id "your task"
+```
+
+`CODEN_OPENAI_BASE_URL` 由 OpenAI SDK 直接使用，支持代理、网关与任何 OpenAI 兼容服务。也可写入配置 `env` 字段（不覆盖 shell 已导出变量）。
+
+## 行为说明
+
+- Base URL 只影响 OpenAI Provider（默认 Provider）；`createProvider` 在构造时读取。
+- Anthropic Provider 固定使用官方端点，当前版本不接受自定义 Base URL。
+- 兼容服务必须实现 OpenAI 的 `chat.completions` 流式接口：`stream_options.include_usage`、function calling 与 tool calls 的流式增量。
+- CodeN 不维护模型能力白名单：`--thinking` 与工具定义按原样发送；服务不支持时会返回 Provider 错误，不做静默降级。
+
+## 验证
+
+```bash
+coden -p "Reply with exactly: coden-ok"
+```
+
+预期输出包含 `coden-ok`。若服务只是部分兼容（例如不支持 usage），可以检查流是否仍正常完成。
+
+## 常见失败
+
+| 现象 | 原因 |
+| --- | --- |
+| `provider.*` 错误 | 端点返回非 2xx；检查 Base URL 是否含 `/v1`、模型 ID 是否有效 |
+| 流式中断/无输出 | 服务不支持流式增量或 `include_usage` |
+| 参数被拒 | 服务不支持 `reasoning_effort` 等字段；改用 `--thinking default` 或选择兼容模型 |
+
+## 相关参考
+
+- [OpenAI 配置](../configuration/openai)
+- [配置第一个 Provider](../getting-started/provider)
+- [常见错误](../reference/troubleshooting)

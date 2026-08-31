@@ -1,10 +1,50 @@
 ---
 title: Outside Workspace Access
-description: Explains how outside-workspace access is handled.
+description: How read/write/edit handle outside paths, symlink classification, and the allow-outside-workspace boundary.
 sidebar:
   order: 820
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Default classification
+
+`read`/`write`/`edit` targets are classified by the **real path after symlink resolution** (new files use the nearest existing real parent):
+
+- Inside the workspace: `read` is auto-allowed; `write`/`edit` follow the approval mode.
+- Outside the workspace: the risk escalates to `modify`, confirmed per call or per session like an ordinary modification; under `--auto` the call returns `permission.outside_workspace_denied`.
+
+## Explicit widening
+
+```bash
+coden --auto --allow-outside-workspace "your task"
+```
+
+- `--allow-outside-workspace` requires `--auto` (using it alone is a configuration error).
+- It affects only the three structured file tools — `read`/`write`/`edit` — permitting arbitrary writable paths outside the workspace.
+- `PreToolUse` and the permission policy still run; `dangerous` risk is unaffected by this switch.
+
+## Symlinks and TOCTOU
+
+- Classification is based on canonicalization (resolving symlinks segment by segment, up to 32 levels), not the lexical path.
+- Immediately before the operation the path is resolved and compared again (`revalidateStructuredFilePath`): a change throws `workspace.path_changed`.
+- Links pointing outside the workspace classify their targets as outside; without `--allow-outside-workspace` they are handled as outside paths.
+
+## Unaffected parts
+
+- `bash` runs with the workspace as its cwd but its access scope is not governed by this switch; it has user process permissions.
+- `activate_skill` reads discovered, re-verified skill entries; skill resources (`references/`, etc.) read with ordinary `read` still follow the outside-path rules.
+- User skills live in `~/.agents/skills/` (outside the workspace): reading their resources with ordinary `read` also requires confirmation or `--allow-outside-workspace`.
+
+## Failure modes
+
+| Scenario | Result |
+| --- | --- |
+| outside access under `--auto` | `permission.outside_workspace_denied: rerun with --auto --allow-outside-workspace` |
+| resolution/escape failure | `permission.workspace_denied` (including `workspace.symlink_escape`/`workspace.outside`) |
+| path changed before execution | `workspace.path_changed` |
+
+## Related references
+
+- [Workspace](../concepts/workspace)
+- [Tools and Risk Levels](../concepts/tools-and-risk)
+- [Data Security](../configuration/data-security)
+- [Security Model](../reference/security-model)

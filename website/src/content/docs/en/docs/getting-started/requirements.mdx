@@ -1,10 +1,68 @@
 ---
 title: Requirements
-description: Lists the basic environment required to run CodeN.
+description: Runtime, terminal, network, and credential prerequisites for running CodeN.
 sidebar:
   order: 110
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Runtime: pick one
+
+| Purpose | Runtime | Version |
+| --- | --- | --- |
+| Run the published CLI (npm bin) | Node.js | `>=22` |
+| Run from source / develop | Bun | `>=1.1.0` |
+
+The published artifact is a minified single-file Node CLI (`dist/index.js`) that requires Node.js 22+; Bun is not needed at runtime. Bun is used only for repository development: dependency installation, scripts, and TypeScript plugin execution. The source code uses only standard Web/Node.js APIs.
+
+Developing from source also requires [Just](https://github.com/casey/just) as the command runner:
+
+```bash
+bun install
+just check
+```
+
+## Runtime capability matrix
+
+Local TypeScript plugins and npm plugin installation depend on Bun's internal loading and package-management capabilities; Node covers only the core feature set:
+
+| Capability | Node.js 22+ | Bun 1.1+ |
+| --- | --- | --- |
+| Agent loop, built-in tools, hooks, sessions | full | full |
+| npm plugins: load installed JS entry | full | full |
+| npm plugins: `plugin install/sync` (runs `bun install` internally) | **unsupported** (needs Bun on PATH) | full |
+| Local TypeScript plugins (`*.ts` files) | **unsupported** (skipped and reported as failed) | full |
+
+Reason: local `.ts` plugins are imported in-process through a `data:text/typescript` URL, which Node rejects with `ERR_UNKNOWN_MODULE_FORMAT`; npm plugin install always uses `bun install --registry https://registry.npmjs.org`. A failed plugin only affects that plugin and never blocks other functionality.
+
+## Terminal requirements
+
+- **CLI/REPL (default)**: works in any terminal, including non-TTY environments (pipes, CI).
+- **Full-screen TUI (`--tui`)**: stdin and stdout must both be TTYs, raw mode must be available, and `TERM` must not be `dumb`. Otherwise an explicit `--tui` falls back to the CLI with a warning rather than failing.
+- **Print mode (`-p`)**: no TTY required; output is plain text and pipe-friendly.
+- `NO_COLOR` disables color only and does not affect interface-mode selection.
+
+## Network requirements
+
+- Installing CodeN or its npm plugins requires access to `https://registry.npmjs.org` (plugin installs always use this registry; private registries, Git, URLs, and local directory sources are not supported).
+- Running an agent requires access to the configured provider API (the OpenAI default endpoint, or the compatible endpoint specified by `CODEN_OPENAI_BASE_URL`).
+
+## Credential requirements
+
+- OpenAI: `CODEN_OPENAI_API_KEY`
+- Anthropic: `CODEN_ANTHROPIC_API_KEY`
+
+Startup fails immediately with the corresponding `..._API_KEY is required` error when the key is missing. Environment variables exported in the shell take precedence over the `env` field in config files.
+
+## Verify the environment
+
+```bash
+node --version            # Node.js >= 22
+coden --version           # 0.1.9
+coden --help
+```
+
+## Related references
+
+- [Install CodeN](./installation)
+- [Configure Your First Provider](./provider)
+- [CLI Reference](../reference/cli)

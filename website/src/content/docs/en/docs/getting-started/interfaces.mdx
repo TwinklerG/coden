@@ -1,10 +1,53 @@
 ---
 title: Launch the CLI / TUI
-description: Covers the startup flow for the CLI and TUI.
+description: Selection rules, mutual exclusions, and fallback behavior for CLI/REPL, full-screen TUI, and print mode.
 sidebar:
   order: 140
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## The three interface modes
+
+| Mode | Trigger | Characteristics |
+| --- | --- | --- |
+| CLI/REPL | default, or `--cli` | Streaming output; interactive multiline input; startup banner |
+| Full-screen TUI | explicit `--tui` | Ink full-screen UI; transient activity enters the transcript; single-task serial execution |
+| print | `-p` / `--print` | Plain text, pipe-friendly; exits after a single turn |
+
+## Selection rules
+
+- With no interface flag, CodeN always enters CLI/REPL, TTY or not.
+- `--tui` requires stdin and stdout to both be TTYs, raw mode to be available, and `TERM != dumb`; otherwise it falls back to the CLI with a warning instead of failing.
+- `-p/--print` requires a prompt; for example `coden -p --auto "Implement the feature and run tests"`.
+- Combining `--tui` with `--cli` or with `--print` fails argument parsing; combining `--cli` with `--print` does not fail, and print wins.
+- `NO_COLOR` disables color only and does not affect interface-mode selection.
+
+## Input in CLI sessions
+
+- With no initial prompt, the multiline editor is used when supported: Enter submits and a single trailing `\` inserts a newline.
+- `Ctrl+D` (empty input) exits; `Ctrl+C` cancels the current task rather than exiting.
+- The startup banner shows version, workspace hash, model, approval mode, thinking level, and session ID, followed by a `Task > ` prompt.
+
+## TUI behavior highlights
+
+- The input area is enclosed by two full-width horizontal rules; Enter submits and Shift+Enter or a trailing `\` inserts a newline.
+- `Ctrl+P`/`Ctrl+N` browse input history; `PageUp`/`PageDown` and the mouse wheel scroll the transcript, and `End` returns to the latest content.
+- While running, `Ctrl+C` cancels the current task; while idle, `Ctrl+C` or `Ctrl+D` with empty input exits.
+- Tool authorization, workspace trust, and plugin confirmations appear as inline transcript requests instead of dialogs; the input area stays visible but disabled while waiting.
+- The TUI runs one task at a time and does not queue input while running.
+
+## Launch examples
+
+```bash
+coden                                     # CLI/REPL (default)
+coden --tui                               # explicit full-screen TUI
+coden --cli                               # explicit CLI/REPL
+coden -p "Reply with exactly: coden-ok"   # print single-turn output
+coden --tui "fix the failing tests in this project"
+```
+
+## Related references
+
+- [CLI / REPL](../interfaces/cli)
+- [Full-screen TUI](../interfaces/tui)
+- [Print Mode](../interfaces/print-mode)
+- [CLI Options](../interfaces/cli-options)

@@ -1,10 +1,34 @@
 ---
 title: Marketplace
-description: Introduces the plugin marketplace entry and browsing flow.
+description: The marketplace entry point and how to install from it.
 sidebar:
   order: 650
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Marketplace entry
+
+- [插件市场（中文）](/coden/zh/plugins/)
+- [Plugin marketplace (English)](/coden/en/plugins/)
+
+The marketplace lists curated npm plugins for CodeN (name, version, description, and compatibility status) with filtering by package name and description. Data comes from live npm registry snapshots.
+
+## Installing a listed plugin
+
+```bash
+coden plugin install npm:coden-modern-unix
+coden plugin install npm:coden-msb
+```
+
+Restart CodeN after installing; `coden plugin list` confirms the registered tools (see [npm Plugin Management](./npm-management)).
+
+If a package violates the author protocol (missing metadata, unsupported `apiVersion`, etc.), installation fails with the matching error code; see the [Author Protocol](./author-protocol) and [Troubleshooting](../reference/troubleshooting).
+
+## Submitting a plugin
+
+Authors can publish their npm package to a public registry to make it browsable; the package must satisfy the [Author Protocol](./author-protocol). Inclusion criteria are as shown on the marketplace page.
+
+## Related references
+
+- [npm Plugin Management](./npm-management)
+- [Author Protocol](./author-protocol)
+- [Trust and Security Boundaries](./trust-and-security)

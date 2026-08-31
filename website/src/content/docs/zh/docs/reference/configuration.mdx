@@ -1,10 +1,59 @@
 ---
 title: 配置参考
-description: 汇总配置字段。
+description: 配置入口、五层覆盖与思考/语言设置的汇总参考。
 sidebar:
   order: 920
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 配置文件位置
+
+| 作用域 | 路径 | 生效时机 |
+| --- | --- | --- |
+| 用户级 | `~/.config/coden/config.json`（`$XDG_CONFIG_HOME` 可覆盖） | 启动时读取 |
+| 项目级 | `<workspace>/.coden/config.json` | 启动时读取（项目级覆盖用户级；`language` 除外） |
+
+## 五层覆盖（高 → 低）
+
+1. CLI 参数
+2. `CODEN_*` 环境变量
+3. 项目级配置
+4. 用户级配置
+5. 默认值
+
+特例：`language` 只读用户级 + `--lang`；`plugins` 三来源拼接；`env` 项目级逐键覆盖用户级且不覆盖 shell 导出；`hooks` 用户级在前合并。
+
+## 最小可用配置
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "env": {
+    "CODEN_OPENAI_API_KEY": "sk-..."
+  }
+}
+```
+
+## 完整字段
+
+字段类型、默认值与校验见[配置字段参考](../configuration/reference)。行为语义的详细展开：
+
+| 主题 | 页面 |
+| --- | --- |
+| 覆盖顺序与合并 | [配置优先级](../configuration/precedence) |
+| 作用域与信任 | [用户级与项目级配置](../configuration/scopes) |
+| 环境变量与凭据 | [环境变量](../configuration/environment)、[OpenAI 配置](../configuration/openai)、[Anthropic 配置](../configuration/anthropic) |
+| 语言与思考 | [语言与思考等级](../configuration/language-and-thinking) |
+| 数据安全 | [凭据与数据安全](../configuration/data-security) |
+
+## 思考等级说明
+
+- 等级：`default`（不发送参数）、`off`、`minimal`、`low`、`medium`、`high`。
+- OpenAI 映射 `reasoning_effort`（`off→minimal`）；Anthropic 映射思考预算（1024 / 25% / 50% / 75%，要求 `reservedOutputTokens > 1024`）。
+- 只作用于主 Agent 请求；压缩与 Smart Approval 不受影响。
+
+## 相关参考
+
+- [字段参考](../configuration/reference)
+- [CLI 命令参考](./cli)
+- [常见错误](./troubleshooting)

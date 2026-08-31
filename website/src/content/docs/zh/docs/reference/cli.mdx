@@ -1,10 +1,72 @@
 ---
 title: CLI 命令参考
-description: 汇总 CLI 命令。
+description: coden 命令与 plugin 子命令的完整参考。
 sidebar:
   order: 910
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 主命令
+
+```text
+coden [prompt] [options]
+```
+
+| 选项 | 说明 |
+| --- | --- |
+| `<prompt>` | 要执行的任务；省略进入 REPL |
+| `-p, --print` | 非交互输出模式（需 prompt，单轮后退出） |
+| `--tui` | 显式全屏 TUI（条件不满足时降级 CLI 并警告） |
+| `--cli` | 显式 CLI（默认） |
+| `--provider <openai\|anthropic>` | 模型 Provider（默认 `openai`） |
+| `--model <model-id>` | 模型（默认 `gpt-5-mini`） |
+| `--resume [session-id]` | 恢复会话；省略 ID 列出会话 |
+| `--auto` | 跳过工具权限确认 |
+| `--smart-approve` | LLM 审查普通修改 |
+| `--allow-outside-workspace` | 与 `--auto` 一起允许工作区外读写 |
+| `--verbose` | 详细运行状态 |
+| `--max-steps <n>` | 最大模型步骤（默认 20） |
+| `--thinking <level>` | `default`/`off`/`minimal`/`low`/`medium`/`high` |
+| `--plugin <path>` | 本地 TypeScript 插件/目录（可重复） |
+| `--lang <zh\|en>` | 界面与 Agent 语言（仅当前进程） |
+| `-V, --version` | 版本 |
+| `-h, --help` | 帮助 |
+
+## plugin 子命令
+
+```text
+coden plugin install <npm:package[@version]> [--global] [--allow-scripts] [--yes]
+coden plugin remove <package> [--global] [--allow-scripts] [--yes]
+coden plugin list [--project | --global]
+coden plugin sync [--global] [--allow-scripts] [--yes]
+```
+
+| 选项 | 说明 |
+| --- | --- |
+| `--global` | 用户全局作用域（默认项目） |
+| `--project` / `--global`（list） | 只显示项目/全局（互斥） |
+| `--allow-scripts` | 允许 npm 生命周期脚本（警告 + 二次确认） |
+| `--yes` | 跳过确认（不自动启用脚本） |
+
+## 退出码
+
+| 码 | 含义 |
+| --- | --- |
+| `0` | 正常完成 |
+| `1` | 执行失败（运行期错误） |
+| `2` | 配置/启动错误（缺 API Key、非法参数、配置 JSON 无效、插件命令失败） |
+
+## 示例
+
+```bash
+coden --resume                          # list sessions of the current workspace
+coden --resume <session-id>             # resume
+coden -p --auto "run the tests"         # CI single-turn output
+coden plugin install npm:coden-msb      # install an npm plugin
+```
+
+## 相关参考
+
+- [常用命令行参数](../interfaces/cli-options)
+- [npm 插件安装和管理](../plugins/npm-management)
+- [斜杠命令](../interfaces/slash-commands)
+- [常见错误](./troubleshooting)

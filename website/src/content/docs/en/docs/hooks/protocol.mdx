@@ -1,10 +1,75 @@
 ---
 title: Protocol
-description: Describes the stdin and stdout protocol structure.
+description: Hook command stdin structure, stdout conventions, environment variables, and limits.
 sidebar:
   order: 730
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Process conventions
+
+- Commands run through the system shell: POSIX `/bin/sh -c <command>`; Windows `cmd /d /s /c`.
+- The working directory is the CodeN workspace; the environment inherits the CodeN process plus:
+
+| Variable | Value |
+| --- | --- |
+| `CODEN_PROJECT_DIR` | workspace path |
+| `CODEN_SESSION_ID` | current session ID |
+| `CODEN_HOOK_EVENT` | event name |
+
+## stdin: one JSON object
+
+```json
+{
+  "schemaVersion": 1,
+  "hookEventName": "PreToolUse",
+  "sessionId": "…",
+  "turnId": "…",
+  "cwd": "/path/to/workspace",
+  "permissionMode": "manual",
+  "toolName": "bash",
+  "callId": "…",
+  "input": { "command": "git status" },
+  "risk": "modify"
+}
+```
+
+Common fields: `schemaVersion`, `hookEventName`, `sessionId`, optional `turnId`, `cwd`, `permissionMode`, followed by the event payload. The input limit is **1MB** (over limit counts as a failure).
+
+## stdout: one JSON object
+
+- Allowed top-level fields: `systemMessage` (all events); `Stop` additionally allows `decision` (`"block"` only) and `reason`; other events use `hookSpecificOutput` with per-event allowlists.
+- `systemMessage` must be a string, scrubbed of control characters, truncated to 2000 characters, and forwarded to the diagnostic sink (stdout/stderr).
+- `hookSpecificOutput.hookEventName` must match the event; unknown fields count as failures.
+- Output limit is **10KB** per stream (stdout and stderr independently); exceeding it terminates the process and marks `outputExceeded`.
+- Exit code `0` with empty stdout: no-op.
+
+## Output example
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "allow"
+  }
+}
+```
+
+## Exit-code semantics
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | success; stdout optional |
+| `2` | explicit block (controllable events only) |
+| other / timeout / output or input over limit | hook failure: warn and fail open, producing no decision |
+
+## Security notes
+
+- The event JSON is the only data channel: never interpolate event fields into shell command strings.
+- Commands should read JSON from stdin and emit valid JSON, avoiding injection and escaping issues.
+- Hook output is scrubbed of terminal control characters; do not rely on stdout to echo sensitive information.
+
+## Related references
+
+- [Decisions](./decisions)
+- [Execution](./execution)
+- [Examples](./examples)

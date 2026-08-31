@@ -1,10 +1,54 @@
 ---
 title: Smart Approval
-description: 说明 Smart Approval 的工作方式。
+description: 独立 LLM 审查普通修改的触发条件、输出协议与失败关闭语义。
 sidebar:
   order: 810
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 触发
+
+```bash
+coden --smart-approve "your task"
+```
+
+只审查**工作区内**、风险为 `modify` 的工具调用（`read` 自动允许；危险命令升级为 `dangerous` 后直接人工；工作区外路径直接人工；`--auto` 与 `--smart-approve` 互斥）。
+
+## 审查模型
+
+- 使用与主任务相同的 Provider 与凭据；模型为 `approvalModel`，未设置时回退 `model`。
+- 每次普通修改一次独立请求：`maxOutputTokens` 256，超时 30 秒。
+- 审查请求的系统提示把 payload 标记为不可信数据，要求只返回一个 JSON 对象（`decision` + `reason`）。
+
+## 判定协议
+
+| 结果 | 行为 |
+| --- | --- |
+| `allow` | 直接放行（不再人工确认） |
+| `human_review` | 转人工确认 |
+| 响应无效 | 超时、截断（`length`/`max_tokens`）、包含工具调用、非 JSON、字段违规、reason 为空 → 转人工 |
+
+失败关闭：任何异常都不会静默放行。
+
+## 严格度
+
+| 值 | 策略 |
+| --- | --- |
+| `soft` | 任务一致、工作区内、普通且可恢复即可允许；无需穷尽证明所有影响 |
+| `medium`（默认） | 仅在任务一致性、有限影响与实际恢复路径都清晰时允许 |
+| `hard` | 只允许目标、完整实质影响与恢复路径都非常清晰的常规局部操作；任何实质不确定性转人工 |
+
+## 成本与可见性
+
+- 每次修改调用消耗与主任务相同的 Provider 配额；批量修改会产生多次审查调用。
+- 界面显示审查过程：`reviewing <tool>…`、`AI approved <tool>`、`AI requested human review — <reason>`；审查不可用时提示需要人工批准。
+- 事件：`permission.review_started`/`review_completed`/`review_failed`。
+
+## 与 Hook 的关系
+
+`PreToolUse` 的 `deny` 优先于 LLM 的 `allow`；Hook 要求 `ask` 时直接人工。LLM 审查作为策略层的一部分，不替代 [PermissionRequest Hook](../hooks/decisions)。
+
+## 相关参考
+
+- [审批模式](../concepts/approval-modes)
+- [工具与风险等级](../concepts/tools-and-risk)
+- [安全模型](../reference/security-model)

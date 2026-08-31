@@ -19,9 +19,7 @@ afterEach(async () => {
 describe("documentation files", () => {
   it("creates missing scaffolds without replacing authored content", async () => {
     const root = await temporaryRoot();
-    await expect(
-      readFile(path.join(root, "src", "content", "docs"), "utf8"),
-    ).rejects.toThrow();
+    await expect(readFile(path.join(root, "src", "content", "docs"), "utf8")).rejects.toThrow();
 
     const first = await syncDocFiles(root, "write");
     expect(first.created).toHaveLength(first.expectedCount);

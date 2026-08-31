@@ -1,10 +1,70 @@
 ---
 title: npm Plugin Management
-description: Explains npm plugin installation and management.
+description: Installing, syncing, listing, and removing npm plugins, plus project file conventions.
 sidebar:
   order: 620
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Install
+
+```bash
+coden plugin install npm:@scope/coden-plugin-example
+coden plugin install npm:@scope/coden-plugin-example@^2 --global
+coden plugin remove @scope/coden-plugin-example
+coden plugin list
+coden plugin sync
+```
+
+- Default scope is **project**; `--global` installs into the user-global scope.
+- Specifiers accept only `npm:<package>` or `npm:<package>@<version-or-tag>`; `https://registry.npmjs.org` is always used — private registries, Git, URLs, and local directory sources are unsupported.
+- Install validation imports the entry: top-level code runs with the current user's permissions.
+- Install/remove/upgrade require a CodeN restart; `/reload` re-reads local `.ts` plugins only.
+
+## Project files
+
+```text
+<workspace>/.coden/plugins.json              # manifest (commit)
+<workspace>/.coden/plugin-runtime/.gitignore # excludes node_modules (commit)
+<workspace>/.coden/plugin-runtime/bun.lock   # locked dependencies (commit)
+```
+
+`plugin-runtime/package.json` is generated deterministically from `plugins.json`; `node_modules/` is never committed. Global plugins live at `$XDG_DATA_HOME/coden/plugins/` (default `~/.local/share/coden/plugins/`) and are not part of the project repository.
+
+## Sync
+
+```bash
+coden plugin sync
+coden plugin sync --global
+```
+
+- Project `sync` requires `plugin-runtime/bun.lock` to exist, otherwise it reports `plugin.lock_missing`.
+- Sync runs `bun install` with `--frozen-lockfile`: an outdated lock file reports `plugin.lock_outdated`; update and commit the lock file.
+- Sync rebuilds the runtime and re-validates every plugin entry.
+
+## Lifecycle scripts
+
+| Behavior | Meaning |
+| --- | --- |
+| disabled by default | equivalent to `bun install --ignore-scripts`; `preinstall`/`install`/`postinstall` do not run |
+| `--allow-scripts` | lets this package and transitive deps run scripts with user permissions; prints a warning and asks again |
+| `--yes` | skips confirmations only, and never enables scripts on its own |
+
+## Listing and shadowing
+
+`coden plugin list` prints project and global sections: package name, installed version, requested version, tool count. When the same package exists in both scopes, the project row is marked as shadowed (`shadowed by project`) and the global version is inactive.
+
+## Transactions and concurrency
+
+- Install/sync/remove commit transactionally (manifest + runtime backups with crash recovery).
+- Only one transaction per scope at a time; concurrent operations report `plugin.install_busy` (stale locks are cleaned automatically).
+
+## Runtime requirement
+
+**Loading** npm plugins requires only a built `.js`/`.mjs` entry (Node or Bun); **install and sync** run `bun install` internally and need Bun on PATH.
+
+## Related references
+
+- [Local TypeScript Plugins](./local-typescript)
+- [Author Protocol](./author-protocol)
+- [Trust and Security Boundaries](./trust-and-security)
+- [Marketplace](./marketplace)

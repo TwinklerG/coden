@@ -1,10 +1,59 @@
 ---
 title: Configuration Reference
-description: Summarizes the configuration fields.
+description: Config entry points, the five-layer override order, and thinking/language settings summary.
 sidebar:
   order: 920
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Config file locations
+
+| Scope | Path | Loaded |
+| --- | --- | --- |
+| user | `~/.config/coden/config.json` (overridable via `$XDG_CONFIG_HOME`) | at startup |
+| project | `<workspace>/.coden/config.json` | at startup (project overrides user, except `language`) |
+
+## Five-layer override (high → low)
+
+1. CLI flags
+2. `CODEN_*` environment variables
+3. project config
+4. user config
+5. defaults
+
+Exceptions: `language` reads the user scope plus `--lang`; `plugins` concatenates three sources; `env` merges project-over-user without overwriting shell exports; `hooks` merge user-first.
+
+## Minimal config
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "env": {
+    "CODEN_OPENAI_API_KEY": "sk-..."
+  }
+}
+```
+
+## Full fields
+
+Types, defaults, and validation are in the [configuration field reference](../configuration/reference). Behavior deep dives:
+
+| Topic | Page |
+| --- | --- |
+| override order and merging | [Precedence](../configuration/precedence) |
+| scopes and trust | [User and Project Scopes](../configuration/scopes) |
+| environment variables and credentials | [Environment Variables](../configuration/environment), [OpenAI Configuration](../configuration/openai), [Anthropic Configuration](../configuration/anthropic) |
+| language and thinking | [Language and Thinking Levels](../configuration/language-and-thinking) |
+| data security | [Data Security](../configuration/data-security) |
+
+## Thinking-level notes
+
+- Levels: `default` (sends no parameter), `off`, `minimal`, `low`, `medium`, `high`.
+- OpenAI maps to `reasoning_effort` (`off→minimal`); Anthropic maps to thinking budgets (1024 / 25% / 50% / 75%, requiring `reservedOutputTokens > 1024`).
+- Main-agent requests only; compaction and Smart Approval are unaffected.
+
+## Related references
+
+- [Reference](../configuration/reference)
+- [CLI Reference](./cli)
+- [Troubleshooting](./troubleshooting)

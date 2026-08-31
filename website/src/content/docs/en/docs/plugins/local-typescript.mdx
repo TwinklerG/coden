@@ -1,10 +1,64 @@
 ---
 title: Local TypeScript Plugins
-description: Explains how local TypeScript plugins run.
+description: Scan locations, single-file constraints, loading mechanism, and runtime requirements of local .ts plugins.
 sidebar:
   order: 610
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Scan locations
+
+| Source | Path | Trust |
+| --- | --- | --- |
+| user | `~/.config/coden/plugins/*.ts` | none (user-initiated install) |
+| project | `<workspace>/.coden/plugins/*.ts` | workspace trust required |
+| additional directories | `--plugin <path>` or config `plugins` entries (repeatable) | project semantics: workspace trust required |
+
+`.ts` files in a directory load in filename order. Missing project directories are skipped silently.
+
+## Single-file constraints
+
+- A plugin must be **self-contained in one file**: it is imported in-process through a `data:text/typescript` URL, so relative imports (`./helper.ts`) cannot resolve; npm bare package imports (`import pc from "picocolors"`) work.
+- Content hashes drive the module cache: unchanged plugins reuse the loaded module on `/reload`; changed ones rebuild the module and atomically replace the tool registry.
+- Top-level code executes at load time — unrelated to authorization and part of the trust boundary.
+
+## Minimal example
+
+```ts
+import type { ToolDefinition } from "@twinklerg/coden/plugin";
+
+const tool: ToolDefinition = {
+  name: "line_count",
+  description: "Count lines in supplied text",
+  risk: "read",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["text"],
+    properties: { text: { type: "string" } },
+  },
+  async execute(input) {
+    const { text } = input as { text: string };
+    return { content: String(text.split("\n").length) };
+  },
+};
+
+export default tool;
+```
+
+## Loading and validation
+
+- The export may be a single `ToolDefinition` or a `CodeNPlugin` (`apiVersion: 1`, `name`, non-empty `tools` array).
+- Tool names must match `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`; input schemas are compiled and validated with Ajv; `execute` returns `{ content, isError?, metadata? }`.
+- On name collisions (including built-ins) the **whole plugin is skipped**: existing tools are never overwritten and other plugins are unaffected.
+- Execution context: `ToolContext` provides `workspace`, `signal` (`AbortSignal`; 60-second timeout requires cooperative cancellation), and structured file-path information.
+
+## Runtime requirement
+
+Local `.ts` plugins are loaded by Bun. **They cannot load under a Node.js runtime**: Node returns `ERR_UNKNOWN_MODULE_FORMAT` for `data:text/typescript`, so the plugin is skipped and reported as failed (other functionality is unaffected). Run from source with Bun or ensure Bun is on PATH to use local TypeScript plugins.
+
+## Related references
+
+- [npm Plugin Management](./npm-management)
+- [Author Protocol](./author-protocol)
+- [Trust and Security Boundaries](./trust-and-security)
+- [Runtime capability matrix](../getting-started/requirements)

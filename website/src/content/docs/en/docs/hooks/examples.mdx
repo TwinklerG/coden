@@ -1,10 +1,88 @@
 ---
 title: Examples
-description: Provides hook configuration and usage examples.
+description: "Copyable hook configurations: notifications, approval scripts, Stop checks, and workspace variables."
 sidebar:
   order: 770
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## macOS authorization notification
+
+The `PermissionRequest` event fires when human authorization is needed. This sends a system notification while waiting (macOS):
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [{
+      "matcher": "bash|edit|write",
+      "hooks": [{
+        "type": "command",
+        "command": "osascript -e 'display notification \"CodeN 正在等待授权\" with title \"CodeN\"'; afplay /System/Library/Sounds/Glass.aiff",
+        "timeout": 5
+      }]
+    }]
+  }
+}
+```
+
+## PreToolUse approval script (Node)
+
+Reads JSON from stdin and emits an `allow` decision; on parse failure it emits nothing (fail-open to the policy layer).
+
+```js
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => (input += chunk));
+process.stdin.on("end", () => {
+  JSON.parse(input);
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" }
+  }));
+});
+```
+
+Matching configuration:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "bash",
+      "hooks": [{
+        "type": "command",
+        "command": "node /path/to/approve.js"
+      }]
+    }]
+  }
+}
+```
+
+## Stop demand-more-work
+
+When the model stops, `decision: "block"` injects `reason` into the conversation and asks it to continue (still bounded by `maxSteps`):
+
+```json
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "echo '{\"decision\":\"block\",\"reason\":\"tests have not been run yet\"}'"
+      }]
+    }]
+  }
+}
+```
+
+## Reading session variables
+
+Hook environments provide `CODEN_PROJECT_DIR`, `CODEN_SESSION_ID`, and `CODEN_HOOK_EVENT`:
+
+```bash
+echo "project=$CODEN_PROJECT_DIR session=$CODEN_SESSION_ID event=$CODEN_HOOK_EVENT"
+```
+
+## Related references
+
+- [Protocol](./protocol)
+- [Decisions](./decisions)
+- [Matchers](./matchers)

@@ -1,10 +1,49 @@
 ---
 title: Language and Thinking Levels
-description: Covers language and thinking level settings.
+description: How the UI/agent language is resolved, plus entry points, precedence, and persistence of the six thinking levels.
 sidebar:
   order: 460
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Language
+
+- CodeN defaults to Chinese and **never reads the system locale**.
+- Language resolution: `--lang <zh|en>` (this process only, no config write) > user config `language` > default `zh`.
+- The project config `language` field is ignored — language is a user-owned preference.
+- REPL `/lang <zh|en>` switches immediately and atomically updates the **user-level** config file (preserving other fields, mode `0600`).
+- The system prompt, built-in tool descriptions, and UI share one language; the agent may follow a per-task request for another reply language without changing the UI or persisting the preference.
+- Third-party plugin names, descriptions, output, and errors always keep the author's original text.
+- Invalid `--lang` or config values error out (exit code 2); an invalid `--lang` on the command line only reports the error and writes no config.
+
+## Thinking levels
+
+Six unified levels: `default` (default), `off`, `minimal`, `low`, `medium`, `high`.
+
+| Entry point | Scope | Persistence |
+| --- | --- | --- |
+| `--thinking <level>` | this process | overridden into the session at startup (resume scenarios) |
+| `CODEN_THINKING_LEVEL` | this process | none |
+| config `thinkingLevel` | user/project | the config file itself |
+| `/thinking [level]` | this process and session | written to session records; never to config files |
+| `/new` | — | does not change the level |
+
+Resume precedence: explicit `--thinking` > saved session value > environment/project/user config > `default`.
+
+## Provider mapping
+
+- OpenAI: `reasoning_effort`; `off→minimal` (displayed as `off→minimal`).
+- Anthropic: explicit thinking budgets (1024 / 25% / 50% / 75%), requiring `reservedOutputTokens > 1024`; `off` sends `{ type: "disabled" }`.
+- `default` sends no parameter, preserving pre-upgrade behavior.
+
+## Scope boundaries
+
+- Main-agent requests only; context compaction and Smart Approval reviews keep provider defaults.
+- The turn-start snapshot covers that turn's tool loop and retries.
+- Explicit settings never silently degrade: unsupported parameters surface as clear provider errors.
+
+## Related references
+
+- [Context and Thinking Levels](../concepts/context-and-thinking)
+- [Slash Commands](../interfaces/slash-commands)
+- [CLI Options](../interfaces/cli-options)
+- [Reference](./reference)

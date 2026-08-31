@@ -1,10 +1,49 @@
 ---
 title: 语言与思考等级
-description: 说明语言和思考等级的设置。
+description: 界面/Agent 语言的确定方式与六档思考等级的设置入口、优先级与持久化。
 sidebar:
   order: 460
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 语言
+
+- CodeN 固定默认中文，**不读取系统区域设置**。
+- 语言来源：`--lang <zh|en>`（仅当前进程，不写配置）> 用户配置 `language` > 默认 `zh`。
+- 项目配置 `language` 字段被忽略——语言是用户的个人偏好。
+- REPL `/lang <zh|en>` 切换语言：立即生效并原子更新**用户级**配置文件（保留其他字段，`0600` 权限）。
+- 系统提示词、内建工具描述与界面共享同一语言；用户在单次任务中要求其他回复语言时 Agent 可遵从，但不会更改界面或持久化偏好。
+- 第三方插件的名称、描述、输出与错误始终保留作者原文。
+- 无效 `--lang` 或配置值会报错退出（退出码 2），但 `--lang` 无效时进程仅报错不写配置。
+
+## 思考等级
+
+统一六档：`default`（默认）、`off`、`minimal`、`low`、`medium`、`high`。
+
+| 设置入口 | 生效范围 | 持久化 |
+| --- | --- | --- |
+| `--thinking <level>` | 当前进程 | 启动时覆盖写入会话（resume 场景） |
+| `CODEN_THINKING_LEVEL` | 当前进程 | 无 |
+| 配置 `thinkingLevel` | 用户/项目 | 配置文件本身 |
+| `/thinking [level]` | 当前进程与会话 | 写入会话记录；不写配置文件 |
+| `/new` | — | 不改变等级 |
+
+恢复会话时的优先级：显式 `--thinking` > 会话保存值 > 环境/项目/用户配置 > `default`。
+
+## Provider 映射
+
+- OpenAI：`reasoning_effort`；`off→minimal`（显示 `off→minimal`）。
+- Anthropic：显式思考预算（1024 / 25% / 50% / 75%），要求 `reservedOutputTokens > 1024`；`off` 发送 `{ type: "disabled" }`。
+- `default` 不发送任何参数，保持升级前的既有行为。
+
+## 作用边界
+
+- 只作用于主 Agent 请求；上下文压缩与 Smart Approval 审查保持 Provider 默认。
+- 每个 turn 起始的快照贯穿该 turn 的工具循环与重试。
+- 显式设置失败不静默降级：不支持的参数会得到清晰的 Provider 错误。
+
+## 相关参考
+
+- [上下文与思考等级](../concepts/context-and-thinking)
+- [斜杠命令](../interfaces/slash-commands)
+- [CLI 选项](../interfaces/cli-options)
+- [字段参考](./reference)

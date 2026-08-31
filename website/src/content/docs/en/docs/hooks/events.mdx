@@ -1,10 +1,39 @@
 ---
 title: Agent Hooks Events
-description: Overview of the Agent Hooks event types.
+description: "The nine command-hook events: timing, payloads, and control capabilities."
 sidebar:
   order: 710
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Event overview
+
+| Event | Timing | Controllable | Payload highlights |
+| --- | --- | --- | --- |
+| `SessionStart` | session startup or resume | no | `source: startup \| resume` |
+| `UserPromptSubmit` | after the user submits input | yes (block) | `prompt` |
+| `PreToolUse` | before a tool executes | yes | `toolName`, `callId`, `input`, `risk` |
+| `PermissionRequest` | before human authorization is needed | yes | `toolName`, `callId`, `input`, `risk`, `reason: policy \| hook` |
+| `PostToolUse` | after a tool succeeds | no | `toolName`, `input`, `result`, `durationMs` |
+| `PostToolUseFailure` | after a tool fails | no | `toolName`, `input`, `errorType`, `error`, `durationMs` |
+| `Notification` | when the user's attention is needed | no | `notificationType: permission_prompt \| attention_required`, `title`, `message` |
+| `Stop` | when the model stops calling tools | yes (demand more work) | `answer`, `toolsExecuted`, `stopHookActive` |
+| `SessionEnd` | when the session ends | no | `reason: completed \| failed \| cancelled \| eof \| quit` |
+
+## Control semantics
+
+- Controllable set: `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `Stop`.
+- Exit code `2` on a controllable event counts as an **explicit block** (`blocked`); blocks on `UserPromptSubmit` and `Stop` use `decision`/`reason` in `stdout` JSON, while `PreToolUse` and `PermissionRequest` use `permissionDecision`/`decision`.
+- Exit code `0` with empty stdout is a no-op; other failures (non-zero, timeout, output/input over limit, invalid JSON) count as hook failures with a warning and never block.
+
+## Relationships
+
+- `PreToolUse` runs before any permission decision; `PermissionRequest` runs only when the policy layer needs a human.
+- `Notification` fires for `permission_prompt` and `attention_required` (turn failure) scenarios.
+- A `Stop` block injects feedback asking the model to continue, still bounded by `maxSteps`; a repeated block sets `stopHookActive`.
+
+## Related references
+
+- [Matchers](./matchers)
+- [Protocol](./protocol)
+- [Decisions](./decisions)
+- [Examples](./examples)

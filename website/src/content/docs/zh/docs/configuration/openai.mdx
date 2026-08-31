@@ -1,10 +1,63 @@
 ---
 title: OpenAI 配置
-description: 说明 OpenAI provider 的配置。
+description: OpenAI Provider 的认证、模型、兼容端点与思考参数传递。
 sidebar:
   order: 440
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 最小配置
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+coden
+```
+
+`openai` 是默认 Provider，模型默认 `gpt-5-mini`。覆盖方式：
+
+```bash
+export CODEN_MODEL=gpt-5-mini
+coden --model gpt-5-mini "your task"
+```
+
+## 兼容端点
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+export CODEN_OPENAI_BASE_URL=https://api.example.com/v1
+coden --model your-model-id "your task"
+```
+
+`CODEN_OPENAI_BASE_URL` 由 OpenAI SDK 直接使用；任何与该 SDK兼容的端点均可，但 CodeN 不维护模型能力白名单，参数按原样发送。
+
+## 请求形态
+
+- 使用 `chat.completions` 流式接口，`stream_options.include_usage` 获取用量。
+- 工具以 OpenAI function calling 形式传递（`type: "function"`，名称/描述/JSON Schema）。
+- 每次请求的 `max_completion_tokens` = `reservedOutputTokens`（默认 8192）。
+- SDK 内部 `maxRetries` 为 0：重试由 Agent 循环执行（最多 3 次指数退避，见 [Agent 循环](../concepts/agent-loop)）。
+
+## 思考参数
+
+`--thinking` 等级映射到 `reasoning_effort`；`off` 映射 `minimal`（界面显示 `off→minimal`），`minimal`/`low`/`medium`/`high` 同名映射。`default` 不发送。详见 [语言与思考等级](./language-and-thinking)。
+
+## 配置示例
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "approvalModel": "gpt-5-mini"
+}
+```
+
+## 失败模式
+
+- 缺少 `CODEN_OPENAI_API_KEY`：启动失败（退出码 2）。
+- 无效模型/端点：Provider 返回的错误会带 `provider` 类别透传；重试槽位用尽后失败。
+
+## 相关参考
+
+- [配置第一个 Provider](../getting-started/provider)
+- [环境变量](./environment)
+- [字段参考](./reference)
+- [常见错误](../reference/troubleshooting)

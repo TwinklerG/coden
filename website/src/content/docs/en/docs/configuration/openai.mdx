@@ -1,10 +1,63 @@
 ---
 title: OpenAI Configuration
-description: Explains OpenAI provider configuration.
+description: OpenAI provider authentication, models, compatible endpoints, and thinking-parameter passing.
 sidebar:
   order: 440
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Minimal configuration
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+coden
+```
+
+`openai` is the default provider with model `gpt-5-mini`. Overrides:
+
+```bash
+export CODEN_MODEL=gpt-5-mini
+coden --model gpt-5-mini "your task"
+```
+
+## Compatible endpoints
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+export CODEN_OPENAI_BASE_URL=https://api.example.com/v1
+coden --model your-model-id "your task"
+```
+
+`CODEN_OPENAI_BASE_URL` is consumed directly by the OpenAI SDK; any SDK-compatible endpoint works, but CodeN maintains no model capability allowlist and sends parameters as-is.
+
+## Request shape
+
+- Uses the streaming `chat.completions` API with `stream_options.include_usage` for usage.
+- Tools are passed as OpenAI function calling (`type: "function"`, name/description/JSON Schema).
+- `max_completion_tokens` of every request equals `reservedOutputTokens` (default 8192).
+- The SDK's internal `maxRetries` is 0: retries are owned by the agent loop (up to 3 exponential backoffs; see [Agent Loop](../concepts/agent-loop)).
+
+## Thinking parameter
+
+`--thinking` levels map to `reasoning_effort`; `off` maps to `minimal` (shown as `off→minimal`), and `minimal`/`low`/`medium`/`high` map to the same-named values. `default` sends nothing. See [Language and Thinking Levels](./language-and-thinking).
+
+## Config example
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "approvalModel": "gpt-5-mini"
+}
+```
+
+## Failure modes
+
+- Missing `CODEN_OPENAI_API_KEY`: startup fails (exit code 2).
+- Invalid model/endpoint: provider errors surface with the `provider` category; failure follows once retry slots are exhausted.
+
+## Related references
+
+- [Configure Your First Provider](../getting-started/provider)
+- [Environment Variables](./environment)
+- [Reference](./reference)
+- [Troubleshooting](../reference/troubleshooting)

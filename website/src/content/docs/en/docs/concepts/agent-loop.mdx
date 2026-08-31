@@ -1,10 +1,50 @@
 ---
 title: Agent Loop
-description: Explains how the agent calls tools in a loop.
+description: "The execution loop from user input to final answer: model requests, tool calls, retries, compaction, and completion."
 sidebar:
   order: 210
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Loop structure
+
+```text
+user input
+  → hook: UserPromptSubmit (can block)
+  → model request (tool definitions + context)
+  → if tool_calls: execute each tool → fill results back
+  → request the model again (same turn)
+  → until the model stops calling tools → hook: Stop (can demand more work)
+  → return the final answer
+```
+
+Each model request plus its tool-execution sequence forms one turn; the default `maxSteps` is 20, and hitting it throws `runtime.step_limit`.
+
+## Key behaviors within a turn
+
+| Behavior | Detail |
+| --- | --- |
+| Tool execution | Executed sequentially in returned order; unfinished calls are repaired as `runtime.interrupted` errors on resume |
+| Tool results | Truncated to 50000 characters before entering context; error results carry an `isError` flag back to the model |
+| Input changes | After a `PreToolUse` hook updates input, schema, path, risk, and permissions are re-validated |
+| Retries | Network/5xx/429 errors retry up to 3 times with 250ms exponential backoff (0.8–1.2 jitter), honoring `Retry-After` |
+| Context errors | A 413 or context-length error triggers one emergency compaction; still over limit throws `context.exhausted` |
+| Thinking level | The snapshot taken at turn start applies to that turn's tool loop and retries |
+
+## Context management
+
+- Input budget = `contextWindow − reservedOutputTokens − safetyMargin` (default 128000 − 8192 − 4096).
+- When the estimate exceeds 80% of the budget, automatic compaction keeps the most recent 3 message units and summarizes the rest deterministically; the same model then refines the summary (capped at `min(2048, reservedOutputTokens)`), falling back to the deterministic version on failure.
+- Compaction history and summaries persist in the session; `/compact` triggers it manually and `/new` clears the summary to start a fresh conversation.
+
+## Completion and failure
+
+- **Normal completion**: model output has no tool_calls; a `Stop` hook returning `decision: "block"` injects feedback and asks the model to continue (still bounded by `maxSteps`).
+- **Failure**: throws `CodeNError`, triggers the `Notification` hook (`attention_required`) and the `turn.failed` event; `SessionEnd` closes the session.
+- Every effective turn ends with a usage summary of token counts.
+
+## Related references
+
+- [Context and Thinking Levels](./context-and-thinking)
+- [Approval Modes](./approval-modes)
+- [Tools and Risk Levels](./tools-and-risk)
+- [Sessions](./sessions)

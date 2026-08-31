@@ -1,10 +1,52 @@
 ---
 title: Trust and Security Boundaries
-description: Explains trust and security boundaries for plugins.
+description: Plugin trust model, process permissions, path validation, and integration guidance.
 sidebar:
   order: 640
 ---
 
-:::note[Documentation scaffold]
-This page establishes the documentation structure. Complete content will be added in a dedicated documentation task.
-:::
+## Trust model
+
+| Type | Trust trigger |
+| --- | --- |
+| project local plugins (`.coden/plugins/*.ts`, `--plugin` directories) | human workspace confirmation on first load |
+| project npm plugins | recorded after `plugin install`/`plugin sync` confirmation; skipped and flagged at startup when untrusted |
+| user local plugins | no confirmation (the current user installed them) |
+| global npm plugins | no startup confirmation (user-initiated install) |
+
+Confirmation accepts only `y` (`--yes` affects plugin commands only, never workspace trust). Trust records store the workspace **real path** (`trusted-workspaces.json`, `0600`); symlink aliases cannot bypass it.
+
+## Permission boundaries
+
+- **Plugins are not a sandbox**: they run inside the CodeN main process with full user process permissions, reaching files, network, environment variables, and subprocesses.
+- Tool `risk` affects call confirmations only and provides no process isolation.
+- Install validation imports the plugin entry: even with lifecycle scripts disabled, top-level code and static dependencies run with the current user's permissions.
+- Local `.ts` plugins load through a `data:` URL and cannot load under a Node runtime (see the [Runtime capability matrix](../getting-started/requirements)).
+
+## Lifecycle scripts
+
+| Option | Behavior |
+| --- | --- |
+| default | `--ignore-scripts`; lifecycle scripts do not run |
+| `--allow-scripts` | this package and its transitive deps run `preinstall`/`install`/`postinstall` with user permissions; warns and confirms again first |
+
+## Paths and validation
+
+- npm entries must resolve inside the package directory and pass safe realpath resolution (`withinBoundary` + `safeRealpath`).
+- Local plugin directory trust is based on the real path; directories/files pass authenticity checks.
+- Schema compile failures, tool name collisions, and invalid exports skip that plugin only, leaving other plugins and built-ins unaffected.
+
+## Integration guidance
+
+1. Install from trusted sources only; review what ships (`npm pack --dry-run`, lock-file diffs).
+2. Keep lifecycle scripts disabled by default; enable `--allow-scripts` explicitly and inspect the dependency tree when needed.
+3. Commit the plugin manifest and `bun.lock`; never commit `node_modules`.
+4. In sensitive repositories, confirm workspace content before trusting project plugins/hooks.
+5. Do not leave untrusted plugins in the global scope (global plugins are not re-confirmed).
+
+## Related references
+
+- [Local TypeScript Plugins](./local-typescript)
+- [npm Plugin Management](./npm-management)
+- [Trust and Security](../hooks/trust-and-security)
+- [Security Model](../reference/security-model)

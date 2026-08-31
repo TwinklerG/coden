@@ -1,10 +1,75 @@
 ---
 title: 配置第一个 Provider
-description: 介绍如何配置第一个模型提供方。
+description: OpenAI 与 Anthropic 的最小可用配置、凭据来源优先级与密钥存放边界。
 sidebar:
   order: 130
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+CodeN 只支持两个 Provider：`openai`（默认）和 `anthropic`。Provider 决定使用的 API 端点、鉴权方式与思考参数映射；默认模型是 `gpt-5-mini`。
+
+## OpenAI（默认 Provider）
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+coden "say hello"
+```
+
+自定义兼容端点（例如代理或兼容服务）：
+
+```bash
+export CODEN_OPENAI_API_KEY=sk-...
+export CODEN_OPENAI_BASE_URL=https://api.example.com/v1
+coden --model your-model-id "say hello"
+```
+
+## Anthropic
+
+```bash
+export CODEN_ANTHROPIC_API_KEY=sk-ant-...
+coden --provider anthropic --model claude-sonnet-4-20250514 "say hello"
+```
+
+切换 Provider 必须显式指定 `--provider anthropic`；Provider 只接受 `openai` 或 `anthropic`，其他值在参数解析阶段报错。
+
+## 凭据来源与优先级
+
+CodeN 创建 Provider 时读取的是**进程环境变量**。设置方式按优先级从高到低：
+
+1. Shell 中已导出的环境变量（`export` 后启动 CodeN）。
+2. 配置文件 `env` 字段：加载配置时注入进程环境，但**不覆盖** shell 中已导出的同名变量。
+3. 未设置任何 Key 时启动失败，退出码 2，错误信息形如 `CODEN_OPENAI_API_KEY is required`。
+
+配置文件 `env` 字段示例（用户级 `~/.config/coden/config.json`）：
+
+```json
+{
+  "env": {
+    "CODEN_OPENAI_API_KEY": "sk-..."
+  }
+}
+```
+
+项目级 `<workspace>/.coden/config.json` 有同名 `env` 字段；两级合并时项目级逐键覆盖用户级。
+
+## 密钥存放边界
+
+- 不要把 Key 写进会提交、共享或分发的目录。`~/.config/coden/`、`.coden/`（已在 `.gitignore` 忽略）以及 config 的 `env` 字段是受支持的位置。
+- CodeN 不会自动读取 `.env` 文件；`just` 命令中使用 `set dotenv-load` 仅影响 `just` 子进程的开发场景。
+- 会话 JSONL 与 trace 可能包含模型推理与输入内容，不要未经审查地分享。
+
+## 验证最小配置
+
+```bash
+coden -p "Reply with exactly: coden-ok"
+```
+
+print 模式输出纯文本并在单轮后退出，适合验证认证与端点是否正确。预期输出包含 `coden-ok`。
+
+## 相关参考
+
+- [配置优先级](../configuration/precedence)
+- [用户级与项目级配置](../configuration/scopes)
+- [环境变量](../configuration/environment)
+- [OpenAI 配置](../configuration/openai)
+- [Anthropic 配置](../configuration/anthropic)
+- [凭据与数据安全](../configuration/data-security)

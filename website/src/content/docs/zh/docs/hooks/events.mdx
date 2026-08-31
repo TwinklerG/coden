@@ -1,10 +1,39 @@
 ---
 title: Agent Hooks 事件
-description: 概览 Agent Hooks 的事件类型。
+description: 九个命令 Hook 事件的发生时机、负载与控制能力。
 sidebar:
   order: 710
 ---
 
-:::note[文档框架]
-本页面已建立文档结构，完整内容将在后续文档任务中补充。
-:::
+## 事件总览
+
+| 事件 | 时机 | 可控制 | 负载要点 |
+| --- | --- | --- | --- |
+| `SessionStart` | 会话启动或恢复 | 否 | `source: startup \| resume` |
+| `UserPromptSubmit` | 用户提交输入后 | 是（阻止） | `prompt` |
+| `PreToolUse` | 工具执行前 | 是 | `toolName`、`callId`、`input`、`risk` |
+| `PermissionRequest` | 需要人工授权前 | 是 | `toolName`、`callId`、`input`、`risk`、`reason: policy \| hook` |
+| `PostToolUse` | 工具成功完成后 | 否 | `toolName`、`input`、`result`、`durationMs` |
+| `PostToolUseFailure` | 工具失败后 | 否 | `toolName`、`input`、`errorType`、`error`、`durationMs` |
+| `Notification` | 需要用户注意时 | 否 | `notificationType: permission_prompt \| attention_required`、`title`、`message` |
+| `Stop` | 模型停止调用工具时 | 是（要求继续） | `answer`、`toolsExecuted`、`stopHookActive` |
+| `SessionEnd` | 会话结束时 | 否 | `reason: completed \| failed \| cancelled \| eof \| quit` |
+
+## 控制语义
+
+- 可控事件集：`UserPromptSubmit`、`PreToolUse`、`PermissionRequest`、`Stop`。
+- 可控事件返回退出码 `2` 视为**明确阻止**（`blocked`）；`UserPromptSubmit` 与 `Stop` 的阻止以 `stdout` JSON 的 `decision`/`reason` 表达，`PreToolUse` 与 `PermissionRequest` 以 `permissionDecision`/`decision` 表达。
+- 退出码 `0` 且无 stdout 视为无操作；其余失败（非零、超时、输出超限、输入超限、非法 JSON）视为 Hook 失败并警告，不产生阻止。
+
+## 组合关系
+
+- `PreToolUse` 在任何权限判定之前执行；`PermissionRequest` 只在策略层要求人工时执行。
+- `Notification` 在 `permission_prompt` 与 `attention_required`（turn 失败）等场景触发。
+- `Stop` 的 `block` 会注入反馈要求模型继续，仍受 `maxSteps` 限制；再次 `block` 会标记 `stopHookActive`。
+
+## 相关参考
+
+- [匹配规则](./matchers)
+- [I/O 协议](./protocol)
+- [决策与权限](./decisions)
+- [示例](./examples)
