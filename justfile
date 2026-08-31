@@ -19,7 +19,7 @@ fmt:
 
 # Lint, typecheck, and test
 check:
-  biome check --config-path . src test
+  bun run biome check --config-path . src test
   bun run typecheck
   bun run test
 
