@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -84,13 +85,16 @@ function setup(state = baseState) {
     newSession: vi.fn(async () => {}),
     resumeSession: vi.fn(async () => {}),
   } as unknown as CodeNWebApi;
+  let push: (state: WebStateResponse) => void = () => {};
   const connect = (options: StateStreamOptions) => {
     options.onStatus("connected");
+    push = options.onState;
     options.onState(state);
     return { dispose: vi.fn() };
   };
   render(<App api={api} connect={connect} />);
-  return api as unknown as {
+  return { ...(api as object), push } as unknown as {
+    push: (state: WebStateResponse) => void;
     takeover: ReturnType<typeof vi.fn>;
     submit: ReturnType<typeof vi.fn>;
     cancel: ReturnType<typeof vi.fn>;
@@ -115,6 +119,72 @@ describe("Web App", () => {
     ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Allow once" }));
     expect(api.answerInteraction).toHaveBeenCalledWith("i", "allow_once");
+  });
+
+  it("shows streaming thinking expanded and collapses it when reasoning ends", async () => {
+    setup({
+      ...baseState,
+      snapshot: {
+        ...baseState.snapshot,
+        blocks: [
+          { id: "u", kind: "user", text: "Fix tests" },
+          {
+            id: "th",
+            kind: "thinking",
+            text: "streaming thought",
+            status: "streaming",
+          },
+        ],
+      },
+    });
+    const toggle = screen.getByRole("button", { name: "Thinking" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("streaming thought")).toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("streaming thought")).not.toBeInTheDocument();
+  });
+
+  it("renders a finished thinking block collapsed by default", () => {
+    setup({
+      ...baseState,
+      snapshot: {
+        ...baseState.snapshot,
+        blocks: [
+          { id: "th", kind: "thinking", text: "final thought", status: "done" },
+          { id: "a", kind: "assistant", markdown: "Done" },
+        ],
+      },
+    });
+    const toggle = screen.getByRole("button", { name: "Thinking" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("final thought")).not.toBeInTheDocument();
+  });
+
+  it("auto-collapses streaming thinking once the turn starts answering", () => {
+    const { push } = setup({
+      ...baseState,
+      snapshot: {
+        ...baseState.snapshot,
+        blocks: [
+          { id: "th", kind: "thinking", text: "thought", status: "streaming" },
+        ],
+      },
+    });
+    const toggle = screen.getByRole("button", { name: "Thinking" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    act(() => {
+      push({
+        ...baseState,
+        snapshot: {
+          ...baseState.snapshot,
+          blocks: [
+            { id: "th", kind: "thinking", text: "thought", status: "done" },
+          ],
+        },
+      });
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 
   it("submits on Enter, preserves Shift+Enter, and switches idle sessions", async () => {

@@ -18,6 +18,7 @@ export type WebInteractionDecision = "allow_once" | "allow_session" | "deny" | "
 export type WebBlock =
   | { id: string; kind: "user"; text: string }
   | { id: string; kind: "assistant"; markdown: string }
+  | { id: string; kind: "thinking"; text: string; status: "streaming" | "done" }
   | {
       id: string;
       kind: "tool";

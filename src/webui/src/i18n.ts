@@ -23,6 +23,7 @@ export interface WebMessages {
   reject: string;
   tool: string;
   duration: string;
+  thinking: string;
   openSessions: string;
   closeSessions: string;
   noTls: string;
@@ -55,6 +56,7 @@ const catalogs: Record<"zh" | "en", WebMessages> = {
     reject: "取消",
     tool: "工具",
     duration: "耗时",
+    thinking: "思考",
     openSessions: "打开会话",
     closeSessions: "关闭会话",
     noTls: "远程模式不提供 TLS 或沙箱",
@@ -93,6 +95,7 @@ const catalogs: Record<"zh" | "en", WebMessages> = {
     reject: "Reject",
     tool: "Tool",
     duration: "Duration",
+    thinking: "Thinking",
     openSessions: "Open sessions",
     closeSessions: "Close sessions",
     noTls: "Remote mode provides no TLS or sandbox",

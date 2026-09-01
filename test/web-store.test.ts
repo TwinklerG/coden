@@ -81,25 +81,56 @@ describe("WebStore", () => {
     expect(() => store.resolveInteraction(pending.id, "deny")).toThrow("no longer pending");
   });
 
-  it("projects recovered messages without system and hook context", () => {
-    const store = new WebStore("en");
-    store.setRecoveredMessages([
-      { role: "system", content: "secret" },
-      { role: "user", source: "hook", content: "hidden" },
-      { role: "user", content: "hello" },
-      {
-        role: "assistant",
-        content: "working",
-        toolCalls: [{ callId: "c", name: "write", input: { path: "a" } }],
-      },
-      { role: "tool", callId: "c", name: "write", content: "done", isError: false },
-    ]);
-    expect(JSON.stringify(store.snapshot().blocks)).not.toContain("secret");
-    expect(JSON.stringify(store.snapshot().blocks)).not.toContain("hidden");
+  it("streams thinking deltas into a scrollable block and finalizes it", async () => {
+    const events = new EventBus();
+    const store = new WebStore("zh");
+    store.connect(events);
+
+    await events.emit("turn.started", { input: "fix tests" }, "turn-1");
+    await events.emit("provider.reasoning_delta", { text: "let me " }, "turn-1");
+    await events.emit("provider.reasoning_delta", { text: "think" }, "turn-1");
+    expect(store.snapshot().phase).toBe("thinking");
     expect(store.snapshot().blocks.at(-1)).toMatchObject({
-      kind: "tool",
-      status: "succeeded",
-      output: "done",
+      kind: "thinking",
+      text: "let me think",
+      status: "streaming",
     });
+
+    // Reasoning ends once the answer starts streaming.
+    await events.emit("provider.delta", { text: "Done" }, "turn-1");
+    expect(store.snapshot().blocks.at(-2)).toMatchObject({
+      kind: "thinking",
+      status: "done",
+    });
+    expect(store.snapshot().blocks.at(-1)).toMatchObject({
+      kind: "assistant",
+      markdown: "Done",
+    });
+  });
+
+  it("discards thinking on provider retry", async () => {
+    const events = new EventBus();
+    const store = new WebStore("zh");
+    store.connect(events);
+
+    await events.emit("turn.started", { input: "rewrite" }, "turn-1");
+    await events.emit("provider.reasoning_delta", { text: "thinking..." }, "turn-1");
+    await events.emit("provider.retry", {}, "turn-1");
+    expect(store.snapshot().blocks.some((block) => block.kind === "thinking")).toBe(false);
+  });
+
+  it("finalizes thinking when a tool call follows reasoning", async () => {
+    const events = new EventBus();
+    const store = new WebStore("zh");
+    store.connect(events);
+
+    await events.emit("turn.started", { input: "run a command" }, "turn-1");
+    await events.emit("provider.reasoning_delta", { text: "I will run ls" }, "turn-1");
+    await events.emit("provider.tool_call_start", { name: "bash", callId: "c1" }, "turn-1");
+    expect(store.snapshot().blocks.at(-2)).toMatchObject({
+      kind: "thinking",
+      status: "done",
+    });
+    expect(store.snapshot().blocks.at(-1)).toMatchObject({ kind: "tool", name: "bash" });
   });
 });

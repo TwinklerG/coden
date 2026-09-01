@@ -32,6 +32,7 @@ export class WebStore {
   #unsubscribeEvents: (() => void) | undefined;
   #pending: PendingInteraction | undefined;
   #activeAssistantId: string | undefined;
+  #activeThinkingId: string | undefined;
 
   constructor(language: "zh" | "en") {
     this.#snapshot = {
@@ -175,6 +176,7 @@ export class WebStore {
     switch (event.type) {
       case "turn.started": {
         this.#activeAssistantId = undefined;
+        this.#activeThinkingId = undefined;
         this.append({
           id: `user-${turnId}`,
           kind: "user",
@@ -184,10 +186,23 @@ export class WebStore {
         return;
       }
       case "provider.started":
-      case "provider.reasoning_delta":
         this.merge({ phase: "thinking", running: true });
         return;
+      case "provider.reasoning_delta": {
+        const text = cleanText(stringValue(data.text));
+        if (this.#activeThinkingId === undefined) {
+          const id = `thinking-${turnId}`;
+          this.#activeThinkingId = id;
+          this.append({ id, kind: "thinking", text, status: "streaming" });
+        } else {
+          const block = this.block(this.#activeThinkingId);
+          if (block?.kind === "thinking") this.update({ ...block, text: `${block.text}${text}` });
+        }
+        this.merge({ phase: "thinking", running: true });
+        return;
+      }
       case "provider.delta": {
+        this.finishThinking();
         const text = cleanText(stringValue(data.text));
         if (!this.#activeAssistantId) {
           this.#activeAssistantId = `assistant-${turnId}`;
@@ -205,9 +220,11 @@ export class WebStore {
           this.removeBlock(this.#activeAssistantId);
           this.#activeAssistantId = undefined;
         }
+        this.removeThinking();
         this.merge({ phase: "thinking", running: true });
         return;
       case "provider.tool_call_start": {
+        this.finishThinking();
         const callId = stringValue(data.callId);
         const id = `tool-${callId}`;
         if (!this.#toolBlocks.has(callId)) {
@@ -264,6 +281,7 @@ export class WebStore {
         return;
       }
       case "turn.completed":
+        this.finishThinking();
         this.#activeAssistantId = undefined;
         this.merge({
           phase: "idle",
@@ -276,6 +294,7 @@ export class WebStore {
         });
         return;
       case "turn.failed":
+        this.finishThinking();
         this.#activeAssistantId = undefined;
         this.append({
           id: `error-${turnId}-${this.#snapshot.revision}`,
@@ -445,6 +464,22 @@ export class WebStore {
     const blocks = this.#snapshot.blocks.filter((block) => block.id !== id);
     this.#reindex(blocks);
     this.commit({ op: "replace_blocks", blocks }, (current) => ({ ...current, blocks }));
+  }
+
+  private finishThinking(): void {
+    const id = this.#activeThinkingId;
+    if (id === undefined) return;
+    const block = this.block(id);
+    if (block?.kind === "thinking" && block.status === "streaming")
+      this.update({ ...block, status: "done" });
+    this.#activeThinkingId = undefined;
+  }
+
+  private removeThinking(): void {
+    const id = this.#activeThinkingId;
+    if (id === undefined) return;
+    this.removeBlock(id);
+    this.#activeThinkingId = undefined;
   }
 
   private block(id: string): WebBlock | undefined {

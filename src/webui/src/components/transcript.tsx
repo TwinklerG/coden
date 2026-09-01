@@ -6,6 +6,7 @@ import type {
 import type { WebMessages } from "../i18n.js";
 import { MarkdownContent } from "../markdown.js";
 import { InteractionCard } from "./interaction-card.js";
+import { ThinkingCard } from "./thinking-card.js";
 import { ToolCard } from "./tool-card.js";
 
 export function Transcript({
@@ -73,6 +74,14 @@ export function Transcript({
                   <header>coden</header>
                   <MarkdownContent markdown={block.markdown} />
                 </article>
+              );
+            if (block.kind === "thinking")
+              return (
+                <ThinkingCard
+                  key={block.id}
+                  block={block}
+                  messages={messages}
+                />
               );
             if (block.kind === "tool")
               return (

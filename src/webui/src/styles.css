@@ -559,6 +559,90 @@ button {
   margin: 0;
 }
 
+.thinking-card {
+  margin: 0 0 1rem 5rem;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.thinking-card.thinking-done {
+  border-left-color: var(--line-strong);
+}
+
+.thinking-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 2.2rem;
+  padding: 0.5rem 0.75rem;
+  align-items: center;
+  gap: 0.6rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.thinking-chevron {
+  color: var(--accent);
+  font: 1.2rem var(--mono);
+  transition: transform 120ms ease;
+}
+
+.thinking-card.open .thinking-chevron {
+  transform: rotate(90deg);
+}
+
+.thinking-label {
+  color: var(--text-strong);
+  font: 0.68rem var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.thinking-live {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: thinking-pulse 1.3s ease-in-out infinite;
+}
+
+.thinking-body {
+  padding: 0 0.8rem 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+.thinking-scroll {
+  max-height: 16rem;
+  overflow-y: auto;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.thinking-scroll pre {
+  margin: 0;
+  padding: 0.85rem 0 0.2rem;
+  color: var(--muted);
+  font: 0.78rem/1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .interaction-card {
   margin: 1.3rem 0 1.3rem 5rem;
   padding: 0.9rem;
@@ -822,6 +906,7 @@ button {
   }
 
   .tool-card,
+  .thinking-card,
   .interaction-card,
   .notice {
     margin-left: 3.15rem;
