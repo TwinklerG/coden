@@ -61,6 +61,67 @@ describe("WebStore", () => {
     expect(revisions).toEqual(revisions.map((_, index) => index + 1));
   });
 
+  it("keeps streamed assistant and thinking blocks in provider-step order", async () => {
+    const events = new EventBus();
+    const store = new WebStore("en");
+    store.connect(events);
+
+    await events.emit("turn.started", { input: "inspect" }, "turn-1");
+    await events.emit("provider.started", { attempt: 0 }, "turn-1");
+    await events.emit("provider.reasoning_delta", { text: "first thought" }, "turn-1");
+    await events.emit("provider.delta", { text: "I will inspect." }, "turn-1");
+    await events.emit("provider.tool_call_start", { name: "read", callId: "call-1" }, "turn-1");
+    await events.emit(
+      "tool.started",
+      { name: "read", callId: "call-1", input: { path: "a.ts" }, risk: "read" },
+      "turn-1",
+    );
+    await events.emit(
+      "tool.result",
+      { name: "read", callId: "call-1", content: "body", isError: false },
+      "turn-1",
+    );
+    await events.emit("provider.started", { attempt: 0 }, "turn-1");
+    await events.emit("provider.reasoning_delta", { text: "second " }, "turn-1");
+    await events.emit("provider.reasoning_delta", { text: "thought" }, "turn-1");
+    await events.emit("provider.delta", { text: "Final answer." }, "turn-1");
+
+    const blocks = store.snapshot().blocks;
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "user",
+      "thinking",
+      "assistant",
+      "tool",
+      "thinking",
+      "assistant",
+    ]);
+    expect(blocks.filter((block) => block.kind === "thinking").map((block) => block.text)).toEqual([
+      "first thought",
+      "second thought",
+    ]);
+    expect(
+      blocks.filter((block) => block.kind === "assistant").map((block) => block.markdown),
+    ).toEqual(["I will inspect.", "Final answer."]);
+    expect(new Set(blocks.map((block) => block.id)).size).toBe(blocks.length);
+  });
+
+  it("discards only the active provider attempt on retry", async () => {
+    const events = new EventBus();
+    const store = new WebStore("en");
+    store.connect(events);
+
+    await events.emit("turn.started", { input: "inspect" }, "turn-1");
+    await events.emit("provider.started", { attempt: 0 }, "turn-1");
+    await events.emit("provider.delta", { text: "keep me" }, "turn-1");
+    await events.emit("provider.started", { attempt: 0 }, "turn-1");
+    await events.emit("provider.delta", { text: "discard me" }, "turn-1");
+    await events.emit("provider.retry", { attempt: 1 }, "turn-1");
+
+    expect(store.snapshot().blocks.filter((block) => block.kind === "assistant")).toEqual([
+      expect.objectContaining({ markdown: "keep me" }),
+    ]);
+  });
+
   it("fails closed for interactions and keeps their transcript block", async () => {
     const store = new WebStore("en");
     const pending = store.openPermission(

@@ -33,6 +33,7 @@ export class WebStore {
   #pending: PendingInteraction | undefined;
   #activeAssistantId: string | undefined;
   #activeThinkingId: string | undefined;
+  #blockSequence = 0;
 
   constructor(language: "zh" | "en") {
     this.#snapshot = {
@@ -186,12 +187,14 @@ export class WebStore {
         return;
       }
       case "provider.started":
+        this.finishThinking();
+        this.#activeAssistantId = undefined;
         this.merge({ phase: "thinking", running: true });
         return;
       case "provider.reasoning_delta": {
         const text = cleanText(stringValue(data.text));
         if (this.#activeThinkingId === undefined) {
-          const id = `thinking-${turnId}`;
+          const id = this.nextBlockId("thinking", turnId);
           this.#activeThinkingId = id;
           this.append({ id, kind: "thinking", text, status: "streaming" });
         } else {
@@ -205,7 +208,7 @@ export class WebStore {
         this.finishThinking();
         const text = cleanText(stringValue(data.text));
         if (!this.#activeAssistantId) {
-          this.#activeAssistantId = `assistant-${turnId}`;
+          this.#activeAssistantId = this.nextBlockId("assistant", turnId);
           this.append({ id: this.#activeAssistantId, kind: "assistant", markdown: text });
         } else {
           const block = this.block(this.#activeAssistantId);
@@ -443,6 +446,11 @@ export class WebStore {
       },
     );
     pending.resolve(value);
+  }
+
+  private nextBlockId(kind: "assistant" | "thinking", turnId: string): string {
+    this.#blockSequence += 1;
+    return `${kind}-${turnId}-${this.#blockSequence}`;
   }
 
   private append(block: WebBlock): void {
