@@ -140,7 +140,7 @@ export class WebStore {
           });
         for (const call of message.toolCalls) {
           const block: Extract<WebBlock, { kind: "tool" }> = {
-            id: `tool-${call.callId}`,
+            id: this.nextBlockId("tool", call.callId),
             kind: "tool",
             callId: call.callId,
             name: cleanText(call.name),
@@ -158,7 +158,7 @@ export class WebStore {
         tool.output = cleanText(message.content);
       } else {
         blocks.push({
-          id: `tool-${message.callId}`,
+          id: this.nextBlockId("tool", message.callId),
           kind: "tool",
           callId: message.callId,
           name: cleanText(message.name),
@@ -229,17 +229,13 @@ export class WebStore {
       case "provider.tool_call_start": {
         this.finishThinking();
         const callId = stringValue(data.callId);
-        const id = `tool-${callId}`;
-        if (!this.#toolBlocks.has(callId)) {
-          this.#toolBlocks.set(callId, id);
-          this.append({
-            id,
-            kind: "tool",
-            callId,
-            name: cleanText(stringValue(data.name)),
-            status: "preparing",
-          });
-        }
+        this.append({
+          id: this.nextBlockId("tool", callId),
+          kind: "tool",
+          callId,
+          name: cleanText(stringValue(data.name)),
+          status: "preparing",
+        });
         return;
       }
       case "tool.started": {
@@ -448,9 +444,9 @@ export class WebStore {
     pending.resolve(value);
   }
 
-  private nextBlockId(kind: "assistant" | "thinking", turnId: string): string {
+  private nextBlockId(kind: "assistant" | "thinking" | "tool", contextId: string): string {
     this.#blockSequence += 1;
-    return `${kind}-${turnId}-${this.#blockSequence}`;
+    return `${kind}-${contextId}-${this.#blockSequence}`;
   }
 
   private append(block: WebBlock): void {
@@ -502,7 +498,7 @@ export class WebStore {
       status: Extract<WebBlock, { kind: "tool" }>["status"];
     },
   ): void {
-    const id = this.#toolBlocks.get(callId) ?? `tool-${callId}`;
+    const id = this.#toolBlocks.get(callId) ?? this.nextBlockId("tool", callId);
     const current = this.block(id);
     if (current?.kind === "tool") this.update({ ...current, ...value });
     else this.append({ id, kind: "tool", callId, ...value });

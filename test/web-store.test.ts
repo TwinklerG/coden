@@ -105,6 +105,135 @@ describe("WebStore", () => {
     expect(new Set(blocks.map((block) => block.id)).size).toBe(blocks.length);
   });
 
+  it("keeps repeated plugin tool call IDs as distinct ordered occurrences", async () => {
+    const events = new EventBus();
+    const store = new WebStore("en");
+    store.connect(events);
+
+    await events.emit("turn.started", { input: "search twice" }, "turn-1");
+    await events.emit("provider.started", { attempt: 0 }, "turn-1");
+    await events.emit("provider.delta", { text: "First search." }, "turn-1");
+    await events.emit(
+      "provider.tool_call_start",
+      { name: "plugin_search", callId: "call_0" },
+      "turn-1",
+    );
+    await events.emit(
+      "tool.started",
+      { name: "plugin_search", callId: "call_0", input: { query: "first" }, risk: "read" },
+      "turn-1",
+    );
+    await events.emit(
+      "tool.result",
+      { name: "plugin_search", callId: "call_0", content: "first result", isError: false },
+      "turn-1",
+    );
+    await events.emit("provider.started", { attempt: 0 }, "turn-1");
+    await events.emit("provider.delta", { text: "Second search." }, "turn-1");
+    await events.emit(
+      "provider.tool_call_start",
+      { name: "plugin_search", callId: "call_0" },
+      "turn-1",
+    );
+    await events.emit(
+      "tool.started",
+      { name: "plugin_search", callId: "call_0", input: { query: "second" }, risk: "read" },
+      "turn-1",
+    );
+    await events.emit(
+      "tool.result",
+      { name: "plugin_search", callId: "call_0", content: "second result", isError: false },
+      "turn-1",
+    );
+
+    const blocks = store.snapshot().blocks;
+    expect(blocks.map((block) => block.kind)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+      "tool",
+    ]);
+    const toolBlocks = blocks.filter((block) => block.kind === "tool");
+    expect(toolBlocks.map((block) => block.output)).toEqual(["first result", "second result"]);
+    expect(new Set(toolBlocks.map((block) => block.id)).size).toBe(2);
+  });
+
+  it("keeps repeated plugin tool call IDs distinct across turns", async () => {
+    const events = new EventBus();
+    const store = new WebStore("en");
+    store.connect(events);
+
+    await events.emit("turn.started", { input: "first" }, "turn-1");
+    await events.emit(
+      "provider.tool_call_start",
+      { name: "plugin_search", callId: "call_0" },
+      "turn-1",
+    );
+    await events.emit(
+      "tool.result",
+      { name: "plugin_search", callId: "call_0", content: "first result", isError: false },
+      "turn-1",
+    );
+    await events.emit(
+      "turn.completed",
+      { inputTokens: 1, outputTokens: 1, durationMs: 1 },
+      "turn-1",
+    );
+    await events.emit("turn.started", { input: "second" }, "turn-2");
+    await events.emit(
+      "provider.tool_call_start",
+      { name: "plugin_search", callId: "call_0" },
+      "turn-2",
+    );
+    await events.emit(
+      "tool.result",
+      { name: "plugin_search", callId: "call_0", content: "second result", isError: false },
+      "turn-2",
+    );
+
+    const toolBlocks = store.snapshot().blocks.filter((block) => block.kind === "tool");
+    expect(toolBlocks.map((block) => block.output)).toEqual(["first result", "second result"]);
+    expect(new Set(toolBlocks.map((block) => block.id)).size).toBe(2);
+  });
+
+  it("keeps repeated plugin tool call IDs distinct when recovering a session", () => {
+    const store = new WebStore("en");
+
+    store.setRecoveredMessages([
+      {
+        role: "assistant",
+        content: "First search.",
+        toolCalls: [{ callId: "call_0", name: "plugin_search", input: { query: "first" } }],
+      },
+      {
+        role: "tool",
+        callId: "call_0",
+        name: "plugin_search",
+        content: "first result",
+        isError: false,
+      },
+      {
+        role: "assistant",
+        content: "Second search.",
+        toolCalls: [{ callId: "call_0", name: "plugin_search", input: { query: "second" } }],
+      },
+      {
+        role: "tool",
+        callId: "call_0",
+        name: "plugin_search",
+        content: "second result",
+        isError: false,
+      },
+    ]);
+
+    const blocks = store.snapshot().blocks;
+    expect(blocks.map((block) => block.kind)).toEqual(["assistant", "tool", "assistant", "tool"]);
+    const toolBlocks = blocks.filter((block) => block.kind === "tool");
+    expect(toolBlocks.map((block) => block.output)).toEqual(["first result", "second result"]);
+    expect(new Set(toolBlocks.map((block) => block.id)).size).toBe(2);
+  });
+
   it("discards only the active provider attempt on retry", async () => {
     const events = new EventBus();
     const store = new WebStore("en");
