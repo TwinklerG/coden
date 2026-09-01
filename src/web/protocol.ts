@@ -13,12 +13,7 @@ export type WebPhase =
   | "failed";
 
 export type WebToolRisk = "read" | "modify" | "dangerous";
-export type WebInteractionDecision =
-  | "allow_once"
-  | "allow_session"
-  | "deny"
-  | "confirm"
-  | "reject";
+export type WebInteractionDecision = "allow_once" | "allow_session" | "deny" | "confirm" | "reject";
 
 export type WebBlock =
   | { id: string; kind: "user"; text: string }
@@ -94,7 +89,18 @@ export type WebPatch =
   | { op: "append_blocks"; blocks: WebBlock[] }
   | { op: "update_block"; id: string; block: WebBlock }
   | { op: "replace_blocks"; blocks: WebBlock[] }
-  | { op: "merge"; value: WebMergeValue };
+  | {
+      op: "merge";
+      value: WebMergeValue;
+      clear?: Array<
+        | "metadata"
+        | "sessionId"
+        | "pendingInteractionId"
+        | "contextPercent"
+        | "turnUsage"
+        | "fatalError"
+      >;
+    };
 
 export interface WebViewer {
   clientId: string;
@@ -147,7 +153,10 @@ export function parseWebActionBody(kind: WebActionKind, value: unknown): WebActi
   }
   if (kind === "interaction") {
     exactKeys(body, ["decision"]);
-    if (typeof body.decision !== "string" || !DECISIONS.has(body.decision as WebInteractionDecision))
+    if (
+      typeof body.decision !== "string" ||
+      !DECISIONS.has(body.decision as WebInteractionDecision)
+    )
       throw new Error("decision is invalid");
     return { decision: body.decision as WebInteractionDecision };
   }
