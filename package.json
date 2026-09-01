@@ -58,5 +58,9 @@
   },
   "patchedDependencies": {
     "ink@7.1.1": "patches/ink@7.1.1.patch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TwinklerG/coden.git"
   }
 }
