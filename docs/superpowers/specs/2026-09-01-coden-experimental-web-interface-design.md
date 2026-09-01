@@ -142,6 +142,7 @@ interface WebSnapshot {
   revision: number;
   phase: "starting" | "idle" | "thinking" | "rendering" | "tool" | "reviewing" | "failed";
   running: boolean;
+  language: "zh" | "en";
   metadata?: AgentApplicationMetadata;
   sessionId?: string;
   sessions: WebSessionSummary[];
@@ -354,6 +355,7 @@ WebController 向 `createAgentApplication()` 提供 `AgentInteraction`：
 - 运行中输入禁用，显示停止按钮；不排队；
 - 只读客户端显示“只读”与“接管控制权”；
 - 顶部只读显示 provider/model、审批模式、thinking、工作区和 context 百分比；
+- 界面语言继承 CodeN 启动语言并使用前端内置的中英文文案，不提供 Web 热切换；
 - Provider、模型和 thinking 不提供编辑控件；
 - 新建/恢复按钮在运行中禁用；
 - 页面 refresh/reconnect 时显示连接状态，但不把短暂断线误报为 Agent 失败。
