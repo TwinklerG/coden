@@ -211,10 +211,10 @@ button {
 }
 
 .agent-pane {
-  display: grid;
+  display: flex;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  flex-direction: column;
   background: color-mix(in srgb, var(--bg) 84%, transparent);
 }
 
@@ -339,6 +339,7 @@ button {
 .transcript-wrap {
   position: relative;
   min-height: 0;
+  flex: 1;
 }
 
 .activity-label {
@@ -617,6 +618,7 @@ button {
 
 .notice,
 .startup-warnings,
+.remote-warning,
 .fatal-panel {
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--line);
@@ -634,6 +636,12 @@ button {
 .fatal-panel {
   border-left-color: var(--danger);
   color: var(--danger);
+}
+
+.remote-warning {
+  border-left-color: var(--danger);
+  color: var(--danger);
+  font-family: var(--mono);
 }
 
 .startup-warnings p,

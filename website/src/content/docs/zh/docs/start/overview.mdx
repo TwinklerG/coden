@@ -5,7 +5,7 @@ sidebar:
   order: 110
 ---
 
-CodeN 的产品边界很具体：它是运行在本机、直接连接模型 Provider 的终端 Coding Agent。核心不是一个远端执行服务，也不是通用 Agent 框架；它把模型原生 Tool Calling 与本地工具 Registry、权限策略、会话和扩展机制连接起来。
+CodeN 的产品边界很具体：它是运行在本机、直接连接模型 Provider 的 Coding Agent，以终端界面为默认入口，并提供实验性本地 Web 界面。核心不是一个远端执行服务，也不是通用 Agent 框架；它把模型原生 Tool Calling 与本地工具 Registry、权限策略、会话和扩展机制连接起来。
 
 最重要的设计取向是可塑造性。Plugin 改变模型可调用的能力，Skill 按需提供方法知识，Hook 在生命周期边界执行确定性策略，`AGENTS.md` 提供项目长期约束。四者互补，但都不会把不可信代码变成沙箱。
 
@@ -21,7 +21,16 @@ export CODEN_OPENAI_API_KEY=...  # or CODEN_ANTHROPIC_API_KEY
 coden "fix the failing tests in this project"
 ```
 
-三条命令即可完成安装、配置和首个任务。启动后默认进入 CLI/REPL，工作目录即工作区。
+三条命令即可完成安装、配置和首个任务。启动后默认进入 CLI/REPL，工作目录即工作区。也可以启动实验性本地 Web 界面：
+
+```bash
+coden --web
+coden --web --no-open
+coden --web --web-host 0.0.0.0
+coden --web --resume <session-id>
+```
+
+Web 默认监听 `127.0.0.1` 的随机端口并打开浏览器。Provider、模型、thinking 与语言继承启动配置且只读；运行中保持单 Agent、单 turn，其他标签页只读但可接管控制权。
 
 ### 使用流程
 
@@ -36,7 +45,7 @@ coden "fix the failing tests in this project"
 ### 文档地图
 
 - **核心概念**：Agent 循环、工作区、工具与风险等级、审批模式、会话、上下文与思考等级。
-- **界面与使用方式**：CLI/REPL、全屏 TUI、print 模式、斜杠命令、命令行参数。
+- **界面与使用方式**：CLI/REPL、全屏 TUI、print 模式、实验性 Web、斜杠命令、命令行参数。
 - **配置**：配置优先级、作用域、环境变量、OpenAI/Anthropic 配置、语言与思考等级、字段参考、凭据与数据安全。
 - **Skills**：发现规则、创建 Skill、安装与调试。
 - **插件**：本地 TypeScript 插件、npm 插件管理、插件作者协议、信任与安全边界、插件市场。

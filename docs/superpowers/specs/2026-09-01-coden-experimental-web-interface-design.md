@@ -112,7 +112,7 @@ src/web/
 ├── controller.ts
 ├── browser.ts
 └── static-assets.ts
-webui/
+src/webui/
 ├── package.json
 ├── bun.lock
 ├── index.html
@@ -129,7 +129,7 @@ webui/
 └── test/
 ```
 
-`src/web/` 是 Node 服务端，不能导入浏览器 React 组件。`webui/` 是独立浏览器工程，不导入 Node-only 模块。双方只通过 `src/web/protocol.ts` 中的 JSON 类型和运行时校验契约通信；前端可通过 type-only import 复用协议类型。
+`src/web/` 是 Node 服务端，不能导入浏览器 React 组件。`src/webui/` 是独立浏览器工程，不导入 Node-only 模块。双方只通过 `src/web/protocol.ts` 中的 JSON 类型和运行时校验契约通信；前端可通过 type-only import 复用协议类型。
 
 ## 6. 服务端状态模型
 
@@ -366,7 +366,7 @@ WebController 向 `createAgentApplication()` 提供 `AgentInteraction`：
 
 ## 13. 浏览器构建与发布
 
-`webui/` 使用 React 19、TypeScript、CSS、`marked` 和 DOMPurify。使用 Bun 作为构建工具链，但浏览器代码不使用 Bun API。为避免把浏览器开发依赖加入主 CLI 运行依赖，`webui/` 拥有独立 `package.json` 和 `bun.lock`。
+`src/webui/` 使用 React 19、TypeScript、CSS、`marked` 和 DOMPurify。使用 Bun 作为构建工具链，但浏览器代码不使用 Bun API。为避免把浏览器开发依赖加入主 CLI 运行依赖，`src/webui/` 拥有独立 `package.json` 和 `bun.lock`。
 
 根构建流程先构建浏览器静态资源到 `dist/web/`，再构建 `dist/index.js` 和插件出口。npm `files` 增加 `dist/web/**`。这是一项明确的发布契约变化：Web 功能需要随包发布静态资源，CLI 不再是严格的单文件包，但 Node 主入口和插件出口保持原路径。
 

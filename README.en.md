@@ -23,7 +23,7 @@ export CODEN_OPENAI_API_KEY=...
 coden "inspect this project, fix the failing tests, and verify the result"
 ```
 
-The published CLI requires **Node.js 22+**. Plain `coden` starts the continuous-output CLI/REPL. Use `coden --tui` to request the full-screen TUI explicitly, or `coden -p --auto "..."` for one-turn, pipeable execution.
+The published CLI requires **Node.js 22+**. Plain `coden` starts the continuous-output CLI/REPL. Use `coden --tui` to request the full-screen TUI explicitly, or `coden -p --auto "..."` for one-turn, pipeable execution. Start the experimental Web interface with `coden --web`: it binds a random `127.0.0.1` port and opens a browser by default, while provider, model, thinking, and language remain inherited and read-only.
 
 ```bash
 export CODEN_ANTHROPIC_API_KEY=...
@@ -32,6 +32,10 @@ coden --provider anthropic --model claude-sonnet-4-20250514
 coden --smart-approve "refactor this module and run its tests"
 coden --resume                 # list sessions for this workspace
 coden --resume <session-id>    # resume one session
+
+coden --web                    # experimental local Web interface
+coden --web --no-open
+coden --web --web-host 0.0.0.0 # mandatory temporary token; no TLS
 ```
 
 See [Get started](https://twinklerg.github.io/coden/en/docs/start/overview/) for installation, providers, interfaces, and runtime requirements.
@@ -91,12 +95,14 @@ See [Choose an extension](https://twinklerg.github.io/coden/en/docs/extend/choos
 - Built-in tools: `read`, `write`, `edit`, and `bash`, plus `activate_skill` when a valid Skill exists.
 - Approval: manual, Smart Approval, and auto. These are approval policies, not sandbox levels.
 - Sessions: workspace-partitioned JSONL that restores conversation, thinking level, and provider state.
-- Interfaces: default CLI/REPL, explicit TUI, and one-turn print mode.
+- Interfaces: default CLI/REPL, explicit TUI, one-turn print mode, and an experimental local Web interface.
 - CodeN currently has no built-in subagents, MCP, plan mode, or general security sandbox.
 
 ## Security
 
 **`bash`, tool plugins, and Hooks run with current user-process privileges. They are not a security sandbox.** Project plugins and Hooks require workspace trust, but trust prompts, tool `risk`, Smart Approval, and `--auto` cannot contain malicious code. Install and execute only code you are willing to run as the current account. Use a container, virtual machine, or restricted account when you need strong isolation.
+
+The Web interface is not a sandbox: tools, Hooks, and plugins retain the current user's permissions. Non-loopback binding enforces a process-lifetime temporary token, but that token does not encrypt traffic; prefer an SSH tunnel or trusted reverse proxy across untrusted networks.
 
 Sessions and traces can contain prompts, source code, tool inputs and outputs, and model reasoning. Keep them private and do not share them without review. Read [Security boundaries](https://twinklerg.github.io/coden/en/docs/safety/security-boundaries/).
 

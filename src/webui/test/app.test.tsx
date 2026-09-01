@@ -19,6 +19,7 @@ const baseState: WebStateResponse = {
     phase: "idle",
     running: false,
     language: "en",
+    remote: false,
     metadata: {
       provider: "openai",
       model: "test-model",

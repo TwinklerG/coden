@@ -13,6 +13,7 @@ const state: WebStateResponse = {
     phase: "idle",
     running: false,
     language: "en",
+    remote: false,
     sessions: [],
     blocks: [],
     control: { ownerClientId: "a" },

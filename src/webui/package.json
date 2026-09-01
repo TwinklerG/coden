@@ -7,7 +7,7 @@
     "build": "rm -rf ../../dist/web && bun build ./index.html --target=browser --outdir=../../dist/web --minify",
     "build:watch": "bun build ./index.html --target=browser --outdir=../../dist/web --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check --config-path . src test",
+    "lint": "biome check --config-path biome.webui.json src test",
     "test": "vitest run",
     "check": "bun run lint && bun run typecheck && bun run test && bun run build"
   },

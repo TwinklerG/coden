@@ -10,6 +10,22 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-01-coden-experimental-web-interface-design.md`
 
+## Execution Record
+
+Implemented inline on 2026-09-01. At the user’s request, the independent browser package lives at `src/webui/` beside the Node adapter at `src/web/`; it retains its own package and lockfile. The visual implementation follows the restrained purple-black documentation system in `website/src/styles/docs.css`: NJU purple accents, 32px grid, 2px borders, system sans, and monospace operational labels.
+
+Validation evidence:
+
+- `just check`: 490 passed, 2 skipped.
+- `just web-check`: 9 passed; browser lint, typecheck, sanitized-Markdown tests, React tests, and production build passed.
+- `just website-check`: 83 passed; 54 bilingual documents, 60 built pages, Pagefind, and built-link validation passed.
+- `just build` and `node dist/index.js --help`: passed; Web flags are present in the Node artifact.
+- Loopback artifact smoke: `/api/health` and packaged `/` returned 200; SIGTERM exited 0.
+- Non-loopback artifact smoke: unauthenticated state returned 401, token exchange returned 303, authenticated state returned 200, and terminal emitted the mandatory no-TLS/no-sandbox warning.
+- `npm pack --dry-run`: package inventory includes `dist/index.js`, `dist/plugin/index.js`, `dist/plugin/index.d.ts`, and `dist/web/` HTML/JS/CSS assets.
+
+Residual validation note: the complete browser-driven manual scenario with a live paid Provider (streaming a real task, invoking a real tool, approving it, cancelling another turn, refreshing, and taking over from a private window) was not run because no real model request should be issued during repository verification. The same state transitions are covered by Runtime, controller, router, security, reducer, and React tests; loopback and non-loopback published-artifact transport was exercised manually.
+
 ## Global Constraints
 
 - `coden --web` is experimental and must not change the default CLI, TUI, or print routing.
@@ -40,22 +56,22 @@
 
 ### New browser package
 
-- `webui/package.json`, `webui/bun.lock`: isolated browser dependencies and scripts.
-- `webui/tsconfig.json`, `webui/biome.json`, `webui/vitest.config.ts`: browser project tooling.
-- `webui/index.html`: CSP-compatible HTML entry.
-- `webui/src/main.tsx`: React mount.
-- `webui/src/api.ts`: state fetch, SSE connection, JSON actions, and reconnection.
-- `webui/src/state.ts`: revision-checked snapshot/patch reducer.
-- `webui/src/i18n.ts`: fixed Chinese/English labels selected by snapshot language.
-- `webui/src/markdown.tsx`: marked + DOMPurify rendering policy.
-- `webui/src/app.tsx`: application shell and state/action wiring.
-- `webui/src/components/status-header.tsx`: read-only runtime and connection metadata.
-- `webui/src/components/session-sidebar.tsx`: session list, new/resume, and narrow-screen drawer.
-- `webui/src/components/transcript.tsx`: block list, follow behavior, and return-to-latest control.
-- `webui/src/components/tool-card.tsx`: collapsed summary and expanded input/output.
-- `webui/src/components/interaction-card.tsx`: permission/trust actions.
-- `webui/src/components/composer.tsx`: multiline submit/cancel and read-only ownership state.
-- `webui/src/styles.css`: desktop-first responsive visual system.
+- `src/webui/package.json`, `src/webui/bun.lock`: isolated browser dependencies and scripts.
+- `src/webui/tsconfig.json`, `src/webui/biome.webui.json`, `src/webui/vitest.config.ts`: browser project tooling.
+- `src/webui/index.html`: CSP-compatible HTML entry.
+- `src/webui/src/main.tsx`: React mount.
+- `src/webui/src/api.ts`: state fetch, SSE connection, JSON actions, and reconnection.
+- `src/webui/src/state.ts`: revision-checked snapshot/patch reducer.
+- `src/webui/src/i18n.ts`: fixed Chinese/English labels selected by snapshot language.
+- `src/webui/src/markdown.tsx`: marked + DOMPurify rendering policy.
+- `src/webui/src/app.tsx`: application shell and state/action wiring.
+- `src/webui/src/components/status-header.tsx`: read-only runtime and connection metadata.
+- `src/webui/src/components/session-sidebar.tsx`: session list, new/resume, and narrow-screen drawer.
+- `src/webui/src/components/transcript.tsx`: block list, follow behavior, and return-to-latest control.
+- `src/webui/src/components/tool-card.tsx`: collapsed summary and expanded input/output.
+- `src/webui/src/components/interaction-card.tsx`: permission/trust actions.
+- `src/webui/src/components/composer.tsx`: multiline submit/cancel and read-only ownership state.
+- `src/webui/src/styles.css`: desktop-first responsive visual system.
 
 ### New tests
 
@@ -65,10 +81,10 @@
 - `test/web-security.test.ts`
 - `test/web-router.test.ts`
 - `test/web-command.test.ts`
-- `webui/test/state.test.ts`
-- `webui/test/api.test.ts`
-- `webui/test/markdown.test.tsx`
-- `webui/test/app.test.tsx`
+- `src/webui/test/state.test.ts`
+- `src/webui/test/api.test.ts`
+- `src/webui/test/markdown.test.tsx`
+- `src/webui/test/app.test.tsx`
 
 ### Existing files to modify
 
@@ -98,7 +114,7 @@
 - Changes `tool.started` data to include `input` and `risk`.
 - Produces a `tool.result` RuntimeEvent after the tool message has been appended to the session.
 
-- [ ] **Step 1: Write failing protocol validation tests**
+- [x] **Step 1: Write failing protocol validation tests**
 
 Create `test/web-protocol.test.ts` with concrete valid/invalid request cases:
 
@@ -133,13 +149,13 @@ describe("Web protocol", () => {
 
 Define test fixtures for every `WebBlock` variant and assert `JSON.stringify()` contains no `undefined`, `bigint`, provider state, or signature field.
 
-- [ ] **Step 2: Run the protocol test and verify RED**
+- [x] **Step 2: Run the protocol test and verify RED**
 
 Run: `bun run vitest run test/web-protocol.test.ts`
 
 Expected: FAIL because `src/web/protocol.ts` does not exist.
 
-- [ ] **Step 3: Implement the JSON-safe protocol types and validators**
+- [x] **Step 3: Implement the JSON-safe protocol types and validators**
 
 Use explicit discriminated unions and exact-key checks; do not import Node-only modules:
 
@@ -211,7 +227,7 @@ export type WebPatch =
 
 `WebSnapshot` includes `revision`, `language`, blocks, sessions, metadata, control, pending interaction ID, usage, warnings, and optional fatal error. `WebStreamEnvelope` is either `{ type: "snapshot", revision, data: WebStateResponse }` or `{ type: "patch", revision, data: WebPatch }`. `WebStateResponse` contains `{ protocolVersion, snapshot, viewer }`.
 
-- [ ] **Step 4: Write failing tool event tests**
+- [x] **Step 4: Write failing tool event tests**
 
 Extend `test/runtime.integration.test.ts` so a scripted provider invokes a tool and capture EventBus events. Assert:
 
@@ -232,13 +248,13 @@ expect(events.find((event) => event.type === "tool.result")?.data).toMatchObject
 
 Also assert `tool.result` occurs after the corresponding tool message is present in `runtime.messages` and does not contain `providerState`.
 
-- [ ] **Step 5: Run the focused runtime test and verify RED**
+- [x] **Step 5: Run the focused runtime test and verify RED**
 
 Run: `bun run vitest run test/runtime.integration.test.ts -t "tool detail events"`
 
 Expected: FAIL because `tool.started` lacks input/risk and `tool.result` is not emitted.
 
-- [ ] **Step 6: Emit final tool input, risk, and result without changing execution semantics**
+- [x] **Step 6: Emit final tool input, risk, and result without changing execution semantics**
 
 In `ToolExecutor.execute()`, extend the existing `tool.started` payload only after hooks, validation, path resolution, and permission produce the effective call:
 
@@ -273,7 +289,7 @@ await this.events.emit(
 
 Do not emit Provider reasoning state or signatures.
 
-- [ ] **Step 7: Verify protocol and runtime tests GREEN**
+- [x] **Step 7: Verify protocol and runtime tests GREEN**
 
 Run:
 
@@ -284,7 +300,7 @@ bun run typecheck
 
 Expected: all pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/web/protocol.ts src/tools/executor.ts src/core/runtime.ts test/web-protocol.test.ts test/runtime.integration.test.ts
@@ -304,7 +320,7 @@ git commit -m "feat: define Web protocol and tool events"
 - Produces: `WebStore`, `WebStore.subscribe()`, `snapshot()`, `setApplication()`, `setRecoveredMessages()`, `applyRuntimeEvent()`, `openPermission()`, `openConfirm()`, `resolveInteraction()`, `cancelInteraction()`, `setOwner()`, and `setSessions()`.
 - Every mutation produces exactly one strictly increasing revision and one `WebPatch`; subscribers may request the current full snapshot independently.
 
-- [ ] **Step 1: Write failing event-projection and revision tests**
+- [x] **Step 1: Write failing event-projection and revision tests**
 
 Create `test/web-store.test.ts` using a real `EventBus`:
 
@@ -334,7 +350,7 @@ expect(patches.map((entry) => entry.revision)).toEqual([1, 2, 3, 4]);
 
 Add separate tests for Provider retry discarding only the active partial assistant, context percentage clamping, plugin warnings, fatal errors, the normal `tool.started → tool.completed → tool.result` sequence, reordered completion/result delivery, and recovered message projection by call ID.
 
-- [ ] **Step 2: Write failing interaction settlement tests**
+- [x] **Step 2: Write failing interaction settlement tests**
 
 Test exact fail-closed behavior:
 
@@ -349,13 +365,13 @@ expect(() => store.resolveInteraction(pending.id, "deny")).toThrow("no longer pe
 
 Cover confirm true/false, AbortSignal cancellation, store close, only one pending interaction, and resolved interaction blocks remaining in transcript.
 
-- [ ] **Step 3: Run store tests and verify RED**
+- [x] **Step 3: Run store tests and verify RED**
 
 Run: `bun run vitest run test/web-store.test.ts`
 
 Expected: FAIL because `src/web/store.ts` does not exist.
 
-- [ ] **Step 4: Implement immutable snapshot commits and block indexing**
+- [x] **Step 4: Implement immutable snapshot commits and block indexing**
 
 Implement one commit primitive and a `Map<blockId, index>` so updates do not scan unrelated state:
 
@@ -369,19 +385,19 @@ private commit(patch: WebPatch, update: (current: WebSnapshot) => WebSnapshot): 
 
 Use stable IDs based on turn/call IDs where available. Sanitize terminal control characters before storing display strings. Never put system messages, hook-only user messages, provider state, redacted thinking, or signatures into Web blocks.
 
-- [ ] **Step 5: Implement RuntimeEvent projection and recovered transcript**
+- [x] **Step 5: Implement RuntimeEvent projection and recovered transcript**
 
 Use the same semantic phases as TUI but do not import `TuiStore`. Merge tool events by `callId`; a `tool.result` supplies output/error and `tool.completed` supplies duration/cancelled status regardless of event order. On Provider retry, remove the current attempt's partial assistant and tool preview without removing prior completed blocks.
 
 Keep reasoning as a transient phase/status only. Do not add full reasoning text to blocks.
 
-- [ ] **Step 6: Implement interaction promises and application metadata setters**
+- [x] **Step 6: Implement interaction promises and application metadata setters**
 
 `openPermission()` and `openConfirm()` append pending blocks and return `{ id, promise }`. Settlement updates the same block, clears `pendingInteractionId`, removes abort listeners, and resolves exactly once. `close()` resolves permission as `deny` and confirm as `false`.
 
 `setApplication(metadata, sessionId, warnings)` and `setSessions(sessions)` update read-only state; `setRecoveredMessages()` replaces transcript blocks during application switching.
 
-- [ ] **Step 7: Verify store tests GREEN**
+- [x] **Step 7: Verify store tests GREEN**
 
 Run:
 
@@ -393,7 +409,7 @@ bun run biome check --config-path . src/web test/web-store.test.ts
 
 Expected: all pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/web/store.ts test/web-store.test.ts
@@ -413,7 +429,7 @@ git commit -m "feat: project Agent state for Web clients"
 - Produces: `WebController.bootstrap()`, `connectClient()`, `takeover()`, `submit()`, `cancel()`, `answerInteraction()`, `newSession()`, `resumeSession()`, `shutdown()`, and `dispose()`.
 - Produces owner errors with stable codes: `web.not_owner`, `web.busy`, `web.not_ready`, `web.interaction_stale`, `web.invalid_session`.
 
-- [ ] **Step 1: Write failing ownership tests with an injected fake application**
+- [x] **Step 1: Write failing ownership tests with an injected fake application**
 
 Create a fake application whose runtime exposes controllable `run()` and messages. Assert:
 
@@ -428,7 +444,7 @@ await expect(controller.submit("client-a", "second")).rejects.toMatchObject({ co
 
 Disconnect client B and assert an unresolved fake `run()` is not aborted. Reconnect B with the same client ID and assert it remains owner.
 
-- [ ] **Step 2: Write failing lifecycle and session-switch tests**
+- [x] **Step 2: Write failing lifecycle and session-switch tests**
 
 Cover:
 
@@ -441,13 +457,13 @@ Cover:
 - failed new app creation produces failed state and never reuses disposed old app;
 - shutdown aborts run, denies interaction, calls `end("cancelled")`, and disposes once.
 
-- [ ] **Step 3: Run controller tests and verify RED**
+- [x] **Step 3: Run controller tests and verify RED**
 
 Run: `bun run vitest run test/web-controller.test.ts`
 
 Expected: FAIL because `src/web/controller.ts` does not exist.
 
-- [ ] **Step 4: Implement ownership and serial turn execution**
+- [x] **Step 4: Implement ownership and serial turn execution**
 
 Define a small stable error class:
 
@@ -467,7 +483,7 @@ export class WebControllerError extends Error {
 
 Keep `#activeController` and `#activeTurn`; do not await browser connection state. Cancellation aborts the controller but does not dispose the application.
 
-- [ ] **Step 5: Adapt permissions and project confirmations to WebStore promises**
+- [x] **Step 5: Adapt permissions and project confirmations to WebStore promises**
 
 Pass this interaction port to the application factory:
 
@@ -481,13 +497,13 @@ interaction: {
 
 `answerInteraction(clientId, id, decision)` checks owner, exact pending ID, interaction kind, and dangerous-risk session allowance before settling.
 
-- [ ] **Step 6: Implement idle-only application replacement**
+- [x] **Step 6: Implement idle-only application replacement**
 
 Centralize first bootstrap, new session, and resume in `replaceApplication(resumeId?: string)`. Disconnect the old EventBus subscription, end/dispose the old app, reset application-specific store fields, clone the original command with `resume: resumeId`, and create the replacement. After success, import metadata/recovered messages/warnings and refresh `session.list()`.
 
 Do not mutate Provider/model/thinking/approval options. If creation fails, set a sanitized fatal error and retain no old app reference.
 
-- [ ] **Step 7: Verify controller and existing application tests GREEN**
+- [x] **Step 7: Verify controller and existing application tests GREEN**
 
 Run:
 
@@ -498,7 +514,7 @@ bun run typecheck
 
 Expected: all pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/web/controller.ts test/web-controller.test.ts
@@ -517,7 +533,7 @@ git commit -m "feat: control Web Agent lifecycle"
 - Produces: `isLoopbackHost()`, `createAccessToken()`, `WebSecurityPolicy`, `ensureAllowedHost()`, `ensureAuthenticated()`, `ensureMutationOrigin()`, `exchangeQueryToken()`, `setClientCookie()`, and `securityHeaders()`.
 - Consumes: Node `IncomingMessage`, configured bind host, actual port, and enumerated interface addresses.
 
-- [ ] **Step 1: Write failing loopback and token tests**
+- [x] **Step 1: Write failing loopback and token tests**
 
 Cover exact host classifications:
 
@@ -533,7 +549,7 @@ expect(isLoopbackHost("192.168.1.10")).toBe(false);
 
 Assert a remote policy creates a 64-character lowercase hex token, a loopback policy has no access token, and token comparison rejects altered length/value without throwing.
 
-- [ ] **Step 2: Write failing request-policy tests**
+- [x] **Step 2: Write failing request-policy tests**
 
 Build minimal fake `IncomingMessage` values and assert:
 
@@ -547,13 +563,13 @@ Build minimal fake `IncomingMessage` values and assert:
 - allowed Host includes bound loopback or enumerated local IP plus exact port and rejects attacker domains;
 - security headers include CSP, no-referrer, nosniff, frame deny, and no-store for API.
 
-- [ ] **Step 3: Run security tests and verify RED**
+- [x] **Step 3: Run security tests and verify RED**
 
 Run: `bun run vitest run test/web-security.test.ts`
 
 Expected: FAIL because `src/web/security.ts` does not exist.
 
-- [ ] **Step 4: Implement host normalization and constant-time token checks**
+- [x] **Step 4: Implement host normalization and constant-time token checks**
 
 Use `node:net` for IP detection and `timingSafeEqual` only after equal-length Buffer checks:
 
@@ -567,13 +583,13 @@ export function secureTokenEqual(expected: string, supplied: string): boolean {
 
 Normalize bracketed IPv6 and lower-case DNS names. In wildcard mode, allow loopback aliases and IP literals returned by `networkInterfaces()`; reject arbitrary domain Host headers. Require the actual listening port in Host and Origin.
 
-- [ ] **Step 5: Implement cookie/token exchange and response headers**
+- [x] **Step 5: Implement cookie/token exchange and response headers**
 
 Use `randomBytes(32).toString("hex")`. Access cookies are process-lifetime, HttpOnly, SameSite=Strict, Path=/, and omit Secure because the built-in server is HTTP. Client identity cookies use a separate random value and the same restrictions.
 
 Strip token from the redirect target. Never include it in an error message, store snapshot, trace event, or request log.
 
-- [ ] **Step 6: Verify security tests GREEN**
+- [x] **Step 6: Verify security tests GREEN**
 
 Run:
 
@@ -585,7 +601,7 @@ bun run biome check --config-path . src/web/security.ts test/web-security.test.t
 
 Expected: all pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/web/security.ts test/web-security.test.ts
@@ -607,7 +623,7 @@ git commit -m "feat: secure local and remote Web access"
 - Produces: `loadStaticAssets(root)`, `createWebRouter(options)`, and `startWebServer(options): Promise<WebServerHandle>`.
 - `WebServerHandle` exposes `origin`, `port`, `accessUrl`, `close()`, and the composed controller.
 
-- [ ] **Step 1: Write failing static asset inventory tests**
+- [x] **Step 1: Write failing static asset inventory tests**
 
 Create a temporary directory with `index.html`, hashed JS/CSS, a nested asset, a symlink, and a file outside the root. Assert `loadStaticAssets()`:
 
@@ -618,7 +634,7 @@ Create a temporary directory with `index.html`, hashed JS/CSS, a nested asset, a
 - returns correct MIME types;
 - rejects encoded traversal and unknown paths.
 
-- [ ] **Step 2: Write failing HTTP and SSE integration tests**
+- [x] **Step 2: Write failing HTTP and SSE integration tests**
 
 Start a real server on `127.0.0.1:0` with a fake controller/store. Use Node `fetch()` and an HTTP stream parser to assert:
 
@@ -641,33 +657,33 @@ expect(turn.status).toBe(202);
 
 Cover every route, owner 403, busy 409, bad JSON 400, wrong content type 400, body over 1 MiB 413, unknown route 404, no stack in 500 response, SSE initial snapshot, ordered patch IDs, heartbeat, disconnect cleanup, and absent CORS headers.
 
-- [ ] **Step 3: Run router tests and verify RED**
+- [x] **Step 3: Run router tests and verify RED**
 
 Run: `bun run vitest run test/web-router.test.ts`
 
 Expected: FAIL because router/server modules do not exist.
 
-- [ ] **Step 4: Implement bounded static asset loading**
+- [x] **Step 4: Implement bounded static asset loading**
 
 At startup, recursively inventory regular files with `lstat()` and store exact URL-to-file mappings. Serve only entries in that map. Never concatenate request paths into filesystem paths during a request. Use streaming `createReadStream()` and handle HEAD without a body.
 
-- [ ] **Step 5: Implement JSON routing and stable error mapping**
+- [x] **Step 5: Implement JSON routing and stable error mapping**
 
 Use one `readJsonBody(request, 1_048_576)` helper that counts raw bytes, aborts on overflow, requires `application/json`, and passes parsed values through `parseWebActionBody()`. Return `{ error: { code, message, retryable } }` for all API failures.
 
 Route control actions to exact controller methods. Return 202 for accepted turn/cancel, 204 for accepted interaction/takeover/session action, and 200 for reads.
 
-- [ ] **Step 6: Implement SSE clients with bounded queues**
+- [x] **Step 6: Implement SSE clients with bounded queues**
 
 On `/api/events`, authenticate, assign/read client cookie, call `controller.connectClient(clientId)`, then send a `snapshot` envelope with contextual viewer. Subscribe to store patches and write `id: <revision>`, `event: state`, and JSON `data` lines.
 
 Each client has a bounded pending-byte count of 1 MiB. If `response.write()` backpressures, queue only up to the bound; exceeding it destroys that response so the browser reconnects from a fresh snapshot. Send comment heartbeat every 15 seconds. Remove listeners/timers on close.
 
-- [ ] **Step 7: Compose and close the native Node server**
+- [x] **Step 7: Compose and close the native Node server**
 
 `startWebServer()` creates `http.createServer(router)`, listens, derives actual origin/port, finalizes security policy, and returns an idempotent `close()` that stops accepting connections, closes SSE clients, shuts down the controller, and closes idle/all HTTP connections.
 
-- [ ] **Step 8: Verify router tests GREEN**
+- [x] **Step 8: Verify router tests GREEN**
 
 Run:
 
@@ -678,7 +694,7 @@ bun run typecheck
 
 Expected: all pass with no leaked handles reported by Vitest.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/web/static-assets.ts src/web/router.ts src/web/server.ts test/web-router.test.ts
@@ -707,7 +723,7 @@ git commit -m "feat: serve Web API and SSE state"
 - Extends `AgentInterfaceMode` with `"web"`.
 - Produces: `openBrowser(url, platform?)` and `runWebCommand(initialPrompt, command, i18n)`.
 
-- [ ] **Step 1: Write failing mode and option tests**
+- [x] **Step 1: Write failing mode and option tests**
 
 Extend `test/interface-mode.test.ts`:
 
@@ -721,13 +737,13 @@ expect(() => resolveInterfaceMode({ tui: false, cli: false, print: true, web: tr
 
 Extend `test/cli.test.ts` to assert help includes all four Web flags, default options become `127.0.0.1`, `0`, and open=true, non-Web use of host/port/no-open exits 2, invalid ports exit 1 during Commander parsing, and bare `--resume` still lists sessions without a Provider key.
 
-- [ ] **Step 2: Run focused CLI tests and verify RED**
+- [x] **Step 2: Run focused CLI tests and verify RED**
 
 Run: `bun run vitest run test/interface-mode.test.ts test/cli.test.ts test/i18n.test.ts`
 
 Expected: FAIL because Web flags and labels are absent.
 
-- [ ] **Step 3: Add deterministic Web option parsing and routing**
+- [x] **Step 3: Add deterministic Web option parsing and routing**
 
 Add Commander options:
 
@@ -742,7 +758,7 @@ Commander stores `--no-open` as `open: false`. `parsePort()` accepts integers fr
 
 Resolve bare resume before interface startup exactly as today. Web mode does not require a TTY.
 
-- [ ] **Step 4: Write failing browser opener and command lifecycle tests**
+- [x] **Step 4: Write failing browser opener and command lifecycle tests**
 
 In `test/web-command.test.ts`, inject spawn and server factories. Assert platform commands are:
 
@@ -752,13 +768,13 @@ In `test/web-command.test.ts`, inject spawn and server factories. Assert platfor
 
 Assert browser failure only writes a warning. Assert command startup prints actual URL, includes a token warning for non-loopback, auto-submits initial prompt once after bootstrap, `--no-open` never spawns, and two signals still close once.
 
-- [ ] **Step 5: Run command tests and verify RED**
+- [x] **Step 5: Run command tests and verify RED**
 
 Run: `bun run vitest run test/web-command.test.ts`
 
 Expected: FAIL because browser/command modules do not exist.
 
-- [ ] **Step 6: Implement safe browser opening and Web command orchestration**
+- [x] **Step 6: Implement safe browser opening and Web command orchestration**
 
 Use `spawn()` argument arrays with `shell: false`, detached child, ignored stdio, and `unref()`. Do not interpolate URL into a shell string.
 
@@ -766,11 +782,11 @@ Use `spawn()` argument arrays with `shell: false`, detached child, ignored stdio
 
 For wildcard binds, auto-open a loopback URL containing the token; print a second remote URL template and the no-TLS warning.
 
-- [ ] **Step 7: Add localized operational copy**
+- [x] **Step 7: Add localized operational copy**
 
 Add equivalent zh/en keys for the experimental flag, host, port, no-open, started URL, browser-open failure, remote token requirement, no-TLS warning, and Web option conflicts. Keep copy concise and explicit that tools retain current user permissions.
 
-- [ ] **Step 8: Verify CLI and command tests GREEN**
+- [x] **Step 8: Verify CLI and command tests GREEN**
 
 Run:
 
@@ -781,7 +797,7 @@ bun run typecheck
 
 Expected: all pass; existing TUI/CLI mode tests remain unchanged except for the new mode field.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/web/browser.ts src/web/command.ts src/cli/agent-command.ts src/cli/interface-mode.ts src/cli/index.ts src/i18n test/interface-mode.test.ts test/cli.test.ts test/i18n.test.ts test/web-command.test.ts
@@ -793,35 +809,35 @@ git commit -m "feat: launch experimental Web interface"
 ### Task 7: Create the browser package, state reducer, transport, and safe Markdown
 
 **Files:**
-- Create: `webui/package.json`
-- Create: `webui/bun.lock`
-- Create: `webui/tsconfig.json`
-- Create: `webui/biome.json`
-- Create: `webui/vitest.config.ts`
-- Create: `webui/index.html`
-- Create: `webui/src/main.tsx`
-- Create: `webui/src/api.ts`
-- Create: `webui/src/state.ts`
-- Create: `webui/src/i18n.ts`
-- Create: `webui/src/markdown.tsx`
-- Create: `webui/test/state.test.ts`
-- Create: `webui/test/api.test.ts`
-- Create: `webui/test/markdown.test.tsx`
+- Create: `src/webui/package.json`
+- Create: `src/webui/bun.lock`
+- Create: `src/webui/tsconfig.json`
+- Create: `src/webui/biome.webui.json`
+- Create: `src/webui/vitest.config.ts`
+- Create: `src/webui/index.html`
+- Create: `src/webui/src/main.tsx`
+- Create: `src/webui/src/api.ts`
+- Create: `src/webui/src/state.ts`
+- Create: `src/webui/src/i18n.ts`
+- Create: `src/webui/src/markdown.tsx`
+- Create: `src/webui/test/state.test.ts`
+- Create: `src/webui/test/api.test.ts`
+- Create: `src/webui/test/markdown.test.tsx`
 
 **Interfaces:**
 - Consumes type-only protocol exports from `../src/web/protocol.ts`.
 - Produces: `applyEnvelope()`, `CodeNWebApi`, `connectStateStream()`, `messagesFor(language)`, and `MarkdownContent`.
 - Browser build outputs only self-hosted files under `dist/web/`.
 
-- [ ] **Step 1: Scaffold the isolated package and install exact dependency families**
+- [x] **Step 1: Scaffold the isolated package and install exact dependency families**
 
 Create scripts:
 
 ```json
 {
   "scripts": {
-    "build": "rm -rf ../dist/web && bun build ./index.html --target=browser --outdir=../dist/web --minify",
-    "build:watch": "bun build ./index.html --target=browser --outdir=../dist/web --watch",
+    "build": "rm -rf ../../dist/web && bun build ./index.html --target=browser --outdir=../../dist/web --minify",
+    "build:watch": "bun build ./index.html --target=browser --outdir=../../dist/web --watch",
     "typecheck": "tsc --noEmit",
     "lint": "biome check --config-path . .",
     "test": "vitest run",
@@ -830,7 +846,7 @@ Create scripts:
 }
 ```
 
-Run inside `webui/`:
+Run inside `src/webui/`:
 
 ```bash
 bun add react@^19.2.0 react-dom@^19.2.0 marked@^18.0.11 dompurify@^3.2.6
@@ -839,9 +855,9 @@ bun add -d typescript@^5.9.2 @types/react@^19.2.0 @types/react-dom@^19.2.0 @biom
 
 Use `index.html` as the Bun browser entry so generated JS/CSS names are rewritten automatically. Include only an external module entry and stylesheet; do not add inline scripts.
 
-- [ ] **Step 2: Write failing reducer tests**
+- [x] **Step 2: Write failing reducer tests**
 
-In `webui/test/state.test.ts`, assert snapshot initialization, ordered patch application, append/update/merge behavior, stale duplicate ignore, and gap detection:
+In `src/webui/test/state.test.ts`, assert snapshot initialization, ordered patch application, append/update/merge behavior, stale duplicate ignore, and gap detection:
 
 ```ts
 const first = applyEnvelope(undefined, snapshotEnvelope);
@@ -852,45 +868,45 @@ expect(applyEnvelope(first, { ...patchEnvelope, revision: 4 })).toBe(first);
 
 Assert update of a missing block throws and does not silently invent state.
 
-- [ ] **Step 3: Write failing API/reconnect tests**
+- [x] **Step 3: Write failing API/reconnect tests**
 
 Mock `fetch` and `EventSource`. Assert all actions use same-origin URLs, JSON content type, exact bodies, and parse `WebApiError`. On stream error, close the source, fetch `/api/state`, and reconnect with capped exponential delays of 250ms, 500ms, 1s, 2s, then 5s. A revision gap triggers immediate state refetch without replaying an action.
 
-- [ ] **Step 4: Write failing Markdown security tests**
+- [x] **Step 4: Write failing Markdown security tests**
 
 Assert model content containing `<script>`, `<img onerror>`, `javascript:` links, iframe, inline style, and event attributes does not survive. Assert fenced code, tables, lists, safe `https:` links, and plain raw HTML text render correctly. External links must have `target="_blank"` and `rel="noreferrer noopener"`.
 
-- [ ] **Step 5: Run browser tests and verify RED**
+- [x] **Step 5: Run browser tests and verify RED**
 
-Run: `cd webui && bun run test`
+Run: `cd src/webui && bun run test`
 
 Expected: FAIL because state, API, and Markdown modules do not exist.
 
-- [ ] **Step 6: Implement revision-safe reducer and transport**
+- [x] **Step 6: Implement revision-safe reducer and transport**
 
 `applyEnvelope()` replaces state on snapshot. Patch revision must equal `current.revision + 1`; lower/equal revisions return the existing object; higher gaps throw a typed `WebRevisionGapError`.
 
 `CodeNWebApi` exposes `takeover`, `submit`, `cancel`, `answerInteraction`, `newSession`, and `resumeSession`. `connectStateStream()` owns one EventSource, one retry timer, and an AbortController for state refetch; `dispose()` closes all three.
 
-- [ ] **Step 7: Implement bilingual labels and sanitized Markdown**
+- [x] **Step 7: Implement bilingual labels and sanitized Markdown**
 
 Provide complete zh/en dictionaries for connection, ownership, session, phase, tool, approval, input, cancel, retry, and error labels. Select only by `snapshot.language`; do not inspect browser locale.
 
 Configure marked with raw model HTML escaped or removed, then sanitize with an explicit DOMPurify allowlist. Render sanitized output with `dangerouslySetInnerHTML` only inside `MarkdownContent`; no other component may use it.
 
-- [ ] **Step 8: Verify browser foundations GREEN and build output exists**
+- [x] **Step 8: Verify browser foundations GREEN and build output exists**
 
 Run:
 
 ```bash
-cd webui
+cd src/webui
 bun run check
 find ../dist/web -maxdepth 2 -type f -print
 ```
 
 Expected: tests/typecheck/lint pass; output contains one HTML entry and self-hosted JS/CSS assets with no `http://` or `https://` script/style imports.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add webui
@@ -902,22 +918,22 @@ git commit -m "feat: add Web client transport foundation"
 ### Task 8: Implement the desktop-first React Agent interface
 
 **Files:**
-- Create: `webui/src/app.tsx`
-- Create: `webui/src/components/status-header.tsx`
-- Create: `webui/src/components/session-sidebar.tsx`
-- Create: `webui/src/components/transcript.tsx`
-- Create: `webui/src/components/tool-card.tsx`
-- Create: `webui/src/components/interaction-card.tsx`
-- Create: `webui/src/components/composer.tsx`
-- Create: `webui/src/styles.css`
-- Create: `webui/test/app.test.tsx`
-- Modify: `webui/src/main.tsx`
+- Create: `src/webui/src/app.tsx`
+- Create: `src/webui/src/components/status-header.tsx`
+- Create: `src/webui/src/components/session-sidebar.tsx`
+- Create: `src/webui/src/components/transcript.tsx`
+- Create: `src/webui/src/components/tool-card.tsx`
+- Create: `src/webui/src/components/interaction-card.tsx`
+- Create: `src/webui/src/components/composer.tsx`
+- Create: `src/webui/src/styles.css`
+- Create: `src/webui/test/app.test.tsx`
+- Modify: `src/webui/src/main.tsx`
 
 **Interfaces:**
 - Consumes: `CodeNWebApi`, stream connection, `WebStateResponse`, protocol blocks, Markdown renderer, and i18n labels.
 - Produces: complete `App` with no business-state duplication outside reducer state and local UI-only state.
 
-- [ ] **Step 1: Write failing application behavior tests**
+- [x] **Step 1: Write failing application behavior tests**
 
 Use Testing Library with a fake API and snapshots. Cover:
 
@@ -934,23 +950,23 @@ Use Testing Library with a fake API and snapshots. Cover:
 - failed tool and API errors are visible in the transcript, not toast-only;
 - narrow viewport opens/closes a labelled session drawer.
 
-- [ ] **Step 2: Write failing transcript follow tests**
+- [x] **Step 2: Write failing transcript follow tests**
 
 Mock scroll metrics. Assert appended deltas follow only when the user is within 32px of bottom; scrolling upward pauses follow and shows “return to latest”; clicking it scrolls to bottom. Updating an existing streaming assistant must not reset user scroll when follow is paused.
 
-- [ ] **Step 3: Run application tests and verify RED**
+- [x] **Step 3: Run application tests and verify RED**
 
-Run: `cd webui && bun run vitest run test/app.test.tsx`
+Run: `cd src/webui && bun run vitest run test/app.test.tsx`
 
 Expected: FAIL because UI components do not exist.
 
-- [ ] **Step 4: Implement the application shell and ownership wiring**
+- [x] **Step 4: Implement the application shell and ownership wiring**
 
 `App` subscribes once to `connectStateStream()`, stores only reducer state plus connection status, and delegates actions to `CodeNWebApi`. Derive `isOwner` from contextual viewer client ID and `snapshot.control.ownerClientId`; never trust a client-side owner boolean for server authorization.
 
 Keep pending button state local per request, clear it on response/snapshot settlement, and render stable API errors inline.
 
-- [ ] **Step 5: Implement focused transcript and action components**
+- [x] **Step 5: Implement focused transcript and action components**
 
 Use semantic elements:
 
@@ -963,7 +979,7 @@ Use semantic elements:
 
 Pretty-print tool input with `JSON.stringify(input, null, 2)` inside `<pre>` and output as text. Do not use HTML injection for tool data.
 
-- [ ] **Step 6: Implement the intentional desktop-first visual system**
+- [x] **Step 6: Implement the intentional desktop-first visual system**
 
 Use CSS custom properties with a quiet code-workbench direction:
 
@@ -986,12 +1002,12 @@ Use system UI for controls and a system monospace stack for code/tool metadata. 
 
 At `max-width: 760px`, move the sidebar into an overlay drawer while keeping transcript/composer/approval usable. Respect `prefers-reduced-motion` and disable smooth scrolling/animations there.
 
-- [ ] **Step 7: Verify UI tests, accessibility basics, and production build GREEN**
+- [x] **Step 7: Verify UI tests, accessibility basics, and production build GREEN**
 
 Run:
 
 ```bash
-cd webui
+cd src/webui
 bun run test
 bun run typecheck
 bun run lint
@@ -1000,10 +1016,10 @@ bun run build
 
 Expected: all pass. Inspect built HTML to confirm it has one root, no inline script, and references only self-hosted assets.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
-git add webui/src webui/test/app.test.tsx
+git add src/webui/src src/webui/test/app.test.tsx
 git commit -m "feat: build experimental Web Agent UI"
 ```
 
@@ -1012,7 +1028,7 @@ git commit -m "feat: build experimental Web Agent UI"
 ### Task 9: Integrate packaging, Just commands, source development, and installed artifacts
 
 **Files:**
-- Create: `webui/scripts/dev.mjs`
+- Create: `src/webui/scripts/dev.mjs`
 - Modify: `package.json`
 - Modify: `bun.lock`
 - Modify: `justfile`
@@ -1022,10 +1038,10 @@ git commit -m "feat: build experimental Web Agent UI"
 
 **Interfaces:**
 - `just web-dev` builds once, starts browser build watch, and runs source `coden --web` with clean child shutdown.
-- `just web-check` installs from the frozen `webui/bun.lock` and runs its complete check.
+- `just web-check` installs from the frozen `src/webui/bun.lock` and runs its complete check.
 - `just build` always emits `dist/index.js`, plugin artifacts, and `dist/web/`.
 
-- [ ] **Step 1: Write failing built-asset resolution and package assertions**
+- [x] **Step 1: Write failing built-asset resolution and package assertions**
 
 Extend `test/web-command.test.ts` to assert:
 
@@ -1036,7 +1052,7 @@ Extend `test/web-command.test.ts` to assert:
 
 Add a package script test or shell assertion that `npm pack --dry-run --json` lists `dist/web/index.html` plus JS/CSS, and still lists existing plugin artifacts.
 
-- [ ] **Step 2: Run packaging assertions and verify RED**
+- [x] **Step 2: Run packaging assertions and verify RED**
 
 Run:
 
@@ -1048,7 +1064,7 @@ npm pack --dry-run --json
 
 Expected: focused tests or package listing fail because build/package scripts do not include Web assets.
 
-- [ ] **Step 3: Update root build and package contents**
+- [x] **Step 3: Update root build and package contents**
 
 Change root scripts so build order is:
 
@@ -1056,31 +1072,31 @@ Change root scripts so build order is:
 rm dist → mkdir dist/plugin → webui build → CLI bundle → plugin bundle/types → shebang normalization
 ```
 
-Add `dist/web` to `package.json.files`. Do not add `webui/node_modules`, source files, tests, or development config to the npm package.
+Add `dist/web` to `package.json.files`. Do not add `src/webui/node_modules`, source files, tests, or development config to the npm package.
 
-- [ ] **Step 4: Add Just and development orchestration**
+- [x] **Step 4: Add Just and development orchestration**
 
-`webui/scripts/dev.mjs` uses only `node:child_process` and signal handling. It runs a one-shot Web build, starts `bun run build:watch`, starts root `bun run src/cli/index.ts --web`, forwards additional arguments, and terminates both children on SIGINT/SIGTERM or either child failure.
+`src/webui/scripts/dev.mjs` uses only `node:child_process` and signal handling. It runs a one-shot Web build, starts `bun run build:watch`, starts root `bun run src/cli/index.ts --web`, forwards additional arguments, and terminates both children on SIGINT/SIGTERM or either child failure.
 
 Add:
 
 ```make
 web-dev *args:
-  node webui/scripts/dev.mjs {{args}}
+  node src/webui/scripts/dev.mjs {{args}}
 
 web-check:
-  cd webui && bun install --frozen-lockfile && bun run check
+  cd src/webui && bun install --frozen-lockfile && bun run check
 ```
 
 Keep `just check` focused on the root package; CI runs both `just check` and `just web-check` explicitly.
 
-- [ ] **Step 5: Update CI and release artifact checks**
+- [x] **Step 5: Update CI and release artifact checks**
 
 In CI, run `just web-check` before `just build`, then execute a Node 22 no-browser Web smoke using a temporary config/workspace and poll `/api/health`. In release, verify `dist/web/index.html` exists before npm publish and run `npm pack --dry-run`.
 
 The smoke must start with `--web --no-open --web-port 0`, parse the printed URL, fetch health, send SIGTERM, and assert exit 0 without sending a model request.
 
-- [ ] **Step 6: Verify package and installed artifact behavior GREEN**
+- [x] **Step 6: Verify package and installed artifact behavior GREEN**
 
 Run:
 
@@ -1100,10 +1116,10 @@ PY
 
 Then install the produced tarball into a temporary directory and start its Node CLI in `--web --no-open` mode. Expected: health and `/` return 200 without access to repository `src/`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
-git add webui/scripts/dev.mjs package.json bun.lock justfile test/web-command.test.ts .github/workflows/ci.yml .github/workflows/release.yml
+git add src/webui/scripts/dev.mjs package.json bun.lock justfile test/web-command.test.ts .github/workflows/ci.yml .github/workflows/release.yml
 git commit -m "build: package experimental Web assets"
 ```
 
@@ -1127,7 +1143,7 @@ git commit -m "build: package experimental Web assets"
 - Consumes the completed feature.
 - Produces bilingual user-facing contract and final automated/manual evidence.
 
-- [ ] **Step 1: Add failing documentation drift assertions**
+- [x] **Step 1: Add failing documentation drift assertions**
 
 Extend `website/test/docs-content.test.ts` and root tests to assert both languages include:
 
@@ -1140,7 +1156,7 @@ Extend `website/test/docs-content.test.ts` and root tests to assert both languag
 
 Keep bilingual code blocks byte-identical, including comments, as required by existing website content tests.
 
-- [ ] **Step 2: Run documentation tests and verify RED**
+- [x] **Step 2: Run documentation tests and verify RED**
 
 Run:
 
@@ -1151,7 +1167,7 @@ cd .. && bun run vitest run test/cli.test.ts test/i18n.test.ts
 
 Expected: FAIL because Web documentation is absent.
 
-- [ ] **Step 3: Update README and website documentation**
+- [x] **Step 3: Update README and website documentation**
 
 Add concise examples:
 
@@ -1174,7 +1190,7 @@ State explicitly:
 
 Do not describe Web as a hosted service or sandbox.
 
-- [ ] **Step 4: Run complete automated acceptance**
+- [x] **Step 4: Run complete automated acceptance**
 
 Run:
 
@@ -1212,7 +1228,7 @@ Non-loopback:
 
 Record results in the final response; do not commit credentials, tokens, traces, or screenshots containing source.
 
-- [ ] **Step 6: Update plan execution record and commit documentation**
+- [x] **Step 6: Update plan execution record and commit documentation**
 
 After implementation, add an `Execution Record` below this plan header containing actual command results, test counts, artifact smoke outcome, and any accepted residual risk. Mark only completed checkboxes as `[x]`.
 
@@ -1221,7 +1237,7 @@ git add README.md README.en.md website/src/content/docs website/test/docs-conten
 git commit -m "docs: publish experimental Web interface guidance"
 ```
 
-- [ ] **Step 7: Final repository integrity check**
+- [x] **Step 7: Final repository integrity check**
 
 Run:
 

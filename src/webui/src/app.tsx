@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type {
-  WebInteractionDecision,
-  WebStateResponse,
+import {
+  WEB_PROTOCOL_VERSION,
+  type WebInteractionDecision,
+  type WebStateResponse,
 } from "../../web/protocol.js";
 import {
   CodeNWebApi,
@@ -67,6 +68,15 @@ export function App({
     );
   }
 
+  if (state.protocolVersion !== WEB_PROTOCOL_VERSION) {
+    return (
+      <main className="boot-screen" role="alert">
+        <code>web.protocol_mismatch</code>
+        <span>Restart CodeN and refresh this page.</span>
+      </main>
+    );
+  }
+
   const { snapshot, viewer } = state;
   const messages = messagesFor(snapshot.language);
   const isOwner = snapshot.control.ownerClientId === viewer.clientId;
@@ -98,6 +108,9 @@ export function App({
           onTakeover={() => void perform(() => api.takeover())}
           onOpenSessions={() => setDrawerOpen(true)}
         />
+        {snapshot.remote && (
+          <div className="remote-warning">{messages.noTls}</div>
+        )}
         {snapshot.startupWarnings.length > 0 && (
           <div className="startup-warnings">
             {snapshot.startupWarnings.map((warning) => (

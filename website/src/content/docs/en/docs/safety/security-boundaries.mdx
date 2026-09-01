@@ -58,6 +58,14 @@ CodeN’s safety mechanisms primarily reduce accidents and require explicit cons
 4. Plugin authors declare their own `risk`; a `dangerous` declaration only affects confirmation.
 5. `--allow-outside-workspace` permits modifying arbitrary paths outside the workspace; use only when clearly needed.
 
+### Experimental Web boundary
+
+- `coden --web` binds only `127.0.0.1` by default, but localhost is not a security sandbox; mutations still validate Host, Origin, and the single-controller identity.
+- Non-loopback binding enforces a process-lifetime 32-byte temporary token. The token provides temporary access control only, **not TLS, traffic encryption, or process isolation**.
+- Provider, model, thinking, approval mode, and language are read-only in Web; this does not reduce tool, Hook, or plugin privileges.
+- Closing or refreshing the browser, or disconnecting the owner, does not cancel the Agent. Other clients are read-only and can explicitly take control.
+- Prefer an SSH tunnel or trusted reverse proxy across untrusted networks; do not expose the built-in HTTP server directly to the public Internet.
+
 ### Threat-model highlights
 
 - **Supply chain**: plugins/hooks are trusted code execution; trust confirmation is the only gate — review packages and scripts before installing.

@@ -5,7 +5,7 @@ sidebar:
   order: 110
 ---
 
-CodeN has a concrete boundary: it is a local terminal coding agent that connects directly to a model provider. Its core is neither a remote execution service nor a general agent framework; it connects provider-native tool calling to a local tool registry, permission policy, sessions, and extension mechanisms.
+CodeN has a concrete boundary: it is a local coding agent that connects directly to a model provider, with terminal interfaces by default and an experimental local Web interface. Its core is neither a remote execution service nor a general agent framework; it connects provider-native tool calling to a local tool registry, permission policy, sessions, and extension mechanisms.
 
 The central design choice is malleability. A Plugin changes the actions available to the model, a Skill supplies method knowledge on demand, a Hook runs deterministic policy at lifecycle boundaries, and `AGENTS.md` supplies durable project instructions. They complement one another, but none turns untrusted code into a sandbox.
 
@@ -21,7 +21,16 @@ export CODEN_OPENAI_API_KEY=...  # or CODEN_ANTHROPIC_API_KEY
 coden "fix the failing tests in this project"
 ```
 
-Install, configure, and finish a first task in three commands. CodeN starts in the CLI/REPL by default and treats the working directory as its workspace.
+Install, configure, and finish a first task in three commands. CodeN starts in the CLI/REPL by default and treats the working directory as its workspace. You can also start the experimental local Web interface:
+
+```bash
+coden --web
+coden --web --no-open
+coden --web --web-host 0.0.0.0
+coden --web --resume <session-id>
+```
+
+Web binds a random `127.0.0.1` port and opens a browser by default. Provider, model, thinking, and language are inherited and read-only; the server keeps one Agent and one turn, while additional tabs are read-only but can take control.
 
 ### Workflow
 
@@ -36,7 +45,7 @@ Install, configure, and finish a first task in three commands. CodeN starts in t
 ### Documentation map
 
 - **Core Concepts**: agent loop, workspace, tools and risk levels, approval modes, sessions, context and thinking levels.
-- **Interfaces**: CLI/REPL, full-screen TUI, print mode, slash commands, CLI options.
+- **Interfaces**: CLI/REPL, full-screen TUI, print mode, experimental Web, slash commands, CLI options.
 - **Configuration**: precedence, scopes, environment variables, OpenAI/Anthropic setup, language and thinking levels, field reference, credential and data security.
 - **Skills**: discovery, creating a skill, installation and debugging.
 - **Plugins**: local TypeScript plugins, npm plugin management, author protocol, trust and security boundaries, marketplace.

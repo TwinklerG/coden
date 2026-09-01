@@ -23,7 +23,7 @@ export CODEN_OPENAI_API_KEY=...
 coden "检查当前项目，修复失败的测试并验证结果"
 ```
 
-发布版 CLI 需要 **Node.js 22+**。`coden` 默认进入连续输出 CLI/REPL；使用 `coden --tui` 显式启动全屏 TUI，使用 `coden -p --auto "..."` 进行单轮、可管道化执行。
+发布版 CLI 需要 **Node.js 22+**。`coden` 默认进入连续输出 CLI/REPL；使用 `coden --tui` 显式启动全屏 TUI，使用 `coden -p --auto "..."` 进行单轮、可管道化执行。实验性 Web 界面通过 `coden --web` 启动：默认监听 `127.0.0.1` 的随机端口并打开浏览器，Provider、模型、thinking 与语言继承启动配置且只读。
 
 ```bash
 export CODEN_ANTHROPIC_API_KEY=...
@@ -32,6 +32,10 @@ coden --provider anthropic --model claude-sonnet-4-20250514
 coden --smart-approve "重构这个模块并运行测试"
 coden --resume                 # 列出当前工作区会话
 coden --resume <session-id>    # 恢复指定会话
+
+coden --web                    # 实验性本地 Web 界面
+coden --web --no-open
+coden --web --web-host 0.0.0.0 # 强制临时 token；不提供 TLS
 ```
 
 完整安装、Provider、界面和运行时说明见[快速开始](https://twinklerg.github.io/coden/zh/docs/start/overview/)。
@@ -91,12 +95,14 @@ coden plugin sync
 - 内置工具：`read`、`write`、`edit`、`bash`，存在有效 Skill 时还提供 `activate_skill`。
 - 审批：manual、Smart Approval 和 auto；它们是审批策略，不是沙箱等级。
 - 会话：按工作区保存 JSONL，可恢复对话、thinking level 和 Provider 状态。
-- 接口：默认 CLI/REPL、显式 TUI、单轮 print 模式。
+- 接口：默认 CLI/REPL、显式 TUI、单轮 print 模式，以及实验性本地 Web 界面。
 - CodeN 当前没有内置子 Agent、MCP、计划模式或通用安全沙箱。
 
 ## 安全
 
 **`bash`、工具插件和 Hook 都以当前用户进程权限运行，不是安全沙箱。** 项目插件和项目 Hook 需要工作区信任，但信任确认、工具 `risk`、Smart Approval 和 `--auto` 都不能隔离恶意代码。只安装和执行你愿意以当前账户运行的代码；需要强隔离时，请在容器、虚拟机或受限账户中运行 CodeN。
+
+Web 界面不是沙箱：工具、Hook 与插件仍以当前用户权限运行。非 loopback 监听会强制使用进程级临时 token，但 token 不加密网络流量；跨不可信网络请优先使用 SSH tunnel 或可信反向代理。
 
 会话和 trace 可能包含提示词、源码、工具输入输出和模型推理。请保持本地私有权限，不要未经审查地分享。详见[安全边界](https://twinklerg.github.io/coden/zh/docs/safety/security-boundaries/)。
 

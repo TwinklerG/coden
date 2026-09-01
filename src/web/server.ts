@@ -38,6 +38,7 @@ export async function startWebServer(options: StartWebServerOptions): Promise<We
   await listen(server, options.host, options.port);
   const address = server.address() as AddressInfo;
   const policy = new WebSecurityPolicy({ bindHost: options.host, port: address.port });
+  options.store.setRemote(policy.remote);
   router = createWebRouter({
     controller: options.controller,
     store: options.store,

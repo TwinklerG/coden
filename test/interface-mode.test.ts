@@ -48,6 +48,9 @@ describe("interface mode", () => {
     expect(() =>
       resolveInterfaceMode({ tui: false, cli: true, print: false, web: true }, tty),
     ).toThrow(/mutually exclusive/);
+    expect(resolveInterfaceMode({ tui: false, cli: true, print: true }, tty)).toEqual({
+      mode: "print",
+    });
   });
 
   it("requires raw mode and a useful terminal", () => {

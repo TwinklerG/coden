@@ -94,6 +94,22 @@ coden --tui
 - [斜杠命令](/coden/zh/docs/reference/cli/)
 - [常用命令行参数](/coden/zh/docs/reference/cli/)
 
+## 实验性 Web 界面
+
+```bash
+coden --web
+coden --web --no-open
+coden --web --web-host 0.0.0.0
+coden --web --resume <session-id>
+```
+
+- 默认监听 `127.0.0.1` 的随机端口并自动打开浏览器；`--no-open` 只打印 URL。
+- 首个有效客户端获得控制权；其他标签页只读，可显式接管。断开或刷新不会取消活动 turn。
+- 单 Agent、单活动 turn；仅空闲时可新建或恢复会话，不提供任务排队。
+- Provider、模型、thinking、审批模式和语言继承 CLI、环境变量及配置，在 Web 中只读。
+- `--web-host`、`--web-port`、`--no-open` 只能与 `--web` 使用；Web 与 CLI、TUI、print 互斥。
+- 任意非 loopback 地址（含 `0.0.0.0`）强制生成临时 token。它不提供 TLS 或沙箱；工具仍以当前用户权限运行。
+
 ## print 模式
 
 ### 触发与约束
@@ -179,6 +195,10 @@ coden -p --auto "run the tests and report the results"
 | `-p, --print` | `false` | 非交互输出模式；需提供 prompt；单轮后退出 |
 | `--tui` | `false` | 显式启动全屏 TUI；不满足 TTY/raw mode/`TERM` 条件时降级 CLI 并警告 |
 | `--cli` | `false` | 显式使用 CLI 界面（默认模式） |
+| `--web` | `false` | 启动实验性本地 Web 界面 |
+| `--web-host <host>` | `127.0.0.1` | Web 监听地址；非 loopback 强制临时 token |
+| `--web-port <port>` | `0` | Web 监听端口；`0` 表示自动分配 |
+| `--no-open` | `false` | 不自动打开浏览器 |
 | `--provider <openai\|anthropic>` | `openai` | 模型 Provider |
 | `--model <model-id>` | `gpt-5-mini` | 模型标识符 |
 | `--resume [session-id]` | — | 带 ID 恢复会话；省略 ID 列出当前工作区会话 |
@@ -195,7 +215,7 @@ coden -p --auto "run the tests and report the results"
 
 ### 校验与互斥
 
-- `--tui` 与 `--cli`、`--tui` 与 `--print` 互斥，同时传入报参数错误；`--cli` 与 `--print` 可共存且 `print` 优先。
+- `--web` 与 `--tui`、`--cli`、`--print` 互斥；`--web-host`、`--web-port`、`--no-open` 必须配合 `--web`。`--tui` 仍与 CLI/print 不兼容；CLI 与 print 可共存且 print 优先。
 - `--smart-approve` 与 `--auto` 互斥（配置错误，退出码 2）。
 - `--allow-outside-workspace` 必须与 `--auto` 同时使用。
 - `--provider` 仅接受 `openai`/`anthropic`；`--max-steps` 必须为正整数；`--thinking` 仅接受六档等级。
@@ -227,6 +247,10 @@ coden [prompt] [options]
 | `-p, --print` | 非交互输出模式（需 prompt，单轮后退出） |
 | `--tui` | 显式全屏 TUI（条件不满足时降级 CLI 并警告） |
 | `--cli` | 显式 CLI（默认） |
+| `--web` | 实验性本地 Web 界面 |
+| `--web-host <host>` | Web 监听地址（默认 `127.0.0.1`） |
+| `--web-port <port>` | Web 监听端口（默认 `0`） |
+| `--no-open` | 不自动打开浏览器 |
 | `--provider <openai\|anthropic>` | 模型 Provider（默认 `openai`） |
 | `--model <model-id>` | 模型（默认 `gpt-5-mini`） |
 | `--resume [session-id]` | 恢复会话；省略 ID 列出会话 |

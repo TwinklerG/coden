@@ -56,6 +56,7 @@ export interface WebSnapshot {
   phase: WebPhase;
   running: boolean;
   language: "zh" | "en";
+  remote: boolean;
   metadata?: AgentApplicationMetadata;
   sessionId?: string;
   sessions: WebSessionSummary[];
@@ -73,6 +74,7 @@ export type WebMergeValue = Partial<
     WebSnapshot,
     | "phase"
     | "running"
+    | "remote"
     | "metadata"
     | "sessionId"
     | "sessions"

@@ -94,6 +94,22 @@ coden --tui
 - [Slash Commands](/coden/en/docs/reference/cli/)
 - [CLI Options](/coden/en/docs/reference/cli/)
 
+## Experimental Web Interface
+
+```bash
+coden --web
+coden --web --no-open
+coden --web --web-host 0.0.0.0
+coden --web --resume <session-id>
+```
+
+- By default it binds a random `127.0.0.1` port and opens the browser; `--no-open` prints the URL only.
+- The first valid client gets control. Additional tabs are read-only and can explicitly take over. Disconnect or refresh never cancels the active turn.
+- One Agent and one active turn; new/resume session actions work only while idle, with no task queue.
+- Provider, model, thinking, approval mode, and language inherit CLI, environment, and config values and remain read-only in Web.
+- `--web-host`, `--web-port`, and `--no-open` require `--web`; Web is mutually exclusive with CLI, TUI, and print.
+- Any non-loopback address, including `0.0.0.0`, enforces a temporary token. It provides neither TLS nor a sandbox; tools retain current-user permissions.
+
 ## Print Mode
 
 ### Trigger and constraints
@@ -179,6 +195,10 @@ coden -p --auto "run the tests and report the results"
 | `-p, --print` | `false` | non-interactive output mode; requires a prompt; exits after one turn |
 | `--tui` | `false` | explicitly start the full-screen TUI; falls back to the CLI with a warning when TTY/raw-mode/`TERM` conditions fail |
 | `--cli` | `false` | explicitly use the CLI interface (the default mode) |
+| `--web` | `false` | start the experimental local Web interface |
+| `--web-host <host>` | `127.0.0.1` | Web bind address; non-loopback enforces a temporary token |
+| `--web-port <port>` | `0` | Web bind port; `0` asks the OS to choose |
+| `--no-open` | `false` | do not open the browser automatically |
 | `--provider <openai\|anthropic>` | `openai` | model provider |
 | `--model <model-id>` | `gpt-5-mini` | model identifier |
 | `--resume [session-id]` | — | with an ID, resume the session; without, list sessions of the current workspace |
@@ -195,7 +215,7 @@ coden -p --auto "run the tests and report the results"
 
 ### Validation and mutual exclusions
 
-- `--tui` with `--cli` or `--print` is rejected; `--cli` with `--print` is allowed and print wins.
+- `--web` is mutually exclusive with `--tui`, `--cli`, and `--print`; `--web-host`, `--web-port`, and `--no-open` require `--web`. `--tui` remains incompatible with CLI/print, while CLI plus print is allowed and print wins.
 - `--smart-approve` and `--auto` are mutually exclusive (configuration error, exit code 2).
 - `--allow-outside-workspace` requires `--auto`.
 - `--provider` accepts only `openai`/`anthropic`; `--max-steps` must be a positive integer; `--thinking` accepts only the six levels.
@@ -227,6 +247,10 @@ coden [prompt] [options]
 | `-p, --print` | non-interactive output mode (requires a prompt; exits after one turn) |
 | `--tui` | explicitly start the full-screen TUI (falls back to the CLI with a warning when unsupported) |
 | `--cli` | explicitly use the CLI (default) |
+| `--web` | experimental local Web interface |
+| `--web-host <host>` | Web bind address (default `127.0.0.1`) |
+| `--web-port <port>` | Web bind port (default `0`) |
+| `--no-open` | do not open the browser automatically |
 | `--provider <openai\|anthropic>` | model provider (default `openai`) |
 | `--model <model-id>` | model (default `gpt-5-mini`) |
 | `--resume [session-id]` | resume a session; without an ID, list sessions |

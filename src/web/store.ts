@@ -39,6 +39,7 @@ export class WebStore {
       phase: "starting",
       running: false,
       language,
+      remote: false,
       sessions: [],
       blocks: [],
       control: {},
@@ -108,6 +109,10 @@ export class WebStore {
 
   setOwner(ownerClientId: string): void {
     this.merge({ control: { ownerClientId } });
+  }
+
+  setRemote(remote: boolean): void {
+    this.merge({ remote });
   }
 
   setRecoveredMessages(messages: AgentMessage[]): void {

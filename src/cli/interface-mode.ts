@@ -46,9 +46,10 @@ export function resolveInterfaceMode(
   options: InterfaceOptions,
   capabilities: TuiCapabilities,
 ): InterfaceModeResult {
-  const selected = [options.tui, options.cli, options.print, options.web].filter(Boolean).length;
-  if (selected > 1)
-    throw new InterfaceModeError("--web, --tui, --cli, and --print are mutually exclusive");
+  if (options.web && (options.tui || options.cli || options.print))
+    throw new InterfaceModeError("--web is mutually exclusive with --tui, --cli, and --print");
+  if (options.tui && (options.cli || options.print))
+    throw new InterfaceModeError("--tui and --cli/--print are mutually exclusive");
   if (options.web) return { mode: "web" };
   if (options.print) return { mode: "print" };
   if (options.cli) return { mode: "cli" };

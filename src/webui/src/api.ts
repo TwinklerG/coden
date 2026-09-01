@@ -18,7 +18,13 @@ export class WebRequestError extends Error {
 }
 
 export class CodeNWebApi {
-  constructor(private readonly fetcher: typeof fetch = fetch) {}
+  // Bind the native `window.fetch` to the global so it can be invoked via
+  // `this.fetcher(...)` without losing its required `this` (window/globalThis).
+  // A bare `fetch` reference called as an object method throws
+  // "Failed to execute 'fetch' on 'Window': Illegal invocation".
+  constructor(
+    private readonly fetcher: typeof fetch = globalThis.fetch.bind(globalThis),
+  ) {}
 
   takeover(): Promise<void> {
     return this.action("/api/control/takeover", {});
