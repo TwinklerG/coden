@@ -25,6 +25,8 @@ jobs:
         run: just check-tag-version ${{ github.ref_name }}
       - name: Run checks
         run: just check
+      - name: Check Web client
+        run: just web-check
       - name: Build artifact
         run: just build
       - name: Set up Node for npm publish
@@ -33,6 +35,9 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - name: Smoke test Node artifact
-        run: node dist/index.js --help
+        run: |
+          node dist/index.js --help
+          test -f dist/web/index.html
+          npm pack --dry-run
       - name: Publish to npm (trusted publishing)
         run: npm publish --access public

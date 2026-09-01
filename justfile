@@ -5,9 +5,17 @@ set dotenv-load
 run *args:
   bun run src/cli/index.ts {{args}}
 
-# Build a portable single-file Node CLI into dist/index.js (used as npm bin)
+# Build the Node CLI, plugin entry, and self-hosted Web assets
 build:
   bun run build
+
+# Build/watch the browser client and start the source Web Agent
+web-dev *args:
+  node src/webui/scripts/dev.mjs {{args}}
+
+# Lint, typecheck, test, and build the browser client
+web-check:
+  cd src/webui && bun install --frozen-lockfile && bun run check
 
 # Run the offline test suite
 test:

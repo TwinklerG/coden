@@ -7,7 +7,8 @@
   "files": [
     "dist/index.js",
     "dist/plugin/index.js",
-    "dist/plugin/index.d.ts"
+    "dist/plugin/index.d.ts",
+    "dist/web"
   ],
   "bin": {
     "coden": "dist/index.js"
@@ -20,7 +21,7 @@
   },
   "scripts": {
     "start": "bun run src/cli/index.ts",
-    "build": "rm -rf dist && mkdir -p dist/plugin && bun build src/cli/index.ts --target=node --minify --outfile dist/index.js && bun build src/plugin/index.ts --target=node --format=esm --minify --outfile dist/plugin/index.js && tsc -p tsconfig.plugin.json && sed -i.bak '1s|^#!.*|#!/usr/bin/env node|' dist/index.js && rm -f dist/index.js.bak",
+    "build": "rm -rf dist && mkdir -p dist/plugin && cd src/webui && bun run build && cd ../.. && bun build src/cli/index.ts --target=node --minify --outfile dist/index.js && bun build src/plugin/index.ts --target=node --format=esm --minify --outfile dist/plugin/index.js && tsc -p tsconfig.plugin.json && sed -i.bak '1s|^#!.*|#!/usr/bin/env node|' dist/index.js && rm -f dist/index.js.bak",
     "prepack": "bun run build",
     "test": "vitest run",
     "test:watch": "vitest",

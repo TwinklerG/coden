@@ -171,7 +171,6 @@ export function createWebRouter(options: WebRouterOptions): WebRouter {
       }
       apiError(response, 404, "web.not_found", "Resource not found", false);
     } catch (error) {
-      options.onError?.(error);
       if (response.headersSent) {
         response.destroy();
         return;
@@ -190,6 +189,7 @@ export function createWebRouter(options: WebRouterOptions): WebRouter {
           error.message.includes("field") ||
           error.message.includes("must be") ||
           error.message.includes("invalid");
+        if (!known) options.onError?.(error);
         apiError(
           response,
           known ? 400 : 500,
@@ -199,6 +199,7 @@ export function createWebRouter(options: WebRouterOptions): WebRouter {
         );
         return;
       }
+      options.onError?.(error);
       apiError(response, 500, "web.internal_error", "Internal server error", false);
     }
   };
