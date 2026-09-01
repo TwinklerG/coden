@@ -378,9 +378,10 @@ describe("AgentRuntime integration", () => {
     });
     expect(h.observed).toContain("turn.completed");
   });
-  it("adds only a bounded generic input summary to tool.started", async () => {
+  it("emits complete effective tool detail events for interface adapters", async () => {
+    const input = { message: "hello", payload: "secret".repeat(100) };
     const provider = new ScriptedProvider([
-      scriptedTool("custom-1", "echo", { message: "hello", payload: "secret".repeat(100) }),
+      scriptedTool("custom-1", "echo", input),
       scriptedText("done"),
     ]);
     const h = await harness(provider);
@@ -400,17 +401,23 @@ describe("AgentRuntime integration", () => {
         return { content: "ok" };
       },
     });
-    const started: RuntimeEvent[] = [];
+    const detail: RuntimeEvent[] = [];
     h.events.on((event) => {
-      if (event.type === "tool.started") started.push(event);
+      if (event.type === "tool.started" || event.type === "tool.result") detail.push(event);
     });
 
     await h.runtime.run("use the tool");
 
-    expect(started).toHaveLength(1);
-    expect(started[0]?.data).toMatchObject({ name: "echo", callId: "custom-1" });
-    expect(started[0]?.data?.summary).toBe("message: hello");
-    expect(JSON.stringify(started[0]?.data)).not.toContain("secretsecret");
+    expect(detail).toHaveLength(2);
+    expect(detail[0]).toMatchObject({
+      type: "tool.started",
+      data: { name: "echo", callId: "custom-1", summary: "message: hello", input, risk: "read" },
+    });
+    expect(detail[1]).toMatchObject({
+      type: "tool.result",
+      data: { name: "echo", callId: "custom-1", content: "ok", isError: false },
+    });
+    expect(JSON.stringify(detail)).not.toContain("providerState");
   });
 
   it("passes the current task into independent smart approval without changing task usage", async () => {

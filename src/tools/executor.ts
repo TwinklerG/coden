@@ -240,7 +240,13 @@ export class ToolExecutor {
     });
     await this.events.emit(
       "tool.started",
-      { name: effectiveCall.name, callId: effectiveCall.callId, summary: display.summary },
+      {
+        name: effectiveCall.name,
+        callId: effectiveCall.callId,
+        summary: display.summary,
+        input: effectiveCall.input,
+        risk: finalRisk,
+      },
       turnId,
     );
     const controller = new AbortController();

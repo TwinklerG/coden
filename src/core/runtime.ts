@@ -294,6 +294,16 @@ export class AgentRuntime {
           };
           this.messages.push(message);
           await this.sessions.appendMessage(message);
+          await this.events.emit(
+            "tool.result",
+            {
+              callId: result.effectiveCall.callId,
+              name: result.effectiveCall.name,
+              content: result.content,
+              isError: result.isError ?? false,
+            },
+            turnId,
+          );
         }
         if (toolHookContext.length) {
           const hookMessage = hookContextMessage("PreToolUse", toolHookContext.join("\n\n"));
