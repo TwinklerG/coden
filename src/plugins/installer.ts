@@ -15,7 +15,6 @@ import {
   serializePluginManifest,
 } from "./manifest.js";
 import type { PackageManager } from "./package-manager.js";
-import { readInstalledPackageMetadata } from "./package-metadata.js";
 import { type PluginPaths, type PluginScope, resolvePluginPaths } from "./paths.js";
 import { isValidNpmPackageName, parseNpmPluginSpecifier } from "./specifier.js";
 import { PluginTransaction, type PluginTransactionCandidate } from "./transaction.js";
@@ -220,19 +219,16 @@ export class PluginInstaller {
   private async listScope(paths: PluginPaths): Promise<ListedPlugin[]> {
     await new PluginTransaction(paths).recover();
     const manifest = await readPluginManifest(paths.manifestPath);
-    const listed: ListedPlugin[] = [];
-    for (const packageName of Object.keys(manifest.plugins).sort()) {
-      const metadata = await readInstalledPackageMetadata(paths.runtimeDir, packageName);
-      listed.push({
-        packageName,
-        requested: manifest.plugins[packageName]?.requested ?? "latest",
-        version: metadata.version,
-        tools: [],
-        scope: paths.scope,
-        shadowedByProject: false,
-      });
-    }
-    return listed;
+    const result = await this.loader.loadScope(paths);
+    if (result.failed.length > 0) throw packageLoadFailure(result.failed);
+    return result.loaded.map((plugin) => ({
+      ...summaryFor(
+        plugin,
+        manifest.plugins[plugin.packageName]?.requested ?? "latest",
+        paths.scope,
+      ),
+      shadowedByProject: false,
+    }));
   }
 }
 

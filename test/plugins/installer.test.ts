@@ -121,17 +121,26 @@ describe("PluginInstaller", () => {
     await expect(h.installer.sync(projectOptions)).rejects.toThrow(/plugin.lock_missing/);
   });
 
-  it("lists requested and resolved versions in package-name order", async () => {
+  it("lists requested and resolved versions with exported tools in package-name order", async () => {
     const h = await createInstallerHarness();
     await h.installer.install("npm:@fixtures/single-tool@^1", projectOptions);
     await h.installer.install("npm:@fixtures/multi-tool@latest", projectOptions);
 
     const listed = await h.installer.list();
 
-    expect(listed.project.map((item) => [item.packageName, item.requested, item.version])).toEqual([
-      ["@fixtures/multi-tool", "latest", "1.0.0"],
-      ["@fixtures/single-tool", "^1", "1.0.0"],
+    expect(
+      listed.project.map((item) => [item.packageName, item.requested, item.version, item.tools]),
+    ).toEqual([
+      ["@fixtures/multi-tool", "latest", "1.0.0", ["fixture_first", "fixture_second"]],
+      ["@fixtures/single-tool", "^1", "1.0.0", ["fixture_single"]],
     ]);
+  });
+
+  it("fails listing when an installed plugin cannot be loaded", async () => {
+    const h = await createInstallerHarness();
+    await seedManifestOnly(h.projectPaths, "@fixtures/single-tool", "latest");
+
+    await expect(h.installer.list()).rejects.toThrow(/plugin.sync_failed.*single-tool/);
   });
 
   it("marks listed global packages shadowed by project package names", async () => {
