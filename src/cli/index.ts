@@ -21,10 +21,12 @@ import {
 import { builtinTools } from "../tools/builtin/index.js";
 import { runTuiCommand, TuiInitializationError } from "../tui/app.js";
 import { CODEN_VERSION } from "../version.js";
+import { runWebCommand } from "../web/command.js";
 import {
   type AgentCommandOptions,
   ConfigError,
   collect,
+  parsePort,
   parseProvider,
   parseThinkingLevel,
   positiveInteger,
@@ -64,6 +66,10 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
     .option("-p, --print", m.print, false)
     .option("--tui", m.tui, false)
     .option("--cli", m.legacyCli, false)
+    .option("--web", m.web, false)
+    .option("--web-host <host>", m.webHost, "127.0.0.1")
+    .option("--web-port <port>", m.webPort, parsePort, 0)
+    .option("--no-open", m.noOpen)
     .option("--provider <provider>", m.provider, parseProvider)
     .option("--model <model-id>", m.model)
     .option("--resume [session-id]", m.resume)
@@ -78,11 +84,15 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       if (!isLanguage(value)) throw new Error(i18n.messages.language.invalid(value));
       return value;
     })
-    .action(async (prompt: string | undefined, options: AgentCommandOptions) => {
+    .action(async (prompt: string | undefined, options: AgentCommandOptions, invoked: Command) => {
+      const explicitWebOption = ["webHost", "webPort", "open"].some(
+        (name) => invoked.getOptionValueSource(name) === "cli",
+      );
+      if (!options.web && explicitWebOption) throw new ConfigError(m.webOptionRequiresWeb);
       let resolved: ReturnType<typeof resolveInterfaceMode>;
       try {
         resolved = resolveInterfaceMode(
-          { tui: options.tui, cli: options.cli, print: options.print },
+          { tui: options.tui, cli: options.cli, print: options.print, web: options.web === true },
           detectTuiCapabilities(process.stdin, process.stdout, process.env.TERM),
         );
       } catch {
@@ -90,6 +100,7 @@ export function createCliProgram(dependencies: CliDependencies = {}): Command {
       }
       if (options.resume === true) return runAgentCommand(prompt, options, i18n);
       if (resolved.warning) process.stderr.write(`${m.tuiUnavailable}\n`);
+      if (resolved.mode === "web") return runWebCommand(prompt, options, i18n);
       if (resolved.mode !== "tui") return runAgentCommand(prompt, options, i18n);
       try {
         await runTuiCommand(prompt, options, i18n);

@@ -2,6 +2,7 @@ export interface InterfaceOptions {
   tui: boolean;
   cli: boolean;
   print: boolean;
+  web?: boolean;
 }
 
 export interface TuiCapabilities {
@@ -11,7 +12,7 @@ export interface TuiCapabilities {
   term: string | undefined;
 }
 
-export type AgentInterfaceMode = "tui" | "cli" | "print";
+export type AgentInterfaceMode = "tui" | "cli" | "print" | "web";
 export type InterfaceModeResult = {
   mode: AgentInterfaceMode;
   warning?: "tui_unavailable";
@@ -45,10 +46,10 @@ export function resolveInterfaceMode(
   options: InterfaceOptions,
   capabilities: TuiCapabilities,
 ): InterfaceModeResult {
-  if (options.tui && options.cli)
-    throw new InterfaceModeError("--tui and --cli are mutually exclusive");
-  if (options.tui && options.print)
-    throw new InterfaceModeError("--tui and --print are mutually exclusive");
+  const selected = [options.tui, options.cli, options.print, options.web].filter(Boolean).length;
+  if (selected > 1)
+    throw new InterfaceModeError("--web, --tui, --cli, and --print are mutually exclusive");
+  if (options.web) return { mode: "web" };
   if (options.print) return { mode: "print" };
   if (options.cli) return { mode: "cli" };
   if (!options.tui) return { mode: "cli" };

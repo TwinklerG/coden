@@ -59,7 +59,7 @@ describe("REPL input helpers", () => {
 });
 
 describe("CLI exit codes", () => {
-  it("advertises and validates TUI/CLI modes", () => {
+  it("advertises and validates TUI/CLI/Web modes", () => {
     const help = spawnSync("bun", [cli, "--help"], {
       encoding: "utf8",
       env: baseEnv,
@@ -69,6 +69,10 @@ describe("CLI exit codes", () => {
     expect(help.stdout).toContain("--tui");
     expect(help.stdout).toContain("--cli");
     expect(help.stdout).toContain("--thinking <level>");
+    expect(help.stdout).toContain("--web");
+    expect(help.stdout).toContain("--web-host <host>");
+    expect(help.stdout).toContain("--web-port <port>");
+    expect(help.stdout).toContain("--no-open");
 
     const conflict = spawnSync("bun", [cli, "--tui", "--cli"], {
       encoding: "utf8",
@@ -77,6 +81,21 @@ describe("CLI exit codes", () => {
     });
     expect(conflict.status).toBe(2);
     expect(conflict.stderr).toContain("不能");
+
+    const webConflict = spawnSync("bun", [cli, "--web", "--cli"], {
+      encoding: "utf8",
+      env: baseEnv,
+      timeout: 30_000,
+    });
+    expect(webConflict.status).toBe(2);
+
+    const orphanOption = spawnSync("bun", [cli, "--no-open"], {
+      encoding: "utf8",
+      env: baseEnv,
+      timeout: 30_000,
+    });
+    expect(orphanOption.status).toBe(2);
+    expect(orphanOption.stderr).toContain("--web");
   });
 
   it("rejects an invalid --thinking value before execution", () => {

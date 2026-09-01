@@ -14,7 +14,7 @@ describe("interface mode", () => {
     });
   });
 
-  it("preserves explicit TUI, CLI, and print modes", () => {
+  it("preserves explicit TUI, CLI, print, and Web modes", () => {
     expect(resolveInterfaceMode({ tui: true, cli: false, print: false }, tty)).toEqual({
       mode: "tui",
     });
@@ -23,6 +23,9 @@ describe("interface mode", () => {
     });
     expect(resolveInterfaceMode({ tui: false, cli: false, print: true }, tty)).toEqual({
       mode: "print",
+    });
+    expect(resolveInterfaceMode({ tui: false, cli: false, print: false, web: true }, tty)).toEqual({
+      mode: "web",
     });
   });
 
@@ -42,6 +45,9 @@ describe("interface mode", () => {
     expect(() => resolveInterfaceMode({ tui: true, cli: false, print: true }, tty)).toThrow(
       /mutually exclusive/,
     );
+    expect(() =>
+      resolveInterfaceMode({ tui: false, cli: true, print: false, web: true }, tty),
+    ).toThrow(/mutually exclusive/);
   });
 
   it("requires raw mode and a useful terminal", () => {

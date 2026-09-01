@@ -44,6 +44,10 @@ export interface AgentCommandOptions {
   print: boolean;
   tui: boolean;
   cli: boolean;
+  web?: boolean;
+  webHost?: string;
+  webPort?: number;
+  open?: boolean;
   lang?: Language;
   thinking?: ThinkingLevel;
 }
@@ -299,6 +303,13 @@ export function positiveInteger(value: string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1)
     throw new InvalidArgumentError("must be a positive integer");
+  return parsed;
+}
+
+export function parsePort(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535)
+    throw new InvalidArgumentError("must be an integer from 0 to 65535");
   return parsed;
 }
 
