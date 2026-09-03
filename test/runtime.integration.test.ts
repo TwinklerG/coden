@@ -11,6 +11,7 @@ import {
 } from "../src/cli/agent-command.js";
 import { TrustStore } from "../src/config/trust.js";
 import { ContextManager } from "../src/context/manager.js";
+import { DEFAULT_MAX_STEPS } from "../src/core/defaults.js";
 import { EventBus, type RuntimeEvent } from "../src/core/events.js";
 import { AgentRuntime } from "../src/core/runtime.js";
 import type { ThinkingLevel } from "../src/core/thinking.js";
@@ -58,7 +59,7 @@ async function harness(
   provider: ModelProvider,
   mode: PermissionMode = "auto",
   prompt = async () => "deny" as const,
-  maxSteps = 20,
+  maxSteps = DEFAULT_MAX_STEPS,
   contextWindow = 10_000,
   reviewer?: ApprovalReviewer,
   thinkingLevel?: ThinkingLevel,

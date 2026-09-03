@@ -7,6 +7,7 @@ import type { I18n } from "../i18n/i18n.js";
 import type { SessionStore } from "../sessions/store.js";
 import type { ToolExecutor } from "../tools/executor.js";
 import type { ToolRegistry } from "../tools/registry.js";
+import { DEFAULT_MAX_STEPS } from "./defaults.js";
 import type { EventBus } from "./events.js";
 import {
   isProviderMessageState,
@@ -58,7 +59,7 @@ export class AgentRuntime {
     private readonly hooks?: HookEngine,
     private readonly hookContext?: Omit<HookInvocationContext, "turnId" | "signal">,
   ) {
-    this.maxSteps = options.maxSteps ?? 20;
+    this.maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
     this.retries = options.retries ?? 3;
     this.retryBaseMs = options.retryBaseMs ?? 250;
     this.currentThinkingLevel = options.thinkingLevel ?? "default";

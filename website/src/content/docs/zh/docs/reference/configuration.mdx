@@ -18,7 +18,7 @@ sidebar:
   "model": "gpt-5-mini",
   "approvalModel": "gpt-5-mini",
   "approvalStrictness": "medium",
-  "maxSteps": 20,
+  "maxSteps": 80,
   "contextWindow": 128000,
   "reservedOutputTokens": 8192,
   "safetyMargin": 4096,
@@ -40,7 +40,7 @@ sidebar:
 | `model` | 非空字符串 | `gpt-5-mini` | 模型标识符 |
 | `approvalModel` | 非空字符串 | 回退 `model` | Smart Approval 审查模型 |
 | `approvalStrictness` | `"soft"` \| `"medium"` \| `"hard"` | `medium` | 审查保守度 |
-| `maxSteps` | 正整数 | `20` | 最大模型步骤数 |
+| `maxSteps` | 正整数 | `80` | 最大模型步骤数 |
 | `contextWindow` | 正整数 | `128000` | 上下文窗口 |
 | `reservedOutputTokens` | 正整数 | `8192` | 每次请求输出预算 |
 | `safetyMargin` | 非负整数 | `4096` | 输入预算安全余量 |

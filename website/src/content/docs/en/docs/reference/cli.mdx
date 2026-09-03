@@ -206,7 +206,7 @@ coden -p --auto "run the tests and report the results"
 | `--smart-approve` | `false` | LLM review for ordinary modifications, escalating to human on uncertainty |
 | `--allow-outside-workspace` | `false` | with `--auto`, allow read/write paths outside the workspace |
 | `--verbose` | `false` | show detailed runtime status |
-| `--max-steps <n>` | `20` | maximum model steps (positive integer) |
+| `--max-steps <n>` | `80` | maximum model steps (positive integer) |
 | `--thinking <level>` | config value/`default` | thinking level: `default`/`off`/`minimal`/`low`/`medium`/`high` |
 | `--plugin <path>` | `[]` | additional local TypeScript plugin or directory; repeatable |
 | `--lang <zh\|en>` | config value/`zh` | UI and agent language; this process only |
@@ -258,7 +258,7 @@ coden [prompt] [options]
 | `--smart-approve` | LLM review for ordinary modifications |
 | `--allow-outside-workspace` | with `--auto`, allow outside-workspace reads/writes |
 | `--verbose` | detailed runtime status |
-| `--max-steps <n>` | maximum model steps (default 20) |
+| `--max-steps <n>` | maximum model steps (default 80) |
 | `--thinking <level>` | `default`/`off`/`minimal`/`low`/`medium`/`high` |
 | `--plugin <path>` | local TypeScript plugin/directory (repeatable) |
 | `--lang <zh\|en>` | UI and agent language (this process only) |

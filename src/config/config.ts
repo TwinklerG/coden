@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DEFAULT_MAX_STEPS } from "../core/defaults.js";
 import { isThinkingLevel, type ThinkingLevel } from "../core/thinking.js";
 import { mergeConfiguredHooks, type ParsedCommandHook, parseHookConfig } from "../hooks/config.js";
 import type { ConfiguredCommandHook, HookScope } from "../hooks/types.js";
@@ -119,7 +120,7 @@ export async function loadConfig(
     provider: "openai",
     model: "gpt-5-mini",
     approvalStrictness: "medium",
-    maxSteps: 20,
+    maxSteps: DEFAULT_MAX_STEPS,
     contextWindow: 128000,
     reservedOutputTokens: 8192,
     safetyMargin: 4096,

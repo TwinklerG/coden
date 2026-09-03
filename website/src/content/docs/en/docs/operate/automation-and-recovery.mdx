@@ -86,7 +86,7 @@ coden -p --auto --resume "$(coden --resume | head -1 | cut -d' ' -f1)" "fix the 
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `runtime.step_limit` (`Maximum model steps (20) reached`) | exceeded `maxSteps` | split the task or raise `--max-steps` |
+| `runtime.step_limit` (`Maximum model steps (80) reached`) | exceeded `maxSteps` | split the task or raise `--max-steps` |
 | `context.exhausted` | still over budget after emergency compaction | `/new` or a fresh session; narrow the task |
 | `permission.denied` | permission refused | use a safer operation or approve manually |
 | `permission.outside_workspace_denied` | outside access under `--auto` | use `--auto --allow-outside-workspace` when truly needed |

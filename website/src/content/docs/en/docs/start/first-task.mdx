@@ -105,7 +105,7 @@ coden --resume       # session list: title, message count, last activity
 ### Boundaries and failure modes
 
 - **Permission denial**: returns `permission.denied: <tool> was not authorized` (or `permission.outside_workspace_denied`); the model receives the error and adjusts. `--auto` does not change the `deny`/`ask` semantics of `PreToolUse` hooks.
-- **Step limit**: the default `maxSteps` is 20; hitting it throws `runtime.step_limit` (`Maximum model steps (20) reached`) after the model exhausts its steps.
+- **Step limit**: the default `maxSteps` is 80; hitting it throws `runtime.step_limit` (`Maximum model steps (80) reached`) after the model exhausts its steps.
 - **Outside-workspace access**: `read`/`write`/`edit` are classified by the real path after symlink resolution; outside paths are requested as modification operations by default and denied outright under `--auto`.
 - **Cancellation**: `Ctrl+C` cancels the current task in the CLI; in the TUI, `Ctrl+C` cancels while running and exits while idle. Interrupted tool calls are repaired with `runtime.interrupted` error markers on session resume.
 - **Sessions and cost**: every effective task creates a session file and counts toward provider usage; keep task scope explicit and verifiable.

@@ -97,7 +97,7 @@ OpenAI 兼容端点：`CODEN_OPENAI_BASE_URL`。Anthropic 固定使用官方端�
 ### 如何控制用量？
 
 - `-p --auto` 单轮执行，CI 友好。
-- `--max-steps` 限制步骤数（默认 20）。
+- `--max-steps` 限制步骤数（默认 80）。
 - `--resume <id>` 恢复上下文，避免重复建立上下文。
 - 思考等级影响输出预算分配（Anthropic 预算计入 `reservedOutputTokens`）。
 

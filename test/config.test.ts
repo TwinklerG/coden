@@ -26,6 +26,18 @@ async function makeTmpConfigs(
 }
 
 describe("configuration", () => {
+  it("defaults maxSteps to 80", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));
+    const workspace = path.join(root, "workspace");
+    const configHome = path.join(root, "config");
+    await mkdir(workspace, { recursive: true });
+    await mkdir(path.join(configHome, "coden"), { recursive: true });
+    vi.stubEnv("XDG_CONFIG_HOME", configHome);
+    vi.stubEnv("XDG_DATA_HOME", path.join(root, "data"));
+
+    await expect(loadConfig(workspace)).resolves.toMatchObject({ maxSteps: 80 });
+  });
+
   it("merges defaults, user, project, environment, and CLI in order", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "coden-config-"));
     const workspace = path.join(root, "workspace");

@@ -206,7 +206,7 @@ coden -p --auto "run the tests and report the results"
 | `--smart-approve` | `false` | 普通修改由 LLM 审查，不确定转人工 |
 | `--allow-outside-workspace` | `false` | 与 `--auto` 一起允许工作区外读写路径 |
 | `--verbose` | `false` | 显示详细运行状态 |
-| `--max-steps <n>` | `20` | 最大模型步骤数（正整数） |
+| `--max-steps <n>` | `80` | 最大模型步骤数（正整数） |
 | `--thinking <level>` | 配置值/`default` | 思考等级：`default`/`off`/`minimal`/`low`/`medium`/`high` |
 | `--plugin <path>` | `[]` | 附加本地 TypeScript 插件或目录，可重复 |
 | `--lang <zh\|en>` | 配置值/`zh` | 界面与 Agent 语言，仅覆盖当前进程 |
@@ -258,7 +258,7 @@ coden [prompt] [options]
 | `--smart-approve` | LLM 审查普通修改 |
 | `--allow-outside-workspace` | 与 `--auto` 一起允许工作区外读写 |
 | `--verbose` | 详细运行状态 |
-| `--max-steps <n>` | 最大模型步骤（默认 20） |
+| `--max-steps <n>` | 最大模型步骤（默认 80） |
 | `--thinking <level>` | `default`/`off`/`minimal`/`low`/`medium`/`high` |
 | `--plugin <path>` | 本地 TypeScript 插件/目录（可重复） |
 | `--lang <zh\|en>` | 界面与 Agent 语言（仅当前进程） |

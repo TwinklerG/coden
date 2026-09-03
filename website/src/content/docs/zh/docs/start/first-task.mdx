@@ -105,7 +105,7 @@ coden --resume       # session list: title, message count, last activity
 ### 边界与失败模式
 
 - **权限拒绝**：返回 `permission.denied: <tool> was not authorized`（或 `permission.outside_workspace_denied`），模型会收到错误并调整策略；`--auto` 不改变 `PreToolUse` Hook 的 `deny`/`ask` 语义。
-- **超出步数**：默认 `maxSteps` 为 20，达到后抛出 `runtime.step_limit`（`Maximum model steps (20) reached`）；模型先耗尽步骤再报错。
+- **超出步数**：默认 `maxSteps` 为 80，达到后抛出 `runtime.step_limit`（`Maximum model steps (80) reached`）；模型先耗尽步骤再报错。
 - **工作区外访问**：`read`/`write`/`edit` 按符号链接解析后的真实路径分类；外部路径默认作为修改请求人工确认，`--auto` 下直接拒绝。
 - **取消**：CLI 中 `Ctrl+C` 取消当前任务；TUI 中运行中 `Ctrl+C` 取消、空闲时退出。被中断的工具调用在会话恢复时会以 `runtime.interrupted` 错误标记补齐。
 - **会话与费用**：每次有效任务都会创建会话文件并计入 Provider 用量；请为任务选择明确、可验证的范围。

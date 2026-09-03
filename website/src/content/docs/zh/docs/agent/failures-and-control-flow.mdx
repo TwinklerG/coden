@@ -76,7 +76,7 @@ fail-open 指：决策类 Hook 失败时**不产生决策**，权限继续走策
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| `runtime.step_limit`（`Maximum model steps (20) reached`） | 超过 `maxSteps` | 拆分任务或提高 `--max-steps` |
+| `runtime.step_limit`（`Maximum model steps (80) reached`） | 超过 `maxSteps` | 拆分任务或提高 `--max-steps` |
 | `context.exhausted` | 紧急压缩后仍超预算 | 用 `/new` 或新会话，减小单次任务范围 |
 | `permission.denied` | 权限被拒 | 换用更安全的操作或人工放行 |
 | `permission.outside_workspace_denied` | `--auto` 下访问工作区外 | 确有必要时使用 `--auto --allow-outside-workspace` |

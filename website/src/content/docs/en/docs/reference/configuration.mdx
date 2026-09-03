@@ -18,7 +18,7 @@ This page records current fields, defaults, and override rules. Configuration ex
   "model": "gpt-5-mini",
   "approvalModel": "gpt-5-mini",
   "approvalStrictness": "medium",
-  "maxSteps": 20,
+  "maxSteps": 80,
   "contextWindow": 128000,
   "reservedOutputTokens": 8192,
   "safetyMargin": 4096,
@@ -40,7 +40,7 @@ This page records current fields, defaults, and override rules. Configuration ex
 | `model` | non-empty string | `gpt-5-mini` | model identifier |
 | `approvalModel` | non-empty string | falls back to `model` | Smart Approval review model |
 | `approvalStrictness` | `"soft"` \| `"medium"` \| `"hard"` | `medium` | review conservativeness |
-| `maxSteps` | positive integer | `20` | maximum model steps |
+| `maxSteps` | positive integer | `80` | maximum model steps |
 | `contextWindow` | positive integer | `128000` | context window |
 | `reservedOutputTokens` | positive integer | `8192` | per-request output budget |
 | `safetyMargin` | non-negative integer | `4096` | input-budget safety margin |
