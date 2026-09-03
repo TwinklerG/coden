@@ -35,8 +35,10 @@ Each model request plus its tool-execution sequence forms one turn; the default 
 ## Context management
 
 - Input budget = `contextWindow − reservedOutputTokens − safetyMargin` (default 128000 − 8192 − 4096).
-- When the estimate exceeds 80% of the budget, automatic compaction keeps the most recent 3 message units and summarizes the rest deterministically; the same model then refines the summary (capped at `min(2048, reservedOutputTokens)`), falling back to the deterministic version on failure.
-- Compaction history and summaries persist in the session; `/compact` triggers it manually and `/new` clears the summary to start a fresh conversation.
+- When the estimate exceeds 80% of the budget, CodeN keeps the current interaction and the preceding complete interaction verbatim. The current session model reads all older history, including any previous compaction summary, and produces one structured handoff summary capped at `min(2048, reservedOutputTokens)`.
+- A summary is committed only when it is non-empty, contains no tool call, reduces the replaced context, and leaves the projected request within the hard input budget. A failed automatic attempt leaves history unchanged and is not repeated during the same user turn.
+- `/compact` runs the same model-driven flow immediately and reports failure explicitly. A failed emergency compaction raises `context.exhausted`; `/new` clears the summary to start a fresh conversation.
+- Semantic compaction remains lossy. Keep durable project rules and critical state in project instruction files rather than relying only on conversation history.
 
 ## Completion and failure
 

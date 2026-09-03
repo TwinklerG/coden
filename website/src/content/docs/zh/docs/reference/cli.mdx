@@ -156,7 +156,7 @@ coden -p --auto "run the tests and report the results"
 | `/skills` | 列出当前生效的 Skill（名称、描述、project/user 来源），不调用模型 |
 | `/session` | 输出当前会话 ID |
 | `/sessions` | 列出当前工作区的全部会话（按最后活动倒序） |
-| `/compact` | 立即压缩上下文（手动触发自动压缩流程，结果持久化） |
+| `/compact` | 立即请求当前模型压缩旧历史；保留最近两条相关交互，仅持久化通过校验的摘要，并明确反馈失败 |
 | `/reload` | 重新加载本地 TypeScript 插件与 npm 插件注册表，输出加载/失败/工具摘要 |
 | `/new` | 在当前会话内开始新对话（保留 system 消息，清除摘要与历史） |
 | `/lang` | 列出 `zh`、`en` 与当前语言 |

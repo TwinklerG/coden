@@ -77,10 +77,11 @@ Validation: all three must be non-negative integers; `contextWindow` and `reserv
 
 ### Automatic compaction
 
-- When the estimate exceeds **80%** of the input budget: keep the 3 most recent message units and summarize the rest deterministically (tool lines 300 chars, others 500 chars, 6000-char total cap).
-- The same model then refines the summary (output capped at `min(2048, reservedOutputTokens)`); if refinement fails the deterministic summary is kept and the main task is unaffected.
-- On a provider 413 or context-length error, **emergency compaction** keeps only the last unit; if still over after one pass, `context.exhausted` is thrown.
-- The summary, source range, and refinement are persisted to the session; `/compact` triggers it manually; `/new` clears the summary.
+- When the estimate exceeds **80%** of the input budget, CodeN keeps the current interaction and the preceding complete interaction verbatim. Tool calls and their results remain in the same interaction unit.
+- The current session model reads all older history, including any previous compaction summary, and produces one structured Markdown handoff capped at `min(2048, reservedOutputTokens)`. No deterministic summary is created before the model sees the history.
+- The handoff is committed only when it is non-empty, contains no tool call, reduces the replaced context, and leaves the projected request within the hard input budget. A failed automatic attempt leaves state unchanged and is not repeated during the same user turn.
+- On a provider 413 or context-length error, **emergency compaction** runs the same flow once; failure or a second context error throws `context.exhausted`. `/compact` reports manual failure explicitly, while `/new` clears the summary.
+- Compaction is still semantically lossy. Store durable rules and critical task state in project instruction files.
 
 ### Thinking levels
 

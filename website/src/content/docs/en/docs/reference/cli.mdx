@@ -156,7 +156,7 @@ coden -p --auto "run the tests and report the results"
 | `/skills` | lists active skills (name, description, project/user scope) without calling the model |
 | `/session` | prints the current session ID |
 | `/sessions` | lists all sessions of the current workspace (newest activity first) |
-| `/compact` | compacts context immediately (runs the automatic flow; result is persisted) |
+| `/compact` | asks the current model to compact older history immediately; preserves the latest two relevant interactions, persists only a validated summary, and reports failure explicitly |
 | `/reload` | reloads local TypeScript plugins and the npm plugin registry; prints loaded/failed/tool summary |
 | `/new` | starts a new conversation in the current session (keeps system messages; clears summary and history) |
 | `/lang` | lists `zh`, `en`, and the current language |
