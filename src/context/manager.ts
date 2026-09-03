@@ -1,6 +1,5 @@
 import type { ThinkingLevel } from "../core/thinking.js";
 import type { AgentMessage, ModelRequest, ToolDefinition } from "../core/types.js";
-import { I18n } from "../i18n/i18n.js";
 
 export interface ContextBudget {
   contextWindow: number;
@@ -10,12 +9,24 @@ export interface ContextBudget {
 export interface PreparedContext {
   messages: AgentMessage[];
   estimatedTokens: number;
-  compacted: boolean;
+  compactionPlan?: CompactionPlan;
 }
 export interface CompactionRange {
   start: number;
   end: number;
 }
+export type CompactionTrigger = "automatic" | "manual" | "emergency";
+export type CompactionValidationFailure = "empty_summary" | "inflated_summary" | "over_budget";
+export interface CompactionPlan {
+  trigger: CompactionTrigger;
+  messagesToCompact: AgentMessage[];
+  retainedMessages: AgentMessage[];
+  sourceRange: CompactionRange;
+  replacedTokens: number;
+}
+export type CompactionCommitResult =
+  | { ok: true; prepared: PreparedContext }
+  | { ok: false; reason: CompactionValidationFailure };
 
 interface MessageUnit {
   messages: AgentMessage[];
@@ -46,8 +57,8 @@ export class ContextManager {
   constructor(
     readonly budget: ContextBudget,
     private readonly threshold = 0.8,
-    private readonly i18n: I18n = new I18n("en"),
   ) {}
+
   inputBudget(): number {
     return this.budget.contextWindow - this.budget.reservedOutputTokens - this.budget.safetyMargin;
   }
@@ -55,72 +66,80 @@ export class ContextManager {
   prepare(messages: AgentMessage[], tools: ToolDefinition[]): PreparedContext {
     const { systems, remainder, offset } = splitLeadingSystems(messages);
     const units = buildMessageUnits(remainder, offset);
-    const toolTokens = this.estimator.estimateTools(tools);
-    const limit = this.inputBudget();
-    let retained = this.summary
+    const activeUnits = this.summary
       ? units.filter((unit) => unit.end > this.compactedThrough)
-      : [...units];
-    const recentCount = Math.min(3, retained.length);
-    let projected = this.project(systems, retained);
-    let estimated = this.estimator.estimateMessages(projected) + toolTokens;
-    let compacted = false;
-
-    if (estimated > limit * this.threshold && retained.length > recentCount) {
-      const old = retained.slice(0, -recentCount);
-      retained = retained.slice(-recentCount);
-      const oldMessages = [
-        ...(this.summary ? [this.summary] : []),
-        ...old.flatMap((unit) => unit.messages),
-      ];
-      this.compactionRange = { start: old[0]?.start ?? 1, end: old.at(-1)?.end ?? 1 };
-      this.compactedThrough = this.compactionRange.end;
-      this.summary = {
-        role: "system",
-        content: `${this.i18n.messages.context.compactTitle}\n${summarizeDeterministically(oldMessages, this.i18n)}`,
-      };
-      projected = this.project(systems, retained);
-      estimated = this.estimator.estimateMessages(projected) + toolTokens;
-      compacted = true;
-    }
-
-    while (estimated > limit && retained.length > 1) {
-      retained = retained.slice(1);
-      projected = this.project(systems, retained);
-      estimated = this.estimator.estimateMessages(projected) + toolTokens;
-      compacted = true;
-    }
-    return { messages: projected, estimatedTokens: estimated, compacted };
+      : units;
+    const projected = this.project(
+      systems,
+      activeUnits.flatMap((unit) => unit.messages),
+    );
+    const estimatedTokens =
+      this.estimator.estimateMessages(projected) + this.estimator.estimateTools(tools);
+    const plan =
+      estimatedTokens > this.inputBudget() * this.threshold
+        ? this.planCompaction(messages, "automatic")
+        : undefined;
+    return {
+      messages: projected,
+      estimatedTokens,
+      ...(plan ? { compactionPlan: plan } : {}),
+    };
   }
 
-  forceCompact(messages: AgentMessage[], tools: ToolDefinition[]): PreparedContext {
-    const { systems, remainder, offset } = splitLeadingSystems(messages);
+  planCompaction(messages: AgentMessage[], trigger: CompactionTrigger): CompactionPlan | undefined {
+    const { remainder, offset } = splitLeadingSystems(messages);
     const units = buildMessageUnits(remainder, offset);
     const unsummarized = this.summary
       ? units.filter((unit) => unit.end > this.compactedThrough)
       : units;
-    const retained = unsummarized.slice(-1);
-    const old = unsummarized.slice(0, -1);
-    const oldMessages = [
+    if (unsummarized.length <= 2) return undefined;
+    const old = unsummarized.slice(0, -2);
+    const retained = unsummarized.slice(-2);
+    const messagesToCompact = [
       ...(this.summary ? [this.summary] : []),
       ...old.flatMap((unit) => unit.messages),
     ];
-    if (old.length) {
-      this.compactionRange = { start: old[0]?.start ?? 1, end: old.at(-1)?.end ?? 1 };
-      this.compactedThrough = this.compactionRange.end;
-    }
-    this.summary = {
-      role: "system",
-      content: `${this.i18n.messages.context.emergencyTitle}\n${summarizeDeterministically(oldMessages, this.i18n)}`,
+    const sourceRange = {
+      start: this.compactionRange?.start ?? old[0]?.start ?? offset,
+      end: old.at(-1)?.end ?? offset,
     };
-    const projected = this.project(systems, retained);
-    const estimated =
-      this.estimator.estimateMessages(projected) + this.estimator.estimateTools(tools);
-    return { messages: projected, estimatedTokens: estimated, compacted: true };
+    return {
+      trigger,
+      messagesToCompact,
+      retainedMessages: retained.flatMap((unit) => unit.messages),
+      sourceRange,
+      replacedTokens: this.estimator.estimateMessages(messagesToCompact),
+    };
   }
 
-  setSummary(content: string, compactedThrough = 0): void {
+  commitCompaction(
+    plan: CompactionPlan,
+    summary: string,
+    systems: AgentMessage[],
+    tools: ToolDefinition[],
+  ): CompactionCommitResult {
+    if (!summary.trim()) return { ok: false, reason: "empty_summary" };
+    const summaryTokens = this.estimator.estimateMessages([{ role: "system", content: summary }]);
+    if (summaryTokens >= plan.replacedTokens) return { ok: false, reason: "inflated_summary" };
+    const messages = [
+      ...systems,
+      { role: "system" as const, content: summary },
+      ...plan.retainedMessages,
+    ];
+    const estimatedTokens =
+      this.estimator.estimateMessages(messages) + this.estimator.estimateTools(tools);
+    if (estimatedTokens > this.inputBudget()) return { ok: false, reason: "over_budget" };
+
+    this.summary = { role: "system", content: summary };
+    this.compactionRange = plan.sourceRange;
+    this.compactedThrough = plan.sourceRange.end;
+    return { ok: true, prepared: { messages, estimatedTokens } };
+  }
+
+  setSummary(content: string, range?: CompactionRange): void {
     this.summary = { role: "system", content };
-    this.compactedThrough = compactedThrough;
+    this.compactionRange = range;
+    this.compactedThrough = range?.end ?? 0;
   }
   getSummary(): string | undefined {
     return this.summary?.content;
@@ -134,12 +153,8 @@ export class ContextManager {
     this.compactedThrough = 0;
   }
 
-  private project(systems: AgentMessage[], units: MessageUnit[]): AgentMessage[] {
-    return [
-      ...systems,
-      ...(this.summary ? [this.summary] : []),
-      ...units.flatMap((unit) => unit.messages),
-    ];
+  private project(systems: AgentMessage[], retained: AgentMessage[]): AgentMessage[] {
+    return [...systems, ...(this.summary ? [this.summary] : []), ...retained];
   }
 }
 
@@ -165,7 +180,8 @@ function buildMessageUnits(messages: AgentMessage[], offset = 0): MessageUnit[] 
     const message = messages[index];
     if (!message) continue;
     const sourceIndex = index + offset;
-    if (message.role === "user" || !current) {
+    const beginsInteraction = message.role === "user" && message.source !== "hook";
+    if (beginsInteraction || !current) {
       if (current) units.push(current);
       current = { messages: [message], start: sourceIndex, end: sourceIndex };
     } else {
@@ -175,19 +191,6 @@ function buildMessageUnits(messages: AgentMessage[], offset = 0): MessageUnit[] 
   }
   if (current) units.push(current);
   return units;
-}
-
-function summarizeDeterministically(messages: AgentMessage[], i18n: I18n): string {
-  const lines = messages.map((message) => {
-    if (message.role === "tool")
-      return i18n.messages.context.toolLine(
-        message.name,
-        message.isError,
-        message.content.slice(0, 300),
-      );
-    return `${message.role}: ${message.content.slice(0, 500)}`;
-  });
-  return lines.join("\n").slice(0, 6000);
 }
 
 export function toModelRequest(

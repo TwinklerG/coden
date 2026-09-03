@@ -541,35 +541,222 @@ describe("AgentRuntime integration", () => {
     expect(h.observed).toContain("provider.retry");
     expect(out.value).toBe("final answer\n");
   });
-  it("uses the current model for proactive compaction", async () => {
+  it("sends complete old history to the current model for automatic compaction", async () => {
+    const long = "detail-".repeat(400);
+    const provider = new ScriptedProvider([
+      scriptedText("one"),
+      scriptedText("two"),
+      (request) => {
+        expect(request.model).toBe("scripted");
+        expect(request.tools).toEqual([]);
+        expect(request.thinkingLevel).toBeUndefined();
+        expect(JSON.stringify(request.messages)).toContain(long);
+        expect(JSON.stringify(request.messages)).toContain("one");
+        return scriptedText("- Goal: preserve every important detail");
+      },
+      (request) => {
+        expect(JSON.stringify(request.messages)).toContain("Compacted conversation summary:");
+        expect(JSON.stringify(request.messages)).toContain("second");
+        expect(JSON.stringify(request.messages)).toContain("third");
+        return scriptedText("three");
+      },
+    ]);
+    const h = await harness(provider, "auto", async () => "deny", 20, 1800);
+
+    await h.runtime.run(`first ${long}`);
+    await h.runtime.run("second");
+    expect((await h.runtime.run("third")).answer).toBe("three");
+    expect(h.observed).toContain("context.compaction_started");
+    expect(h.observed).toContain("context.compacted");
+  });
+
+  it("keeps original context after automatic failure and retries next turn only", async () => {
+    let compactionCalls = 0;
+    const long = "detail-".repeat(400);
+    const provider = new ScriptedProvider([
+      scriptedText("one"),
+      scriptedText("two"),
+      (request) => {
+        expect(request.tools).toEqual([]);
+        compactionCalls++;
+        return scriptedText("");
+      },
+      scriptedTool("r", "read", { path: "file.txt" }),
+      scriptedText("done"),
+      (request) => {
+        expect(request.tools).toEqual([]);
+        compactionCalls++;
+        return scriptedText("- Goal: recovered on next turn");
+      },
+      scriptedText("next"),
+    ]);
+    const h = await harness(provider, "auto", async () => "deny", 20, 1800);
+    await writeFile(path.join(h.workspace, "file.txt"), "body", "utf8");
+    await h.runtime.run(`first ${long}`);
+    await h.runtime.run("second");
+
+    expect((await h.runtime.run("inspect file")).answer).toBe("done");
+    expect(compactionCalls).toBe(1);
+    expect(h.observed).toContain("context.compaction_failed");
+    expect(await readFile(h.session.sessionPath, "utf8")).not.toContain(
+      '"type":"context.compacted"',
+    );
+
+    expect((await h.runtime.run("continue")).answer).toBe("next");
+    expect(compactionCalls).toBe(2);
+    expect((await h.session.recover()).summary).toContain("recovered on next turn");
+  });
+
+  it("manually compacts through the current model and persists only success", async () => {
     const provider = new ScriptedProvider([
       scriptedText("one"),
       scriptedText("two"),
       scriptedText("three"),
-      scriptedText("Goals and decisions preserved."),
-      scriptedText("four"),
+      (request) => {
+        expect(request.tools).toEqual([]);
+        expect(JSON.stringify(request.messages)).toContain("one");
+        return scriptedText("- Goal: continue the task");
+      },
     ]);
-    const h = await harness(provider, "auto", async () => "deny", 20, 900);
+    const h = await harness(provider);
     await h.runtime.run("first");
     await h.runtime.run("second");
     await h.runtime.run("third");
-    expect((await h.runtime.run("fourth")).answer).toBe("four");
-    expect(h.observed).toContain("context.compaction_started");
-    expect(provider.requests.at(-2)?.tools).toEqual([]);
+
+    await expect(h.runtime.compact()).resolves.toMatchObject({ status: "compacted" });
+    expect((await h.session.recover()).summary).toContain("continue the task");
   });
 
-  it("emergency-compacts once before reporting context exhaustion", async () => {
+  it("reports manual compaction failure without persisting it", async () => {
     const provider = new ScriptedProvider([
+      scriptedText("one"),
+      scriptedText("two"),
+      scriptedText("three"),
+      scriptedText(""),
+    ]);
+    const h = await harness(provider);
+    await h.runtime.run("first");
+    await h.runtime.run("second");
+    await h.runtime.run("third");
+
+    await expect(h.runtime.compact()).resolves.toEqual({
+      status: "failed",
+      reason: "empty_summary",
+    });
+    expect((await h.session.recover()).summary).toBeUndefined();
+  });
+
+  it.each([
+    ["tool_call", () => scriptedTool("unexpected", "read", { path: "x" })],
+    ["provider_error", () => Object.assign(new Error("compressor unavailable"), { status: 500 })],
+    ["inflated_summary", () => scriptedText("z".repeat(20_000))],
+  ] as const)("rejects manual %s results without committing", async (reason, failureStep) => {
+    const provider = new ScriptedProvider([
+      scriptedText("one"),
+      scriptedText("two"),
+      scriptedText("three"),
+      failureStep(),
+    ]);
+    const h = await harness(provider);
+    await h.runtime.run("first");
+    await h.runtime.run("second");
+    await h.runtime.run("third");
+
+    await expect(h.runtime.compact()).resolves.toEqual({ status: "failed", reason });
+    expect(h.observed).toContain("context.compaction_failed");
+    expect((await h.session.recover()).summary).toBeUndefined();
+  });
+
+  it("does not commit a cancelled manual compaction", async () => {
+    const provider = new ScriptedProvider([
+      scriptedText("one"),
+      scriptedText("two"),
+      scriptedText("three"),
+      scriptedText("unused"),
+    ]);
+    const h = await harness(provider);
+    await h.runtime.run("first");
+    await h.runtime.run("second");
+    await h.runtime.run("third");
+    const controller = new AbortController();
+    controller.abort(new Error("cancelled"));
+
+    await expect(h.runtime.compact(controller.signal)).rejects.toThrow("cancelled");
+    expect(provider.requests).toHaveLength(3);
+    expect((await h.session.recover()).summary).toBeUndefined();
+  });
+
+  it("does not call the model when manual compaction has insufficient history", async () => {
+    const provider = new ScriptedProvider([scriptedText("one")]);
+    const h = await harness(provider);
+    await h.runtime.run("first");
+
+    await expect(h.runtime.compact()).resolves.toEqual({
+      status: "failed",
+      reason: "insufficient_history",
+    });
+    expect(provider.requests).toHaveLength(1);
+  });
+
+  it("model-compacts once before an emergency retry succeeds", async () => {
+    const provider = new ScriptedProvider([
+      scriptedText("one"),
+      scriptedText("two"),
+      scriptedText("three"),
       Object.assign(new Error("context length exceeded"), { status: 400 }),
+      (request) => {
+        expect(request.tools).toEqual([]);
+        expect(request.thinkingLevel).toBeUndefined();
+        return scriptedText("- Goal: emergency handoff");
+      },
+      scriptedText("recovered"),
+    ]);
+    const h = await harness(provider);
+    await h.runtime.run("first");
+    await h.runtime.run("second");
+    await h.runtime.run("third");
+
+    expect((await h.runtime.run("large task")).answer).toBe("recovered");
+    expect(h.observed.filter((type) => type === "context.compacted")).toHaveLength(1);
+    expect((await h.session.recover()).summary).toContain("emergency handoff");
+  });
+
+  it("reports context exhaustion when emergency model compaction fails", async () => {
+    const provider = new ScriptedProvider([
+      scriptedText("one"),
+      scriptedText("two"),
+      scriptedText("three"),
+      Object.assign(new Error("context length exceeded"), { status: 400 }),
+      scriptedText(""),
+    ]);
+    const h = await harness(provider);
+    await h.runtime.run("first");
+    await h.runtime.run("second");
+    await h.runtime.run("third");
+
+    await expect(h.runtime.run("large task")).rejects.toMatchObject({ code: "context.exhausted" });
+    expect(h.observed).toContain("context.compaction_failed");
+    expect(h.observed).not.toContain("context.compacted");
+    expect((await h.session.recover()).summary).toBeUndefined();
+  });
+
+  it("does not emergency-compact twice when the retried request is still too long", async () => {
+    const provider = new ScriptedProvider([
+      scriptedText("one"),
+      scriptedText("two"),
+      scriptedText("three"),
+      Object.assign(new Error("context length exceeded"), { status: 400 }),
+      scriptedText("- Goal: emergency handoff"),
       Object.assign(new Error("context length exceeded"), { status: 400 }),
     ]);
     const h = await harness(provider);
-    await expect(h.runtime.run("large task")).rejects.toMatchObject({
-      code: "context.exhausted",
-    });
+    await h.runtime.run("first");
+    await h.runtime.run("second");
+    await h.runtime.run("third");
+
+    await expect(h.runtime.run("large task")).rejects.toMatchObject({ code: "context.exhausted" });
+    expect(h.observed.filter((type) => type === "context.compaction_started")).toHaveLength(1);
     expect(h.observed.filter((type) => type === "context.compacted")).toHaveLength(1);
-    const recovered = await h.session.recover();
-    expect(recovered.messages).toContainEqual({ role: "user", content: "large task" });
   });
 
   it("fails deterministically at the model step limit", async () => {
@@ -761,15 +948,13 @@ describe("AgentRuntime integration", () => {
     const provider = new ScriptedProvider([
       scriptedText("one"),
       scriptedText("two"),
-      scriptedText("three"),
       scriptedText("Goals and decisions preserved."),
-      scriptedText("four"),
+      scriptedText("three"),
     ]);
-    const h = await harness(provider, "auto", async () => "deny", 20, 900, undefined, "high");
-    await h.runtime.run("first");
+    const h = await harness(provider, "auto", async () => "deny", 20, 1800, undefined, "high");
+    await h.runtime.run(`first ${"detail-".repeat(400)}`);
     await h.runtime.run("second");
     await h.runtime.run("third");
-    await h.runtime.run("fourth");
     const compaction = provider.requests.find((request) => request.tools.length === 0);
     expect(compaction).toBeDefined();
     expect(compaction?.thinkingLevel).toBeUndefined();

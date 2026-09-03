@@ -146,14 +146,14 @@ export async function createAgentApplication(
   const session = new SessionStore(config.dataDir, workspace, resumedId);
   let initialMessages: AgentMessage[] | undefined;
   let recoveredSummary: string | undefined;
-  let recoveredCompactionEnd = 0;
+  let recoveredCompactionRange: { start: number; end: number } | undefined;
   let recoveredThinkingLevel: ThinkingLevel | undefined;
   const startupWarnings: string[] = [];
   if (typeof command.resume === "string") {
     const recovered = await session.recover();
     initialMessages = recovered.messages;
     recoveredSummary = recovered.summary;
-    recoveredCompactionEnd = recovered.compactionRange?.end ?? 0;
+    recoveredCompactionRange = recovered.compactionRange;
     recoveredThinkingLevel = recovered.thinkingLevel;
     startupWarnings.push(...recovered.warnings);
   }
@@ -311,9 +311,8 @@ export async function createAgentApplication(
       safetyMargin: config.safetyMargin,
     },
     0.8,
-    i18n,
   );
-  if (recoveredSummary) contextManager.setSummary(recoveredSummary, recoveredCompactionEnd);
+  if (recoveredSummary) contextManager.setSummary(recoveredSummary, recoveredCompactionRange);
   const runtime = new AgentRuntime(
     provider,
     registry,

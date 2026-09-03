@@ -10,94 +10,166 @@ import { JSONLTraceWriter } from "../src/observability/trace.js";
 import { LlmApprovalReviewer } from "../src/permissions/reviewer.js";
 import { ScriptedProvider, scriptedText } from "../src/providers/scripted.js";
 import { SessionStore } from "../src/sessions/store.js";
-import { builtinTools } from "../src/tools/builtin/index.js";
+
+function completedTurn(index: number, body = "x".repeat(700)): AgentMessage[] {
+  return [
+    { role: "user", content: `request-${index} ${body}` },
+    {
+      role: "assistant",
+      content: "",
+      toolCalls: [
+        { callId: `${index}-a`, name: "read", input: { path: "a" } },
+        { callId: `${index}-b`, name: "read", input: { path: "b" } },
+      ],
+    },
+    { role: "tool", callId: `${index}-a`, name: "read", content: body, isError: false },
+    { role: "tool", callId: `${index}-b`, name: "read", content: "b", isError: false },
+    { role: "assistant", content: `answer-${index}`, toolCalls: [] },
+  ];
+}
 
 describe("context and sessions", () => {
-  it("estimates, truncates, and compacts old messages", () => {
+  it("estimates and truncates tool output", () => {
     expect(new TokenEstimator().estimateText("1234567")).toBe(2);
     const truncated = truncateOutput("x".repeat(1000), 200);
     expect(truncated.length).toBeLessThanOrEqual(200);
     expect(truncated).toContain("omitted");
+  });
+
+  it("plans model compaction without truncating or mutating old history", () => {
+    const long = "complete-tool-output-1 ".repeat(40);
     const messages: AgentMessage[] = [
       { role: "system", content: "system" },
-      ...Array.from(
-        { length: 14 },
-        (_, i): AgentMessage => ({ role: "user", content: `${i} ${"x".repeat(200)}` }),
-      ),
+      ...completedTurn(1, long),
+      ...completedTurn(2),
+      ...completedTurn(3),
+      { role: "user", content: "current request" },
     ];
     const manager = new ContextManager({
-      contextWindow: 900,
+      contextWindow: 1800,
       reservedOutputTokens: 100,
       safetyMargin: 100,
     });
-    const prepared = manager.prepare(messages, builtinTools());
-    expect(prepared.compacted).toBe(true);
-    expect(prepared.messages.length).toBeLessThan(messages.length);
-  });
-  it("keeps multi-tool call/result groups intact while compacting", () => {
-    const messages: AgentMessage[] = [{ role: "system", content: "system" }];
-    for (let turn = 0; turn < 6; turn++) {
-      messages.push(
-        { role: "user", content: `turn ${turn} ${"x".repeat(200)}` },
-        {
-          role: "assistant",
-          content: "",
-          toolCalls: [
-            { callId: `${turn}-a`, name: "read", input: { path: "a" } },
-            { callId: `${turn}-b`, name: "read", input: { path: "b" } },
-          ],
-        },
-        { role: "tool", callId: `${turn}-a`, name: "read", content: "a", isError: false },
-        { role: "tool", callId: `${turn}-b`, name: "read", content: "b", isError: false },
-        { role: "assistant", content: `done ${turn}`, toolCalls: [] },
-      );
-    }
-    const prepared = new ContextManager({
-      contextWindow: 1200,
-      reservedOutputTokens: 100,
-      safetyMargin: 100,
-    }).prepare(messages, builtinTools());
-    const calls = new Set(
-      prepared.messages.flatMap((message) =>
-        message.role === "assistant" ? message.toolCalls.map((call) => call.callId) : [],
-      ),
-    );
-    const results = new Set(
-      prepared.messages.flatMap((message) => (message.role === "tool" ? [message.callId] : [])),
-    );
-    expect(calls).toEqual(results);
+
+    const prepared = manager.prepare(messages, []);
+
+    expect(prepared.compactionPlan).toBeDefined();
+    expect(JSON.stringify(prepared.compactionPlan?.messagesToCompact)).toContain(long);
+    expect(prepared.compactionPlan?.retainedMessages).toEqual([
+      ...completedTurn(3),
+      { role: "user", content: "current request" },
+    ]);
+    expect(manager.getSummary()).toBeUndefined();
+    expect(manager.getCompactionRange()).toBeUndefined();
   });
 
-  it("keeps tool call/result groups intact during emergency compaction", () => {
-    const messages: AgentMessage[] = [{ role: "system", content: "system" }];
-    for (let turn = 0; turn < 8; turn++) {
-      messages.push(
-        { role: "user", content: `turn ${turn}` },
-        {
-          role: "assistant",
-          content: "",
-          toolCalls: [{ callId: `c${turn}`, name: "read", input: { path: "x" } }],
-        },
-        { role: "tool", callId: `c${turn}`, name: "read", content: "r", isError: false },
-      );
+  it("keeps hook user messages inside their real user interaction", () => {
+    const messages: AgentMessage[] = [
+      { role: "system", content: "system" },
+      ...completedTurn(1),
+      ...completedTurn(2),
+      { role: "user", content: "current" },
+      { role: "user", source: "hook", content: "hook context" },
+    ];
+    const manager = new ContextManager({
+      contextWindow: 700,
+      reservedOutputTokens: 100,
+      safetyMargin: 100,
+    });
+
+    const plan = manager.planCompaction(messages, "manual");
+
+    expect(plan?.retainedMessages).toEqual([
+      ...completedTurn(2),
+      { role: "user", content: "current" },
+      { role: "user", source: "hook", content: "hook context" },
+    ]);
+  });
+
+  it("commits valid summaries atomically and rejects invalid summaries", () => {
+    const messages: AgentMessage[] = [
+      { role: "system", content: "system" },
+      ...completedTurn(1),
+      ...completedTurn(2),
+      ...completedTurn(3),
+    ];
+    const manager = new ContextManager({
+      contextWindow: 2400,
+      reservedOutputTokens: 100,
+      safetyMargin: 100,
+    });
+    const plan = manager.planCompaction(messages, "manual");
+    if (!plan) throw new Error("expected compaction plan");
+
+    expect(manager.commitCompaction(plan, "", messages.slice(0, 1), [])).toEqual({
+      ok: false,
+      reason: "empty_summary",
+    });
+    expect(manager.commitCompaction(plan, "z".repeat(20_000), messages.slice(0, 1), [])).toEqual({
+      ok: false,
+      reason: "inflated_summary",
+    });
+    expect(manager.getSummary()).toBeUndefined();
+
+    const summary = "Compacted conversation summary:\n- Goal: finish task";
+    const result = manager.commitCompaction(plan, summary, messages.slice(0, 1), []);
+    expect(result.ok).toBe(true);
+    expect(manager.getSummary()).toBe(summary);
+    expect(manager.getCompactionRange()).toEqual(plan.sourceRange);
+    if (result.ok) {
+      expect(result.prepared.messages).toEqual([
+        { role: "system", content: "system" },
+        { role: "system", content: summary },
+        ...plan.retainedMessages,
+      ]);
     }
+  });
+
+  it("rejects a summary whose projected context remains over budget", () => {
+    const messages: AgentMessage[] = [
+      { role: "system", content: "system" },
+      ...completedTurn(1),
+      ...completedTurn(2),
+      ...completedTurn(3),
+    ];
     const manager = new ContextManager({
       contextWindow: 500,
       reservedOutputTokens: 100,
       safetyMargin: 100,
     });
-    const prepared = manager.forceCompact(messages, builtinTools());
-    const calls = new Set(
-      prepared.messages.flatMap((message) =>
-        message.role === "assistant" ? message.toolCalls.map((call) => call.callId) : [],
+    const plan = manager.planCompaction(messages, "emergency");
+    if (!plan) throw new Error("expected compaction plan");
+
+    expect(
+      manager.commitCompaction(
+        plan,
+        "Compacted conversation summary:\nshort",
+        [{ role: "system", content: "s".repeat(2000) }],
+        [],
       ),
-    );
-    const results = new Set(
-      prepared.messages.flatMap((message) => (message.role === "tool" ? [message.callId] : [])),
-    );
-    expect(calls).toEqual(results);
-    expect(prepared.messages.at(-1)).toMatchObject({ role: "tool" });
-    expect(manager.getSummary()).toContain("Emergency compacted");
+    ).toEqual({ ok: false, reason: "over_budget" });
+    expect(manager.getSummary()).toBeUndefined();
+  });
+
+  it("merges an existing summary and extends its source range", () => {
+    const manager = new ContextManager({
+      contextWindow: 3000,
+      reservedOutputTokens: 100,
+      safetyMargin: 100,
+    });
+    manager.setSummary("old summary", { start: 1, end: 5 });
+    const messages: AgentMessage[] = [
+      { role: "system", content: "system" },
+      ...completedTurn(1),
+      ...completedTurn(2),
+      ...completedTurn(3),
+      ...completedTurn(4),
+    ];
+
+    const plan = manager.planCompaction(messages, "manual");
+
+    expect(plan?.sourceRange.start).toBe(1);
+    expect(plan?.messagesToCompact[0]).toEqual({ role: "system", content: "old summary" });
   });
 
   it("recovers messages and ignores a damaged final line", async () => {

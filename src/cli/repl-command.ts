@@ -137,9 +137,13 @@ ${formatThinkingStatus(status, i18n)}`,
       };
     case "/session":
       return { type: "output", text: `${dependencies.session.sessionId}\n` };
-    case "/compact":
-      await dependencies.runtime.compact();
-      return { type: "output", text: i18n.messages.repl.compacted };
+    case "/compact": {
+      const result = await dependencies.runtime.compact();
+      if (result.status === "compacted")
+        return { type: "output", text: i18n.messages.repl.compacted };
+      const reason = i18n.messages.repl.compactFailureReasons[result.reason];
+      return { type: "output", text: i18n.messages.repl.compactFailed(reason) };
+    }
     case "/new":
       await dependencies.runtime.reset();
       return { type: "output", text: i18n.messages.repl.newConversation };

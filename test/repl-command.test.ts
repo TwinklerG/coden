@@ -1,11 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { executeReplCommand, formatThinkingStatus } from "../src/cli/repl-command.js";
+import type { ManualCompactionResult } from "../src/core/runtime.js";
 import { I18n } from "../src/i18n/i18n.js";
 import { SkillRegistry } from "../src/skills/registry.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 
 function dependencies() {
-  const runtime = { compact: vi.fn(async () => {}), reset: vi.fn(async () => {}) };
+  const runtime = {
+    compact: vi.fn(
+      async (): Promise<ManualCompactionResult> => ({
+        status: "compacted",
+        estimatedTokens: 10,
+      }),
+    ),
+    reset: vi.fn(async () => {}),
+  };
   const reload = vi.fn(async () => ({ registry: new ToolRegistry(), loaded: [], failed: [] }));
   const switchLanguage = vi.fn(async (language: "zh" | "en") => i18n.setLanguage(language));
   const getThinkingStatus = vi.fn(() => ({
@@ -64,6 +73,19 @@ describe("shared REPL commands", () => {
     expect(deps.runtime.compact).toHaveBeenCalledOnce();
     expect(deps.runtime.reset).toHaveBeenCalledOnce();
     expect(deps.reload).toHaveBeenCalledOnce();
+  });
+
+  it("reports manual compaction failure instead of success", async () => {
+    const deps = dependencies();
+    deps.runtime.compact.mockResolvedValueOnce({
+      status: "failed" as const,
+      reason: "insufficient_history" as const,
+    });
+
+    await expect(executeReplCommand("/compact", deps.value)).resolves.toEqual({
+      type: "output",
+      text: "Context was not compacted: insufficient history.\n",
+    });
   });
 
   it("handles language and exit commands", async () => {
