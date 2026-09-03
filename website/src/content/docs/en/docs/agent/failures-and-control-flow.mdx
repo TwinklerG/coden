@@ -100,7 +100,7 @@ Fail-open means: decision hooks that fail produce **no decision**, and permissio
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| config parse failure: `unsupported hook event`/`invalid matcher`/`timeout` range | illegal hook config | see [Matchers](/coden/en/docs/extend/skills-and-hooks/) and [Execution](/coden/en/docs/agent/failures-and-control-flow/) |
+| config parse failure: `unsupported hook event`/`invalid matcher`/`timeout` range | illegal hook config | see [Matchers](/coden/en/docs/extend/hooks/) and [Execution](/coden/en/docs/agent/failures-and-control-flow/) |
 | `X config exceeds 64 commands` | too many hooks for one event | trim the hook list |
 | hook silently ineffective | non-zero exit, timeout, output over limit, invalid JSON | `--verbose`; check the stdin/stdout protocol |
 

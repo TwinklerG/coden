@@ -1,0 +1,110 @@
+---
+title: Skills
+description: Create, install, and debug method knowledge loaded on demand.
+sidebar:
+  order: 360
+---
+
+A Skill is method guidance loaded into model context on demand. Its effect depends on the model following it rather than runtime enforcement. Skills are suitable for reusable workflows, rules, and supporting resources, but are not permission policy.
+
+## Create a Skill
+
+### Minimal structure
+
+```text
+<workspace>/skills/pdf-processing/
+└── SKILL.md
+```
+
+`SKILL.md` content:
+
+```markdown
+---
+name: pdf-processing
+description: Use when reading or modifying PDF documents.
+---
+
+# PDF workflow
+
+Read the relevant files before changing them.
+```
+
+`name` must match the directory name; `description` states **when to trigger**, which is how the agent matches tasks against the startup context.
+
+### frontmatter fields
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `name` | yes | lowercase letters/digits/hyphens, 1–64 chars |
+| `description` | yes | non-empty, ≤1024 chars |
+| `license` | no | license information |
+| `compatibility` | no | compatibility statement |
+| `metadata` | no | arbitrary object |
+| `allowed-tools` | no | tool allowlist |
+
+### Progressive-disclosure guidance
+
+- Expand the body as needed: start with a minimal workflow and keep details in `references/`, `scripts/`, etc., which the agent reads with ordinary tools after activation.
+- Prefer explicit steps and rules over background prose.
+- Resource files travel with the skill directory; paths are relative to the skill root (returned by `activate_skill`).
+- The repository-bundled `skills/coden-tool-plugin-development/` is a reusable template.
+
+### Placement in a repository
+
+| Directory | Purpose |
+| --- | --- |
+| `<workspace>/skills/<name>/` | bundled with the repository, distributed with it |
+| `<workspace>/.agents/skills/<name>/` | locally installed, not distributed |
+| `~/.agents/skills/<name>/` | user-global |
+
+### Related references
+
+- [Discovery](/coden/en/docs/extend/choose-an-extension/)
+- [Install and Debug](/coden/en/docs/extend/skills/)
+- [Agent Skills specification](https://agentskills.io/specification)
+
+## Install and Debug
+
+### Installation
+
+| Target | How |
+| --- | --- |
+| user-global | place at `~/.agents/skills/<name>/SKILL.md` |
+| project-local | place at `<workspace>/.agents/skills/<name>/SKILL.md` |
+| repository-bundled | place at `<workspace>/skills/<name>/SKILL.md` and commit |
+| install a skill from a repository | `npx skills add TwinklerG/CodeN --skill coden-tool-plugin-development` |
+
+### Verification
+
+```bash
+coden --verbose
+```
+
+After startup, run `/skills` to list active skills (name, description, `project`/`user` scope). `--verbose` prints the reason for each skipped entry:
+
+```text
+ignored project skill <path>: <reason>
+```
+
+### Common failure reasons
+
+| Symptom | Cause |
+| --- | --- |
+| skill not listed | directory name differs from frontmatter `name`; or it sits in a non-scanned location |
+| invalid `description` | empty or longer than 1024 characters |
+| YAML parse failure | malformed frontmatter (must start and end with `---`) |
+| directory skipped | missing `SKILL.md`, not a regular file, larger than 1MB, or a symlink escaping the scan root |
+| changes not effective | skills are discovered at startup only; restart required |
+
+### Debug order
+
+1. Start with `coden --verbose` and inspect `ignored ... skill` lines.
+2. Confirm the name and scope with `/skills`.
+3. Check the directory name, frontmatter, file size, and real path (`realpath`).
+4. Activation test: `coden -p "use the <name> skill for the task"` and watch for a `activate_skill` call.
+
+### Related references
+
+- [Discovery](/coden/en/docs/extend/choose-an-extension/)
+- [Create a Skill](/coden/en/docs/extend/skills/)
+- [Tools and Risk Levels](/coden/en/docs/agent/tools-and-context/)

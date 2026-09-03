@@ -1,0 +1,110 @@
+---
+title: Skills
+description: 创建、安装并调试按需加载的方法知识。
+sidebar:
+  order: 360
+---
+
+Skill 是按需进入模型上下文的方法说明，效果依赖模型遵循，而不是由运行时强制执行。它适合封装可复用工作流、规则和配套资源，不应被当作权限策略。
+
+## 创建 Skill
+
+### 最小结构
+
+```text
+<workspace>/skills/pdf-processing/
+└── SKILL.md
+```
+
+`SKILL.md` 内容：
+
+```markdown
+---
+name: pdf-processing
+description: Use when reading or modifying PDF documents.
+---
+
+# PDF workflow
+
+Read the relevant files before changing them.
+```
+
+`name` 必须与目录名一致；`description` 描述**何时触发**，供 Agent 在启动上下文里匹配任务。
+
+### frontmatter 字段
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `name` | 是 | 小写字母/数字/连字符，1–64 字符 |
+| `description` | 是 | 非空，≤1024 字符 |
+| `license` | 否 | 许可证信息 |
+| `compatibility` | 否 | 兼容性声明 |
+| `metadata` | 否 | 任意对象 |
+| `allowed-tools` | 否 | 工具允许列表 |
+
+### 渐进披露建议
+
+- 正文按需展开：先给最小工作流，细节放 `references/`、`scripts/` 等资源，由 Agent 在激活后用普通工具读取。
+- 正文使用明确的步骤与规则，避免只有背景叙述。
+- 资源文件跟随 Skill 目录；路径以 Skill 根目录为基准（`activate_skill` 会返回根目录）。
+- 可复用仓库自带 Skill 作为模板：`skills/coden-tool-plugin-development/`。
+
+### 放置到仓库
+
+| 目录 | 用途 |
+| --- | --- |
+| `<workspace>/skills/<name>/` | 仓库随附、随仓库分发 |
+| `<workspace>/.agents/skills/<name>/` | 本地安装，不随仓库分发 |
+| `~/.agents/skills/<name>/` | 用户全局 |
+
+### 相关参考
+
+- [发现规则](/coden/zh/docs/extend/choose-an-extension/)
+- [安装与调试](/coden/zh/docs/extend/skills/)
+- [Agent Skills 规范](https://agentskills.io/specification)
+
+## 安装与调试
+
+### 安装
+
+| 目标 | 方式 |
+| --- | --- |
+| 用户全局 | 放置到 `~/.agents/skills/<name>/SKILL.md` |
+| 项目本地 | 放置到 `<workspace>/.agents/skills/<name>/SKILL.md` |
+| 仓库随附 | 放置到 `<workspace>/skills/<name>/SKILL.md` 并提交 |
+| 从仓库安装指定 Skill | `npx skills add TwinklerG/CodeN --skill coden-tool-plugin-development` |
+
+### 验证
+
+```bash
+coden --verbose
+```
+
+启动后执行 `/skills` 列出当前生效的 Skill（名称、描述、`project`/`user` 来源）。`--verbose` 显示被跳过条目的原因：
+
+```text
+ignored project skill <path>: <reason>
+```
+
+### 常见失败原因
+
+| 现象 | 原因 |
+| --- | --- |
+| Skill 未列出 | 目录名与 frontmatter `name` 不一致；或放在了非扫描位置 |
+| `description` 无效 | 空值或超过 1024 字符 |
+| YAML 解析失败 | frontmatter 格式错误（必须以 `---` 开头/结尾） |
+| 目录被跳过 | `SKILL.md` 缺失、不是普通文件、超过 1MB，或符号链接逃逸扫描根目录 |
+| 修改不生效 | Skill 只在启动时发现，修改后需重启 |
+
+### 调试顺序
+
+1. `coden --verbose` 启动，检查 `ignored ... skill` 行。
+2. 用 `/skills` 确认名称与来源。
+3. 检查目录名、frontmatter、文件大小与真实路径（`realpath`）。
+4. 激活测试：`coden -p "use the <name> skill for the task"`，观察模型是否调用 `activate_skill`。
+
+### 相关参考
+
+- [发现规则](/coden/zh/docs/extend/choose-an-extension/)
+- [创建 Skill](/coden/zh/docs/extend/skills/)
+- [工具与风险等级](/coden/zh/docs/agent/tools-and-context/)

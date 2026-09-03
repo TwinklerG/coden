@@ -100,7 +100,7 @@ fail-open 指：决策类 Hook 失败时**不产生决策**，权限继续走策
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| 配置解析失败：`unsupported hook event`/`invalid matcher`/`timeout` 范围 | Hook 配置非法 | 对照 [匹配规则](/coden/zh/docs/extend/skills-and-hooks/) 与 [执行与超时](/coden/zh/docs/agent/failures-and-control-flow/) |
+| 配置解析失败：`unsupported hook event`/`invalid matcher`/`timeout` 范围 | Hook 配置非法 | 对照 [匹配规则](/coden/zh/docs/extend/hooks/) 与 [执行与超时](/coden/zh/docs/agent/failures-and-control-flow/) |
 | `X config exceeds 64 commands` | 单事件 Hook 超限 | 精简 Hook |
 | Hook 静默失效 | 非零退出、超时、输出超限、非法 JSON | `--verbose` 查看；检查脚本 stdin/stdout 协议 |
 

@@ -64,7 +64,7 @@ coden -p --auto --resume "$(coden --resume | head -1 | cut -d' ' -f1)" "fix the 
 - [Print Mode](/coden/en/docs/reference/cli/)
 - [CLI Options](/coden/en/docs/reference/cli/)
 - [Sessions](/coden/en/docs/agent/sessions/)
-- [Stop examples](/coden/en/docs/extend/skills-and-hooks/)
+- [Stop examples](/coden/en/docs/extend/hooks/)
 
 ## Troubleshooting
 
@@ -110,7 +110,7 @@ coden -p --auto --resume "$(coden --resume | head -1 | cut -d' ' -f1)" "fix the 
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| config parse failure: `unsupported hook event`/`invalid matcher`/`timeout` range | illegal hook config | see [Matchers](/coden/en/docs/extend/skills-and-hooks/) and [Execution](/coden/en/docs/agent/failures-and-control-flow/) |
+| config parse failure: `unsupported hook event`/`invalid matcher`/`timeout` range | illegal hook config | see [Matchers](/coden/en/docs/extend/hooks/) and [Execution](/coden/en/docs/agent/failures-and-control-flow/) |
 | `X config exceeds 64 commands` | too many hooks for one event | trim the hook list |
 | hook silently ineffective | non-zero exit, timeout, output over limit, invalid JSON | `--verbose`; check the stdin/stdout protocol |
 
